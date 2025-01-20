@@ -17,25 +17,63 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// PrometheusMetric is a configuration for polling from Prometheus
+type PrometheusMetric struct {
+	// ID of this metric.
+	ID string `json:"id,omitempty"`
+	// Query is the query used to fetch the metric. It is a Go Template with Sprig functions binding.
+	// A `.data` of the cluster secret is passed inside as parameters.
+	Query string `json:"query,omitempty"`
+	// Value is the value of the metric.
+	// +kubebuilder:validation:Type:=number
+	// +kubebuilder:validation:Format:=float
+	Value resource.Quantity `json:"value,omitempty"`
+}
 
-// PollSpec defines the desired state of Poll.
+// PrometheusSource is a configuration for polling from Prometheus
+type PrometheusSource struct {
+	// Address is the address of the Prometheus server.
+	Address string `json:"address,omitempty"`
+	// Metrics is the list of metrics to poll from Prometheus.
+	Metrics []PrometheusMetric `json:"metrics,omitempty"`
+}
+
+// PollSpec defines the configuration for this poller.
 type PollSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Period is the period of polling.
+	Period metav1.Duration `json:"period,omitempty"`
+	// PrometheusSource is the configuration for polling from Prometheus.
+	PrometheusSource PrometheusSource `json:"prometheusSource,omitempty"`
+}
 
-	// Foo is an example field of Poll. Edit poll_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+// MetricValue is a resulting value from Prometheus
+type MetricValue struct {
+	// Poller is the identification of the poller that was used to fetch this metric.
+	Poller string `json:"poller,omitempty"`
+	// ID of this metric.
+	ID string `json:"id,omitempty"`
+	// Query is the query that was used to fetch this value.
+	// It will be different for individual implementations.
+	Query string `json:"query,omitempty"`
+	// Value is the value of the metric.
+	// +kubebuilder:validation:Type:=number
+	// +kubebuilder:validation:Format:=float
+	Value resource.Quantity `json:"value,omitempty"`
 }
 
 // PollStatus defines the observed state of Poll.
 type PollStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	// Values of the metrics polled.
+	// +kubebuilder:validation:Type:=number
+	// +kubebuilder:validation:Format:=float
+	Values []resource.Quantity `json:"values,omitempty"`
+	// LastCalculatedTime is the last time the polling was performed for this configuration.
+	LastPollingTime *metav1.Time `json:"lastPollingTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true
