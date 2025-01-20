@@ -19,6 +19,7 @@ package autoscaler
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -97,37 +98,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: poll.Spec.InitialDelay.Duration}, nil
 	}
 
-	// TODO: check here if clusters were added/removed
-
-	// Now we check if the last polling hasn't been expired yet, we then should re-queue for the remainder of its time
-	if poll.Status.LastPollingTime != nil {
-		sinceLastPoll := time.Since(poll.Status.LastPollingTime.Time)
-		log.V(1).Info("Reconciliation request for pre-existing poll", "sinceLastPoll", sinceLastPoll)
-		if sinceLastPoll < poll.Spec.Period.Duration {
-			remainingWaitTime := poll.Spec.Period.Duration - sinceLastPoll
-			log.V(1).Info("Not enough time has passed since last poll, queuing up for remaining time",
-				"remaining", remainingWaitTime)
-			return ctrl.Result{RequeueAfter: remainingWaitTime}, nil
-		}
-	}
-
-	// Ok, at this point we are almost ready to poll.
-	// First, change the availability condition from unknown to false -
-	// once it is set to true at the very end, we won't touch it ever again.
-	if meta.IsStatusConditionPresentAndEqual(poll.Status.Conditions, typeAvailable, metav1.ConditionUnknown) {
-		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    typeAvailable,
-			Status:  metav1.ConditionFalse,
-			Reason:  "InitialPoll",
-			Message: "This is the first poll",
-		})
-		if err := r.Status().Update(ctx, poll); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true}, nil
-	}
-
+	// If the resource malformed - bail out early
 	if len(poll.Spec.Metrics) == 0 {
 		err := fmt.Errorf("No polling configuration present")
 		log.Error(err, "No polling configuration present, fail")
@@ -145,6 +116,23 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, nil
 	}
 
+	// First, change the availability condition from unknown to false -
+	// once it is set to true at the very end, we won't touch it ever again.
+	if meta.IsStatusConditionPresentAndEqual(poll.Status.Conditions, typeAvailable, metav1.ConditionUnknown) {
+		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
+			Type:    typeAvailable,
+			Status:  metav1.ConditionFalse,
+			Reason:  "InitialPoll",
+			Message: "This is the first poll",
+		})
+		if err := r.Status().Update(ctx, poll); err != nil {
+			log.Error(err, "Failed to update resource status")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Find all clusters
 	clusters := &corev1.SecretList{}
 	if err := r.List(ctx, clusters, &client.ListOptions{
 		Namespace: poll.Namespace,
@@ -166,6 +154,44 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 	log.V(1).Info("Found clusters", "count", len(clusters.Items))
+
+	if poll.Status.LastPollingTime != nil {
+
+		sinceLastPoll := time.Since(poll.Status.LastPollingTime.Time)
+		log.V(1).Info("Reconciliation request for pre-existing poll", "sinceLastPoll", sinceLastPoll)
+
+		if sinceLastPoll < poll.Spec.Period.Duration {
+
+			// Check if the list of clusters has changed since the last poll
+			previouslyObservedClusters := []string{}
+			for _, metricValue := range poll.Status.Values {
+				refStr := fmt.Sprintf("%s/%s",
+					metricValue.OwnerRef.Kind,
+					metricValue.OwnerRef.Name)
+				if !slices.Contains(previouslyObservedClusters, refStr) {
+					previouslyObservedClusters = append(previouslyObservedClusters, refStr)
+				}
+			}
+			slices.Sort(previouslyObservedClusters)
+			currentlyObservedClusters := []string{}
+			for _, cluster := range clusters.Items {
+				refStr := fmt.Sprintf("%s/%s",
+					cluster.Kind,
+					cluster.Name)
+				if !slices.Contains(currentlyObservedClusters, refStr) {
+					currentlyObservedClusters = append(currentlyObservedClusters, refStr)
+				}
+			}
+			slices.Sort(currentlyObservedClusters)
+			if slices.Equal(previouslyObservedClusters, currentlyObservedClusters) {
+				remainingWaitTime := poll.Spec.Period.Duration - sinceLastPoll
+				log.V(1).Info("Not enough time has passed since last poll, queuing up for remaining time",
+					"remaining", remainingWaitTime)
+				return ctrl.Result{RequeueAfter: remainingWaitTime}, nil
+			}
+			log.V(1).Info("Clusters have changed since last poll, re-queuing for immediate poll")
+		}
+	}
 
 	poller := prometheus.Poller{}
 	metrics, err := poller.Poll(ctx, *poll, clusters.Items)
@@ -238,7 +264,7 @@ func (r *PrometheusPollReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *PrometheusPollReconciler) mapClusterSecret(ctx context.Context, object client.Object) []reconcile.Request {
-	var requests []reconcile.Request
+	requests := []reconcile.Request{}
 	namespace := object.GetNamespace()
 
 	var polls autoscaler.PrometheusPollList
