@@ -1,4 +1,4 @@
-apiVersion: autoscaler.argoproj.iom/v1alpha1
+apiVersion: autoscaler.argoproj.io/v1alpha1
 kind: Poll
 metadata:
   labels:

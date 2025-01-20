@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.0
-  name: polls.autoscaler.argoproj.iom
+  name: polls.autoscaler.argoproj.io
 spec:
-  group: autoscaler.argoproj.iom
+  group: autoscaler.argoproj.io
   names:
     kind: Poll
     listKind: PollList

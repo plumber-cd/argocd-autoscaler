@@ -5,7 +5,7 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - autoscaler.argoproj.iom
+  - autoscaler.argoproj.io
   resources:
   - polls
   verbs:
@@ -17,13 +17,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - autoscaler.argoproj.iom
+  - autoscaler.argoproj.io
   resources:
   - polls/finalizers
   verbs:
   - update
 - apiGroups:
-  - autoscaler.argoproj.iom
+  - autoscaler.argoproj.io
   resources:
   - polls/status
   verbs:

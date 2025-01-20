@@ -33,9 +33,9 @@ type PollReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=autoscaler.argoproj.iom,resources=polls,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=autoscaler.argoproj.iom,resources=polls/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=autoscaler.argoproj.iom,resources=polls/finalizers,verbs=update
+// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=polls,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=polls/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=polls/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

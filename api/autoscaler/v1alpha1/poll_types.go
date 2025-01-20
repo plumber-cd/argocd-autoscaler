@@ -47,7 +47,7 @@ type PollSpec struct {
 	// Period is the period of polling.
 	Period metav1.Duration `json:"period,omitempty"`
 	// PrometheusSource is the configuration for polling from Prometheus.
-	PrometheusSource PrometheusSource `json:"prometheusSource,omitempty"`
+	PrometheusSource *PrometheusSource `json:"prometheusSource,omitempty"`
 }
 
 // MetricValue is a resulting value from Prometheus
