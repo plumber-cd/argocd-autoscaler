@@ -19,14 +19,10 @@ package autoscaler
 import (
 	"context"
 	"fmt"
-	"slices"
-	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
@@ -39,11 +35,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/argoproj/argo-cd/v2/common"
-
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
-	"github.com/plumber-cd/argocd-autoscaler/pollers/prometheus"
 )
 
 // RobustScalingNormalizerReconciler reconciles a RobustScalingNormalizer object
@@ -127,13 +120,13 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 	if len(values) == 0 {
 		err := fmt.Errorf("No polling configuration present")
 		log.Error(err, "No polling configuration present, fail")
-		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
+		meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
 			Type:    typeReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "NoPollingConfiguration",
 			Message: err.Error(),
 		})
-		if err := r.Status().Update(ctx, poll); err != nil {
+		if err := r.Status().Update(ctx, normalizer); err != nil {
 			log.Error(err, "Failed to update resource status")
 			return ctrl.Result{}, err
 		}
@@ -143,120 +136,40 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 
 	// First, change the availability condition from unknown to false -
 	// once it is set to true at the very end, we won't touch it ever again.
-	if meta.IsStatusConditionPresentAndEqual(poll.Status.Conditions, typeAvailable, metav1.ConditionUnknown) {
-		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
+	if meta.IsStatusConditionPresentAndEqual(normalizer.Status.Conditions, typeAvailable, metav1.ConditionUnknown) {
+		meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
 			Type:    typeAvailable,
 			Status:  metav1.ConditionFalse,
-			Reason:  "InitialPoll",
+			Reason:  "InitialNormalization",
 			Message: "This is the first poll",
 		})
-		if err := r.Status().Update(ctx, poll); err != nil {
+		if err := r.Status().Update(ctx, normalizer); err != nil {
 			log.Error(err, "Failed to update resource status")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// Find all clusters
-	clusters := &corev1.SecretList{}
-	if err := r.List(ctx, clusters, &client.ListOptions{
-		Namespace: poll.Namespace,
-		LabelSelector: labels.Set(client.MatchingLabels{
-			common.LabelKeySecretType: common.LabelValueSecretTypeCluster,
-		}).AsSelector(),
-	}); err != nil {
-		log.Error(err, "Failed to list clusters")
-		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "NoPollingConfiguration",
-			Message: err.Error(),
-		})
-		if err := r.Status().Update(ctx, poll); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, err
-	}
-	log.V(1).Info("Found clusters", "count", len(clusters.Items))
-
-	if poll.Status.LastPollingTime != nil {
-
-		sinceLastPoll := time.Since(poll.Status.LastPollingTime.Time)
-		log.V(1).Info("Reconciliation request for pre-existing poll", "sinceLastPoll", sinceLastPoll)
-
-		if sinceLastPoll < poll.Spec.Period.Duration {
-
-			// Check if the list of clusters has changed since the last poll
-			previouslyObservedClusters := []string{}
-			for _, metricValue := range poll.Status.Values {
-				refStr := fmt.Sprintf("%s/%s",
-					metricValue.OwnerRef.Kind,
-					metricValue.OwnerRef.Name)
-				if !slices.Contains(previouslyObservedClusters, refStr) {
-					previouslyObservedClusters = append(previouslyObservedClusters, refStr)
-				}
-			}
-			slices.Sort(previouslyObservedClusters)
-			currentlyObservedClusters := []string{}
-			for _, cluster := range clusters.Items {
-				refStr := fmt.Sprintf("%s/%s",
-					cluster.Kind,
-					cluster.Name)
-				if !slices.Contains(currentlyObservedClusters, refStr) {
-					currentlyObservedClusters = append(currentlyObservedClusters, refStr)
-				}
-			}
-			slices.Sort(currentlyObservedClusters)
-			if slices.Equal(previouslyObservedClusters, currentlyObservedClusters) {
-				remainingWaitTime := poll.Spec.Period.Duration - sinceLastPoll
-				log.V(1).Info("Not enough time has passed since last poll, queuing up for remaining time",
-					"remaining", remainingWaitTime)
-				return ctrl.Result{RequeueAfter: remainingWaitTime}, nil
-			}
-			log.V(1).Info("Clusters have changed since last poll, re-queuing for immediate poll")
-		}
-	}
-
-	poller := prometheus.Poller{}
-	metrics, err := poller.Poll(ctx, *poll, clusters.Items)
-	if err != nil {
-		log.Error(err, "Failed to poll metrics")
-		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "PollingError",
-			Message: err.Error(),
-		})
-		if err := r.Status().Update(ctx, poll); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, err
-	}
-	log.V(1).Info("Polled metrics", "count", len(metrics))
-
-	// Update the status with the new values
-	poll.Status.Values = metrics
-	poll.Status.LastPollingTime = &metav1.Time{Time: time.Now()}
-	if !meta.IsStatusConditionPresentAndEqual(poll.Status.Conditions, typeAvailable, metav1.ConditionTrue) {
-		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
+	// TODO: normalize here
+	normalizer.Status.Values = values
+	if !meta.IsStatusConditionPresentAndEqual(normalizer.Status.Conditions, typeAvailable, metav1.ConditionTrue) {
+		meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
 			Type:   typeAvailable,
 			Status: metav1.ConditionTrue,
-			Reason: "InitialPollSuccessful",
+			Reason: "InitialNormalizationSuccessful",
 		})
 	}
-	meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
+	meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
 		Type:   typeReady,
 		Status: metav1.ConditionTrue,
-		Reason: "PollingSuccessful",
+		Reason: "NormalizationSuccessful",
 	})
-	if err := r.Status().Update(ctx, poll); err != nil {
+	if err := r.Status().Update(ctx, normalizer); err != nil {
 		log.Error(err, "Failed to update resource status")
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{RequeueAfter: poll.Spec.Period.Duration}, nil
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
