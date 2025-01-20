@@ -1,0 +1,2 @@
+# argocd-autoscaler
+Autoscaling ArgoCD
