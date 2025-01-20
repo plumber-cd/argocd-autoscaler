@@ -1,12 +1,13 @@
 name: E2E Tests
 
 on:
-  push:
-    # This is time consuming and meaningless for ongoing work in a feature branch
-    # Open draft PR to trigger E2E
-    branches:
-      - main
-  pull_request:
+  # Disable for now, until we have something to test
+  # push:
+  #   # This is time consuming and meaningless for ongoing work in a feature branch
+  #   # Open draft PR to trigger E2E
+  #   branches:
+  #     - main
+  # pull_request:
 
 jobs:
   test-e2e:

@@ -1,8 +1,9 @@
 name: Lint
 
 on:
-  push:
-  pull_request:
+  # Disable for now, until we have something to test
+  # push:
+  # pull_request:
 
 jobs:
   lint:

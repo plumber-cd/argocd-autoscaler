@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,28 +42,31 @@ import (
 	"github.com/argoproj/argo-cd/v2/common"
 
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
+	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	"github.com/plumber-cd/argocd-autoscaler/pollers/prometheus"
 )
 
-// PrometheusPollReconciler reconciles a PrometheusPoll object
-type PrometheusPollReconciler struct {
+// RobustScalingNormalizerReconciler reconciles a RobustScalingNormalizer object
+type RobustScalingNormalizerReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
-// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=prometheuspolls,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=prometheuspolls/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=prometheuspolls/finalizers,verbs=update
+// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=robustscalingnormalizers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=robustscalingnormalizers/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=robustscalingnormalizers/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+//
+// For more details, check Reconcile and its Result here:
+// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.4/pkg/reconcile
+func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 	log.V(1).Info("Received reconcile request")
 
-	poll := &autoscaler.PrometheusPoll{}
-	if err := r.Get(ctx, req.NamespacedName, poll); err != nil {
+	normalizer := &autoscaler.RobustScalingNormalizer{}
+	if err := r.Get(ctx, req.NamespacedName, normalizer); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.V(1).Info("Resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
@@ -71,27 +75,56 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
-	// After initial creation of the new poll or individual cluster,
-	// we need to wait a little for some metrics to become available.
-	// We will check if this resource has no conditions and re-queue it for initial cooldown parameter.
-	if len(poll.Status.Conditions) == 0 {
-		log.Info("First reconciliation request, re-queuing for initial delay",
-			"cooldown", poll.Spec.InitialDelay)
-		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    typeAvailable,
-			Status:  metav1.ConditionUnknown,
-			Reason:  "InitialDelay",
-			Message: "Initial delay before initial reconciliation...",
+	values := []autoscaler.MetricValue{}
+
+	switch normalizer.Spec.PollerRef.Kind {
+
+	case "PrometheusPoll":
+
+		poll := &autoscaler.PrometheusPoll{}
+		if err := r.Get(ctx, types.NamespacedName{
+			Name:      normalizer.Spec.PollerRef.Name,
+			Namespace: normalizer.Namespace,
+		}, poll); err != nil {
+			err := fmt.Errorf("%s didn't exist %s/%s",
+				normalizer.Spec.PollerRef.Kind, normalizer.Namespace, normalizer.Name)
+			log.Error(err, "PrometheusPoll not found")
+			meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
+				Type:    typeReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  "PrometheusPollNotFound",
+				Message: err.Error(),
+			})
+			if err := r.Status().Update(ctx, normalizer); err != nil {
+				log.Error(err, "Failed to update resource status")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+
+		values = poll.Status.Values
+
+	default:
+
+		err := fmt.Errorf("Unknown poller Kind=%s in %s/%s",
+			normalizer.Spec.PollerRef.Kind, normalizer.Namespace, normalizer.Name)
+		log.Error(err, "Unknown poller Kind")
+		meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
+			Type:    typeReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "UnknownPollerKind",
+			Message: err.Error(),
 		})
-		if err := r.Status().Update(ctx, poll); err != nil {
+		if err := r.Status().Update(ctx, normalizer); err != nil {
 			log.Error(err, "Failed to update resource status")
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: poll.Spec.InitialDelay.Duration}, nil
+		return ctrl.Result{}, nil
+
 	}
 
 	// If the resource malformed - bail out early
-	if len(poll.Spec.Metrics) == 0 {
+	if len(values) == 0 {
 		err := fmt.Errorf("No polling configuration present")
 		log.Error(err, "No polling configuration present, fail")
 		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
@@ -227,25 +260,18 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *PrometheusPollReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	secretPredicate := predicate.NewPredicateFuncs(func(object client.Object) bool {
-		labels := object.GetLabels()
-		if labels == nil {
-			return false
-		}
-		if val, ok := labels[common.LabelKeySecretType]; ok && val == common.LabelValueSecretTypeCluster {
-			return true
-		}
-		return false
+func (r *RobustScalingNormalizerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	pollerPredicate := predicate.NewPredicateFuncs(func(_ client.Object) bool {
+		return true
 	})
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&autoscaler.PrometheusPoll{}).
-		Named("argocd_autoscaler_prometheuspoll").
+		For(&autoscalerv1alpha1.RobustScalingNormalizer{}).
+		Named("argocd_autoscaler_rubustscalingnormalizer").
 		Watches(
-			&corev1.Secret{},
-			handler.EnqueueRequestsFromMapFunc(r.mapClusterSecret),
-			builder.WithPredicates(secretPredicate),
+			&autoscaler.PrometheusPoll{},
+			handler.EnqueueRequestsFromMapFunc(r.mapPrometheusPolls),
+			builder.WithPredicates(pollerPredicate),
 		).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		WithOptions(controller.Options{
@@ -254,24 +280,30 @@ func (r *PrometheusPollReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PrometheusPollReconciler) mapClusterSecret(ctx context.Context, object client.Object) []reconcile.Request {
+func (r *RobustScalingNormalizerReconciler) mapPrometheusPolls(
+	ctx context.Context, object client.Object) []reconcile.Request {
+
 	requests := []reconcile.Request{}
 	namespace := object.GetNamespace()
 
-	var polls autoscaler.PrometheusPollList
-	if err := r.List(ctx, &polls, client.InNamespace(namespace)); err != nil {
-		log.Log.Error(err, "Failed to list PrometheusPolls", "Namespace", namespace)
+	var normalizers autoscaler.RobustScalingNormalizerList
+	if err := r.List(ctx, &normalizers, client.InNamespace(namespace)); err != nil {
+		log.Log.Error(err, "Failed to list RobustScalingNormalizer", "Namespace", namespace)
 		return requests
 	}
 
-	for _, poll := range polls.Items {
-		req := reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      poll.GetName(),
-				Namespace: poll.GetNamespace(),
-			},
+	for _, normalizer := range normalizers.Items {
+		if normalizer.Spec.PollerRef.APIGroup == ptr.To(object.GetObjectKind().GroupVersionKind().Group) &&
+			normalizer.Spec.PollerRef.Kind == object.GetObjectKind().GroupVersionKind().Kind &&
+			normalizer.Spec.PollerRef.Name == object.GetName() {
+			req := reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      normalizer.GetName(),
+					Namespace: normalizer.GetNamespace(),
+				},
+			}
+			requests = append(requests, req)
 		}
-		requests = append(requests, req)
 	}
 
 	return requests

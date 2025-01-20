@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/autoscaler.argoproj.io_prometheuspolls.yaml
+- bases/autoscaler.argoproj.io_robustscalingnormalizers.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

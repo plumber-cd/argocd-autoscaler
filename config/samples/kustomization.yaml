@@ -1,4 +1,5 @@
 ## Append samples of your project ##
 resources:
 - autoscaler_v1alpha1_prometheuspoll.yaml
+- autoscaler_v1alpha1_robustscalingnormalizer.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

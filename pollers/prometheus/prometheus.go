@@ -15,7 +15,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -107,13 +106,10 @@ func (r *Poller) Poll(
 				return nil, err
 			}
 
-			ownerRef := metav1.OwnerReference{
-				APIVersion:         cluster.APIVersion,
-				Kind:               cluster.Kind,
-				Name:               cluster.GetName(),
-				UID:                cluster.GetUID(),
-				BlockOwnerDeletion: ptr.To(false),
-				Controller:         ptr.To(false),
+			ownerRef := corev1.TypedLocalObjectReference{
+				APIGroup: ptr.To(cluster.GroupVersionKind().Group),
+				Kind:     cluster.Kind,
+				Name:     cluster.GetName(),
 			}
 
 			metrics = append(metrics, autoscaler.MetricValue{

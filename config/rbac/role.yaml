@@ -16,6 +16,7 @@ rules:
   - autoscaler.argoproj.io
   resources:
   - prometheuspolls
+  - robustscalingnormalizers
   verbs:
   - create
   - delete
@@ -28,12 +29,14 @@ rules:
   - autoscaler.argoproj.io
   resources:
   - prometheuspolls/finalizers
+  - robustscalingnormalizers/finalizers
   verbs:
   - update
 - apiGroups:
   - autoscaler.argoproj.io
   resources:
   - prometheuspolls/status
+  - robustscalingnormalizers/status
   verbs:
   - get
   - patch

@@ -59,7 +59,7 @@ type PrometheusPollStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 	// Values of the metrics polled.
 	Values []MetricValue `json:"values,omitempty"`
-	// LastCalculatedTime is the last time the polling was performed for this configuration.
+	// LastPollingTime is the last time the polling was performed for this configuration.
 	LastPollingTime *metav1.Time `json:"lastPollingTime,omitempty"`
 }
 

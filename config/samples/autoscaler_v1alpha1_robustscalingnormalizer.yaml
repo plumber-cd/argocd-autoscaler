@@ -1,0 +1,8 @@
+apiVersion: autoscaler.argoproj.io/v1alpha1
+kind: RobustScalingNormalizer
+metadata:
+  labels:
+    app.kubernetes.io/name: argocd-autoscaler
+    app.kubernetes.io/managed-by: kustomize
+  name: robustscalingnormalizer-sample
+spec:
