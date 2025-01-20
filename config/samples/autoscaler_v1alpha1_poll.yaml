@@ -1,0 +1,9 @@
+apiVersion: autoscaler.argoproj.iom/v1alpha1
+kind: Poll
+metadata:
+  labels:
+    app.kubernetes.io/name: argocd-autoscaler
+    app.kubernetes.io/managed-by: kustomize
+  name: poll-sample
+spec:
+  # TODO(user): Add fields here
