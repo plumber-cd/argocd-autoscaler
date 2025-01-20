@@ -1,4 +1,4 @@
 ## Append samples of your project ##
 resources:
-- autoscaler_v1alpha1_poll.yaml
+- autoscaler_v1alpha1_prometheuspoll.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

@@ -15,6 +15,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
@@ -26,18 +28,14 @@ type Poller struct{}
 
 func (r *Poller) Poll(
 	ctx context.Context,
-	poll *autoscaler.Poll,
-	clusters []*corev1.Secret,
-) ([]*autoscaler.MetricValue, error) {
+	poll autoscaler.PrometheusPoll,
+	clusters []corev1.Secret,
+) ([]autoscaler.MetricValue, error) {
 
 	log := log.FromContext(ctx).WithValues("poller", "prometheus")
 
-	if poll.Spec.PrometheusSource == nil {
-		return nil, fmt.Errorf("PrometheusSource is required")
-	}
-
 	client, err := api.NewClient(api.Config{
-		Address: poll.Spec.PrometheusSource.Address,
+		Address: poll.Spec.Address,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error creating Prometheus client: %w", err)
@@ -45,9 +43,15 @@ func (r *Poller) Poll(
 
 	promAPI := pm.NewAPI(client)
 
-	metrics := []*autoscaler.MetricValue{}
-	for _, metric := range poll.Spec.PrometheusSource.Metrics {
+	metrics := []autoscaler.MetricValue{}
+	for _, metric := range poll.Spec.Metrics {
 		for _, cluster := range clusters {
+			tmplParams := map[string]string{
+				"namespace": cluster.Namespace,
+				"cluster":   string(cluster.Data["name"]),
+				"server":    string(cluster.Data["server"]),
+			}
+
 			tmpl, err := template.New("query_" + metric.ID).Funcs(sprig.FuncMap()).Parse(metric.Query)
 			if err != nil {
 				log.Error(err, "Failed to parse Prometheus query as Go template", "metric", metric.ID)
@@ -55,7 +59,7 @@ func (r *Poller) Poll(
 			}
 
 			var queryBuffer bytes.Buffer
-			if err := tmpl.Execute(&queryBuffer, cluster.Data); err != nil {
+			if err := tmpl.Execute(&queryBuffer, tmplParams); err != nil {
 				log.Error(err, "Failed to execute Prometheus query template", "metric", metric.ID)
 				return nil, err
 			}
@@ -80,8 +84,11 @@ func (r *Poller) Poll(
 
 			var value float64
 			if len(vectorVal) == 0 {
-				log.Error(nil, "Result from Prometheus had no data", "metric", metric.ID, "query", query)
-				return nil, fmt.Errorf("Result from Prometheus had no data, query:\n%s", query)
+				if metric.NoData == nil {
+					log.Error(nil, "Result from Prometheus had no data", "metric", metric.ID, "query", query)
+					return nil, fmt.Errorf("Result from Prometheus had no data, query:\n%s", query)
+				}
+				value = metric.NoData.AsApproximateFloat64()
 			} else if len(vectorVal) != 1 {
 				// We require users to use promql that returns a single value ready for normalization
 				log.Error(nil, "Expected exactly 1 sample", "result", vectorVal, "metric", metric, "query", query)
@@ -100,11 +107,21 @@ func (r *Poller) Poll(
 				return nil, err
 			}
 
-			metrics = append(metrics, &autoscaler.MetricValue{
-				Poller: "prometheus",
-				ID:     metric.ID,
-				Query:  query,
-				Value:  valueAsResource,
+			ownerRef := metav1.OwnerReference{
+				APIVersion:         cluster.APIVersion,
+				Kind:               cluster.Kind,
+				Name:               cluster.GetName(),
+				UID:                cluster.GetUID(),
+				BlockOwnerDeletion: ptr.To(false),
+				Controller:         ptr.To(false),
+			}
+
+			metrics = append(metrics, autoscaler.MetricValue{
+				Poller:   "prometheus",
+				OwnerRef: ownerRef,
+				ID:       metric.ID,
+				Query:    query,
+				Value:    valueAsResource,
 			})
 		}
 	}

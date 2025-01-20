@@ -202,11 +202,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&autoscalercontroller.PollReconciler{
+	if err = (&autoscalercontroller.PrometheusPollReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Poll")
+		setupLog.Error(err, "unable to create controller", "controller", "PrometheusPoll")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

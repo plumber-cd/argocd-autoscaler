@@ -1,7 +1,7 @@
 # This rule is not used by the project argocd-autoscaler itself.
 # It is provided to allow the cluster admin to help manage permissions for users.
 #
-# Grants permissions to create, update, and delete resources within the autoscaler.argoporj.io.
+# Grants permissions to create, update, and delete resources within the autoscaler.argoproj.io.
 # This role is intended for users who need to manage these resources
 # but should not control RBAC or manage permissions for others.
 
@@ -11,12 +11,12 @@ metadata:
   labels:
     app.kubernetes.io/name: argocd-autoscaler
     app.kubernetes.io/managed-by: kustomize
-  name: autoscaler-poll-editor-role
+  name: autoscaler-prometheuspoll-editor-role
 rules:
 - apiGroups:
-  - autoscaler.argoporj.io
+  - autoscaler.argoproj.io
   resources:
-  - polls
+  - prometheuspolls
   verbs:
   - create
   - delete
@@ -26,8 +26,8 @@ rules:
   - update
   - watch
 - apiGroups:
-  - autoscaler.argoporj.io
+  - autoscaler.argoproj.io
   resources:
-  - polls/status
+  - prometheuspolls/status
   verbs:
   - get

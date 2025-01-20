@@ -5,9 +5,17 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - autoscaler.argoproj.io
   resources:
-  - polls
+  - prometheuspolls
   verbs:
   - create
   - delete
@@ -19,13 +27,13 @@ rules:
 - apiGroups:
   - autoscaler.argoproj.io
   resources:
-  - polls/finalizers
+  - prometheuspolls/finalizers
   verbs:
   - update
 - apiGroups:
   - autoscaler.argoproj.io
   resources:
-  - polls/status
+  - prometheuspolls/status
   verbs:
   - get
   - patch

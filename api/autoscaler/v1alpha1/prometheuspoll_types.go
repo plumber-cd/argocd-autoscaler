@@ -21,57 +21,44 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// PrometheusMetric is a configuration for polling from Prometheus
-type PrometheusMetric struct {
+// Metric is a configuration for polling from Prometheus
+type Metric struct {
 	// ID of this metric.
+	// +kubebuilder:validation:Required
 	ID string `json:"id,omitempty"`
 	// Query is the query used to fetch the metric. It is a Go Template with Sprig functions binding.
-	// A `.data` of the cluster secret is passed inside as parameters.
+	// A `.namespace`, `.name` and `.server` are available for the template.
+	// +kubebuilder:validation:Required
 	Query string `json:"query,omitempty"`
-	// Value is the value of the metric.
+	// NoData if set will be used as the value when no data is available in Prometheus.
+	// If not set - missing data will result in error.
+	// There are metrics like argocd_app_k8s_request_total that might have a bug and not being reported for prolonged periods of time.
 	// +kubebuilder:validation:Type:=number
 	// +kubebuilder:validation:Format:=float
-	Value resource.Quantity `json:"value,omitempty"`
+	NoData *resource.Quantity `json:"noData,omitempty"`
 }
 
-// PrometheusSource is a configuration for polling from Prometheus
-type PrometheusSource struct {
+// PrometheusPollSpec defines the configuration for this poller.
+type PrometheusPollSpec struct {
+	// InitialDelay is the initial delay before polling after creating a poll or adding a new cluster.
+	// +kubebuilder:validation:Required
+	InitialDelay metav1.Duration `json:"initialDelay,omitempty"`
+	// Period is the period of polling.
+	// +kubebuilder:validation:Required
+	Period metav1.Duration `json:"period,omitempty"`
 	// Address is the address of the Prometheus server.
+	// +kubebuilder:validation:Required
 	Address string `json:"address,omitempty"`
 	// Metrics is the list of metrics to poll from Prometheus.
-	Metrics []PrometheusMetric `json:"metrics,omitempty"`
+	// +kubebuilder:validation:Required
+	Metrics []Metric `json:"metrics,omitempty"`
 }
 
-// PollSpec defines the configuration for this poller.
-type PollSpec struct {
-	// Period is the period of polling.
-	Period metav1.Duration `json:"period,omitempty"`
-	// PrometheusSource is the configuration for polling from Prometheus.
-	PrometheusSource *PrometheusSource `json:"prometheusSource,omitempty"`
-}
-
-// MetricValue is a resulting value from Prometheus
-type MetricValue struct {
-	// Poller is the identification of the poller that was used to fetch this metric.
-	Poller string `json:"poller,omitempty"`
-	// ID of this metric.
-	ID string `json:"id,omitempty"`
-	// Query is the query that was used to fetch this value.
-	// It will be different for individual implementations.
-	Query string `json:"query,omitempty"`
-	// Value is the value of the metric.
-	// +kubebuilder:validation:Type:=number
-	// +kubebuilder:validation:Format:=float
-	Value resource.Quantity `json:"value,omitempty"`
-}
-
-// PollStatus defines the observed state of Poll.
-type PollStatus struct {
+// PrometheusPollStatus defines the observed state of PrometheusPoll.
+type PrometheusPollStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 	// Values of the metrics polled.
-	// +kubebuilder:validation:Type:=number
-	// +kubebuilder:validation:Format:=float
-	Values []resource.Quantity `json:"values,omitempty"`
+	Values []MetricValue `json:"values,omitempty"`
 	// LastCalculatedTime is the last time the polling was performed for this configuration.
 	LastPollingTime *metav1.Time `json:"lastPollingTime,omitempty"`
 }
@@ -83,24 +70,24 @@ type PollStatus struct {
 // +kubebuilder:printcolumn:name="Last Polled",type="date",JSONPath=".status.lastPollingTime",description="Since last poll"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Time since creation"
 
-// Poll is the Schema for the polls API.
-type Poll struct {
+// PrometheusPoll is the Schema for the prometheuspolls API.
+type PrometheusPoll struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   PollSpec   `json:"spec,omitempty"`
-	Status PollStatus `json:"status,omitempty"`
+	Spec   PrometheusPollSpec   `json:"spec,omitempty"`
+	Status PrometheusPollStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// PollList contains a list of Poll.
-type PollList struct {
+// PrometheusPollList contains a list of PrometheusPoll.
+type PrometheusPollList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Poll `json:"items"`
+	Items           []PrometheusPoll `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Poll{}, &PollList{})
+	SchemeBuilder.Register(&PrometheusPoll{}, &PrometheusPollList{})
 }
