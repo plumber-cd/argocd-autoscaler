@@ -51,6 +51,16 @@ type RobustScalingNormalizer struct {
 	Status RobustScalingNormalizerStatus `json:"status,omitempty"`
 }
 
+// GetConditions returns .Status.Conditions
+func (n *RobustScalingNormalizer) GetConditions() []metav1.Condition {
+	return n.Status.Conditions
+}
+
+// GetValues returns .Status.Values
+func (n *RobustScalingNormalizer) GetValues() []MetricValue {
+	return n.Status.Values
+}
+
 // +kubebuilder:object:root=true
 
 // RobustScalingNormalizerList contains a list of RobustScalingNormalizer.

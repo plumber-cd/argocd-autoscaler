@@ -5,6 +5,7 @@ resources:
 - bases/autoscaler.argoproj.io_prometheuspolls.yaml
 - bases/autoscaler.argoproj.io_robustscalingnormalizers.yaml
 - bases/autoscaler.argoproj.io_secrettypeclusterdiscoveries.yaml
+- bases/autoscaler.argoproj.io_weightedpnormloadindexes.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

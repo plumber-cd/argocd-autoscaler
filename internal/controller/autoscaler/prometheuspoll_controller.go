@@ -79,6 +79,7 @@ type PrometheusPollReconciler struct {
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=prometheuspolls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=prometheuspolls/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=prometheuspolls/finalizers,verbs=update
+// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=secrettypeclusterdiscoveries,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -131,6 +132,27 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 		// Re-queuing will change nothing - resource is malformed
 		return ctrl.Result{}, nil
+	}
+
+	metricIDs := map[string]bool{}
+	for _, metric := range poll.Spec.Metrics {
+		if _, exists := metricIDs[metric.ID]; exists {
+			err := fmt.Errorf("duplicate metric for ID '%s'", metric.ID)
+			log.Error(err, "No polling configuration present, fail")
+			meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
+				Type:    typeReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  "NoPollingConfiguration",
+				Message: err.Error(),
+			})
+			if err := r.Status().Update(ctx, poll); err != nil {
+				log.Error(err, "Failed to update resource status")
+				return ctrl.Result{RequeueAfter: time.Second}, nil
+			}
+			// Re-queuing will change nothing - resource is malformed
+			return ctrl.Result{}, nil
+		}
+		metricIDs[metric.ID] = true
 	}
 
 	// First, change the availability condition from unknown to false -

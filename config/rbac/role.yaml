@@ -18,6 +18,7 @@ rules:
   - prometheuspolls
   - robustscalingnormalizers
   - secrettypeclusterdiscoveries
+  - weightedpnormloadindexes
   verbs:
   - create
   - delete
@@ -32,6 +33,7 @@ rules:
   - prometheuspolls/finalizers
   - robustscalingnormalizers/finalizers
   - secrettypeclusterdiscoveries/finalizers
+  - weightedpnormloadindexes/finalizers
   verbs:
   - update
 - apiGroups:
@@ -40,6 +42,7 @@ rules:
   - prometheuspolls/status
   - robustscalingnormalizers/status
   - secrettypeclusterdiscoveries/status
+  - weightedpnormloadindexes/status
   verbs:
   - get
   - patch

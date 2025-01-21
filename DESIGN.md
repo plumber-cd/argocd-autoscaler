@@ -31,6 +31,17 @@ Each phase is a separate API and a controller to allow for extendability.
 
 For initial implementation, we will pick one particular algorithm for each phase.
 
+A quick disclaimer - Kubernetes doesn't like floats (because they are not the same across languages)
+and suggests to avoid them.
+They in fact prevent you from using them in `kubebuilder`, unless you enable use of "dangerous" types.
+We use a lot of floats here.
+We'll follow their educated advice, and use `resource.Quantity` type to store floats.
+It will be stored as a `string` as a result,
+and you may recognize it as it is the same thing they use for resource requests/limits.
+Despite visual similarity (it would be saying `500m` to represent `0.5`),
+these valued **DO NOT** have anything to do with CPU or memory.
+It is just a string representation of a float with precision rules replicated among all languages.
+
 ## Discovery
 
 First of all - we need to find our clusters. There are multiple ways to add clusters in ArgoCD,
@@ -144,12 +155,13 @@ What would be most important is rate of events, requests and numbers of connecti
 With that in mind - we need an algorithm that would allow us to assign weight to each metric,
 and prevents some metrics to completely overshadow all other.
 
-### Weighted Non-Linear "p-Norm"
+### Weighted Positive "p-Norm"
 
 #### What It Is
 
 A **non-linear aggregator** that combines multiple normalized metrics (each with a different importance) into one "load index".
 Rather than summing metrics directly, we apply a **p-norm** to reduce the effect of any single large metric.
+We use positive variation as that would be easier to represent and use for charts later.
 
 #### How It Works
 
@@ -166,15 +178,6 @@ Rather than summing metrics directly, we apply a **p-norm** to reduce the effect
    - If `p = 1`, this reduces to a simple weighted sum.
    - If `p = 2`, it behaves like a weighted Euclidean norm (moderate emphasis on larger values).
    - Larger `p` values increase the influence of the largest metric but still combine the rest.
-
-4. **Storage:**
-   - Kubernetes doesn't like floats (because they are not the same across languages) and suggests to avoid them.
-     They in fact prevent you from using them in `kubebuilder`, unless you enable use of "dangerous" types.
-   - Our load index (as well as normalized metrics too) is a float number between 0 and 1.
-   - We'll follow their educated advice, and use `resource.Quantity` type to store values.
-     It is stored in YAML as a `string` and you may recognize it as it is the same thing as resource requests/limits.
-     Despite visual resemblence, these valued **DO NOT** have anything to do with CPU/memory.
-     It is just a string representation of a float with precision rules replicated among all languages.
 
 ## Partitioning
 

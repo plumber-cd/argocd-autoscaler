@@ -62,7 +62,7 @@ func (r *Poller) Poll(
 			}
 
 			query := queryBuffer.String()
-			log.V(1).Info("Executing Prometheus query", "metric", metric.ID, "query", query)
+			log.V(2).Info("Executing Prometheus query", "metric", metric.ID, "query", query)
 
 			result, warnings, err := promAPI.Query(ctx, query, time.Now())
 			if err != nil {
@@ -95,7 +95,7 @@ func (r *Poller) Poll(
 				value = float64(sample.Value)
 			}
 
-			log.V(1).Info("Prometheus query response", "metric", metric.ID, "value", value, "query", query)
+			log.V(2).Info("Prometheus query response", "metric", metric.ID, "value", value, "query", query)
 
 			valueAsResource, err := resource.ParseQuantity(
 				strconv.FormatFloat(value, 'f', -1, 32))

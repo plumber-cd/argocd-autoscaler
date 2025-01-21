@@ -22,6 +22,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the {{ .ProjectName }} itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- autoscaler_weightedpnormloadindex_admin_role.yaml
+- autoscaler_weightedpnormloadindex_editor_role.yaml
+- autoscaler_weightedpnormloadindex_viewer_role.yaml
 - autoscaler_secrettypeclusterdiscovery_admin_role.yaml
 - autoscaler_secrettypeclusterdiscovery_editor_role.yaml
 - autoscaler_secrettypeclusterdiscovery_viewer_role.yaml
