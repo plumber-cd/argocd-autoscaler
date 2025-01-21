@@ -79,8 +79,19 @@ type PrometheusPoll struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// +kubebuilder:validation:Required
 	Spec   PrometheusPollSpec   `json:"spec,omitempty"`
 	Status PrometheusPollStatus `json:"status,omitempty"`
+}
+
+// GetConditions returns .Status.Conditions
+func (p *PrometheusPoll) GetConditions() []metav1.Condition {
+	return p.Status.Conditions
+}
+
+// GetValues returns .Status.Values
+func (p *PrometheusPoll) GetValues() []MetricValue {
+	return p.Status.Values
 }
 
 // +kubebuilder:object:root=true

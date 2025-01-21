@@ -146,10 +146,70 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			log.Error(err, "Failed to update resource status")
 			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
-	shards, err := r.GetShards(ctx, req, *poll)
+	discoverer, err := findByRef[Discoverer](
+		ctx,
+		r.Scheme,
+		r.RESTMapper(),
+		r.Client,
+		poll.Namespace,
+		poll.Spec.DiscovererRef,
+	)
+	if err != nil {
+		log.Error(err, "Failed to find discoverer by ref")
+		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
+			Type:    typeReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "ErrorFindingDiscoverer",
+			Message: err.Error(),
+		})
+		if err := r.Status().Update(ctx, poll); err != nil {
+			log.Error(err, "Failed to update resource status")
+			return ctrl.Result{RequeueAfter: time.Second}, nil
+		}
+		// We should receive an event if discoverer is created
+		return ctrl.Result{}, err
+	}
+
+	if !meta.IsStatusConditionPresentAndEqual((*discoverer).GetConditions(), typeReady, metav1.ConditionTrue) {
+		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
+			Type:   typeReady,
+			Status: metav1.ConditionFalse,
+			Reason: "DiscoveredNotReady",
+			Message: fmt.Sprintf("Check the status of discoverer %s (api=%s, kind=%s)",
+				poll.Spec.DiscovererRef.Name,
+				*poll.Spec.DiscovererRef.APIGroup,
+				poll.Spec.DiscovererRef.Kind,
+			),
+		})
+		if err := r.Status().Update(ctx, poll); err != nil {
+			log.Error(err, "Failed to update resource status")
+			return ctrl.Result{RequeueAfter: time.Second}, nil
+		}
+		// We should get a new event when discoverer changes
+		return ctrl.Result{}, nil
+	}
+
+	shards := (*discoverer).GetShards()
+	if len(shards) == 0 {
+		err := fmt.Errorf("No shards found")
+		log.Error(err, "No shards found, fail")
+		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
+			Type:    typeReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "NoShardsFound",
+			Message: err.Error(),
+		})
+		if err := r.Status().Update(ctx, poll); err != nil {
+			log.Error(err, "Failed to update resource status")
+			return ctrl.Result{RequeueAfter: time.Second}, nil
+		}
+		// We should get a new event when discovery changes
+		return ctrl.Result{}, nil
+	}
+
 	if poll.Status.LastPollingTime != nil {
 
 		sinceLastPoll := time.Since(poll.Status.LastPollingTime.Time)
@@ -198,8 +258,25 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			log.Error(err, "Failed to update resource status")
 			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
+
+	if len(metrics) == 0 {
+		err := fmt.Errorf("No metrics found")
+		log.Error(err, "No metrics found, fail")
+		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
+			Type:    typeReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "NoMetricsFound",
+			Message: err.Error(),
+		})
+		if err := r.Status().Update(ctx, poll); err != nil {
+			log.Error(err, "Failed to update resource status")
+			return ctrl.Result{RequeueAfter: time.Second}, nil
+		}
+		return ctrl.Result{RequeueAfter: poll.Spec.Period.Duration}, nil
+	}
+
 	log.V(1).Info("Polled metrics", "count", len(metrics))
 
 	// Update the status with the new values
@@ -223,51 +300,6 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	return ctrl.Result{RequeueAfter: poll.Spec.Period.Duration}, nil
-}
-
-func (r *PrometheusPollReconciler) GetShards(ctx context.Context, req ctrl.Request,
-	poll autoscaler.PrometheusPoll) ([]autoscaler.DiscoveredShard, error) {
-
-	log := log.FromContext(ctx)
-
-	gk := schema.GroupKind{
-		Group: *poll.Spec.DiscovererRef.APIGroup,
-		Kind:  poll.Spec.DiscovererRef.Kind,
-	}
-
-	mapping, err := r.RESTMapper().RESTMapping(gk, "")
-	if err != nil {
-		log.Error(err, "Failed to map GVK to REST mapping")
-		return nil, err
-	}
-
-	gvk := schema.GroupVersionKind{
-		Group:   *poll.Spec.DiscovererRef.APIGroup,
-		Version: mapping.GroupVersionKind.Version,
-		Kind:    poll.Spec.DiscovererRef.Kind,
-	}
-
-	obj, err := r.Scheme.New(gvk)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create object for GVK %s: %w", gvk.String(), err)
-	}
-
-	clientObj, ok := obj.(client.Object)
-	if !ok {
-		return nil, fmt.Errorf("object for GVK %s does not implement client.Object", gvk.String())
-	}
-
-	key := types.NamespacedName{Name: poll.Spec.DiscovererRef.Name, Namespace: poll.Namespace}
-	if err := r.Client.Get(ctx, key, clientObj); err != nil {
-		return nil, fmt.Errorf("failed to fetch resource %s: %w", key, err)
-	}
-
-	discoverer, ok := clientObj.(Discoverer)
-	if !ok {
-		return nil, fmt.Errorf("resource %s does not implement Discoverer interface", key)
-	}
-
-	return discoverer.GetShards(), nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

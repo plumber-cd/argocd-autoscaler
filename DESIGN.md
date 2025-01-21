@@ -21,11 +21,11 @@ Autoscaler will be operating in multiple phases, for each phane there could be m
 
 1. Discovery - find shards aka clusters.
 1. Poll - gather metrics from shards.
-2. Normalize - make metrics comparable.
-3. Load Index - combine metrics from each cluster into a single index.
-4. Partition - distribute shards based accordingly each cluster index.
-5. Evaluate - observe over time that the desired partition is the best choice.
-6. Apply - assign shards to clusters in ArgoCD and restart controllers.
+1. Normalize - make metrics comparable.
+1. Load Index - combine metrics from each cluster into a single index.
+1. Partition - distribute shards based accordingly each cluster index.
+1. Evaluate - observe over time that the desired partition is the best choice.
+1. Apply - assign shards to clusters in ArgoCD and restart controllers.
 
 Each phase is a separate API and a controller to allow for extendability.
 
@@ -109,7 +109,8 @@ Combined, these metrics should give a good idea of how busy each cluster is, the
 
 First, we need to normalize all our metrics (each withing its own dimension) so they are comparable to each other later.
 We will be using Robust Scaling normalization for that.
-As a result, we will get a representation of each metric as a float number in the range between 0 and 1.
+As a result, we will get a representation of each metric as a
+float number relative to median value which will be represented by 0.
 
 ### Robust Scaling
 

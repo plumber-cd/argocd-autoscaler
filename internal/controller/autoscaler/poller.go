@@ -5,10 +5,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Discoverer is an interface that should be implemented by all discoverers.
-type Discoverer interface {
+// Poller is an interface that should be implemented by all pollers.
+type Poller interface {
 	// GetConditions returns a list of shards discovered by this discoverer.
 	GetConditions() []metav1.Condition
-	// GetShards returns a list of shards discovered by this discoverer.
-	GetShards() []autoscaler.DiscoveredShard
+	// GetValues returns a list of metric values discovered by this poller.
+	GetValues() []autoscaler.MetricValue
 }

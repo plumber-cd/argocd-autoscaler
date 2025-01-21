@@ -34,6 +34,16 @@ type SecretTypeClusterDiscoveryStatus struct {
 	Shards []DiscoveredShard `json:"shards,omitempty"`
 }
 
+// GetConditions returns .Status.Conditions
+func (d *SecretTypeClusterDiscovery) GetConditions() []metav1.Condition {
+	return d.Status.Conditions
+}
+
+// GetShards returns .Status.Shards
+func (d *SecretTypeClusterDiscovery) GetShards() []DiscoveredShard {
+	return d.Status.Shards
+}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Available",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status",description="Current status based on Available condition"
@@ -45,12 +55,9 @@ type SecretTypeClusterDiscovery struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// +kubebuilder:validation:Required
 	Spec   SecretTypeClusterDiscoverySpec   `json:"spec,omitempty"`
 	Status SecretTypeClusterDiscoveryStatus `json:"status,omitempty"`
-}
-
-func (d *SecretTypeClusterDiscovery) GetShards() []DiscoveredShard {
-	return d.Status.Shards
 }
 
 // +kubebuilder:object:root=true

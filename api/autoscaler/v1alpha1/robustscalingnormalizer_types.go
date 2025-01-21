@@ -24,7 +24,8 @@ import (
 // RobustScalingNormalizerSpec defines the desired state of RobustScalingNormalizer.
 type RobustScalingNormalizerSpec struct {
 	// PollerRef is the reference to the poller that we need to normalize.
-	PollerRef corev1.TypedLocalObjectReference `json:"ownerRef,omitempty"`
+	// +kubebuilder:validation:Required
+	PollerRef corev1.TypedLocalObjectReference `json:"pollerRef,omitempty"`
 }
 
 // RobustScalingNormalizerStatus defines the observed state of RobustScalingNormalizer.
@@ -45,6 +46,7 @@ type RobustScalingNormalizer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// +kubebuilder:validation:Required
 	Spec   RobustScalingNormalizerSpec   `json:"spec,omitempty"`
 	Status RobustScalingNormalizerStatus `json:"status,omitempty"`
 }

@@ -54,7 +54,7 @@ spec:
             description: RobustScalingNormalizerSpec defines the desired state of
               RobustScalingNormalizer.
             properties:
-              ownerRef:
+              pollerRef:
                 description: PollerRef is the reference to the poller that we need
                   to normalize.
                 properties:
@@ -75,6 +75,8 @@ spec:
                 - name
                 type: object
                 x-kubernetes-map-type: atomic
+            required:
+            - pollerRef
             type: object
           status:
             description: RobustScalingNormalizerStatus defines the observed state
@@ -176,6 +178,8 @@ spec:
                   type: object
                 type: array
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true
