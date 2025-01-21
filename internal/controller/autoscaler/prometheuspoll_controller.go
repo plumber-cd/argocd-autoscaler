@@ -20,9 +20,9 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,11 +38,36 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/argoproj/argo-cd/v2/common"
-
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	"github.com/plumber-cd/argocd-autoscaler/pollers/prometheus"
 )
+
+var (
+	knownDiscoverers      []schema.GroupVersionKind
+	knownDiscoverersMutex sync.Mutex
+)
+
+func RegisterDiscoverer(gvk schema.GroupVersionKind) {
+	knownDiscoverersMutex.Lock()
+	defer knownDiscoverersMutex.Unlock()
+	knownDiscoverers = append(knownDiscoverers, gvk)
+}
+
+func getDiscoverers() []schema.GroupVersionKind {
+	knownDiscoverersMutex.Lock()
+	defer knownDiscoverersMutex.Unlock()
+	_copy := make([]schema.GroupVersionKind, len(knownDiscoverers))
+	copy(_copy, knownDiscoverers)
+	return _copy
+}
+
+func init() {
+	RegisterDiscoverer(schema.GroupVersionKind{
+		Group:   "autoscaler.argoproj.io",
+		Version: "v1alpha1",
+		Kind:    "SecretTypeClusterDiscovery",
+	})
+}
 
 // PrometheusPollReconciler reconciles a PrometheusPoll object
 type PrometheusPollReconciler struct {
@@ -85,7 +110,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		})
 		if err := r.Status().Update(ctx, poll); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{}, err
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 		return ctrl.Result{RequeueAfter: poll.Spec.InitialDelay.Duration}, nil
 	}
@@ -102,7 +127,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		})
 		if err := r.Status().Update(ctx, poll); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{}, err
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 		// Re-queuing will change nothing - resource is malformed
 		return ctrl.Result{}, nil
@@ -119,7 +144,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		})
 		if err := r.Status().Update(ctx, poll); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{}, err
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -171,7 +196,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		})
 		if err := r.Status().Update(ctx, poll); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{}, err
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 		return ctrl.Result{}, err
 	}
@@ -194,7 +219,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	})
 	if err := r.Status().Update(ctx, poll); err != nil {
 		log.Error(err, "Failed to update resource status")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	return ctrl.Result{RequeueAfter: poll.Spec.Period.Duration}, nil
@@ -247,34 +272,45 @@ func (r *PrometheusPollReconciler) GetShards(ctx context.Context, req ctrl.Reque
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PrometheusPollReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	secretPredicate := predicate.NewPredicateFuncs(func(object client.Object) bool {
-		labels := object.GetLabels()
-		if labels == nil {
-			return false
-		}
-		if val, ok := labels[common.LabelKeySecretType]; ok && val == common.LabelValueSecretTypeCluster {
-			return true
-		}
-		return false
-	})
+	c := ctrl.NewControllerManagedBy(mgr).
+		Named("argocd_autoscaler_prometheus_poll").
+		For(
+			&autoscaler.PrometheusPoll{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		)
 
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&autoscaler.PrometheusPoll{}).
-		Named("argocd_autoscaler_prometheuspoll").
-		Watches(
-			&corev1.Secret{},
-			handler.EnqueueRequestsFromMapFunc(r.mapClusterSecret),
-			builder.WithPredicates(secretPredicate),
-		).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
+	for _, gvk := range getDiscoverers() {
+		obj, err := mgr.GetScheme().New(gvk)
+		if err != nil {
+			return fmt.Errorf("failed to create object for GVK %v: %w", gvk, err)
+		}
+
+		clientObj, ok := obj.(client.Object)
+		if !ok {
+			return fmt.Errorf("object for GVK %s does not implement client.Object", gvk.String())
+		}
+
+		c = c.Watches(
+			clientObj,
+			handler.EnqueueRequestsFromMapFunc(r.mapDiscoverer),
+		)
+	}
+
+	c = c.
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,
-		}).
-		Complete(r)
+		})
+	return c.Complete(r)
 }
 
-func (r *PrometheusPollReconciler) mapClusterSecret(ctx context.Context, object client.Object) []reconcile.Request {
+func (r *PrometheusPollReconciler) mapDiscoverer(ctx context.Context, object client.Object) []reconcile.Request {
 	requests := []reconcile.Request{}
+
+	gvk, _, err := r.Scheme.ObjectKinds(object)
+	if err != nil || len(gvk) == 0 {
+		log.Log.Error(err, "Failed to determine GVK for object")
+		return requests
+	}
 	namespace := object.GetNamespace()
 
 	var polls autoscaler.PrometheusPollList
@@ -284,13 +320,19 @@ func (r *PrometheusPollReconciler) mapClusterSecret(ctx context.Context, object 
 	}
 
 	for _, poll := range polls.Items {
-		req := reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      poll.GetName(),
-				Namespace: poll.GetNamespace(),
-			},
+		for _, _gvk := range gvk {
+			if *poll.Spec.DiscovererRef.APIGroup == _gvk.Group && poll.Spec.DiscovererRef.Kind == _gvk.Kind &&
+				poll.Spec.DiscovererRef.Name == object.GetName() {
+				req := reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      poll.GetName(),
+						Namespace: poll.GetNamespace(),
+					},
+				}
+				requests = append(requests, req)
+				break
+			}
 		}
-		requests = append(requests, req)
 	}
 
 	return requests

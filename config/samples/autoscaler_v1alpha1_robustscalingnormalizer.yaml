@@ -5,4 +5,3 @@ metadata:
     app.kubernetes.io/name: argocd-autoscaler
     app.kubernetes.io/managed-by: kustomize
   name: robustscalingnormalizer-sample
-spec:

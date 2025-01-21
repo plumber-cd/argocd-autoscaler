@@ -25,7 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -174,17 +173,15 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RobustScalingNormalizerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	pollerPredicate := predicate.NewPredicateFuncs(func(_ client.Object) bool {
-		return true
-	})
-
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&autoscalerv1alpha1.RobustScalingNormalizer{}).
-		Named("argocd_autoscaler_rubustscalingnormalizer").
+		Named("argocd_autoscaler_rubust_scaling_normalizer").
+		For(
+			&autoscalerv1alpha1.RobustScalingNormalizer{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
 		Watches(
 			&autoscaler.PrometheusPoll{},
 			handler.EnqueueRequestsFromMapFunc(r.mapPrometheusPolls),
-			builder.WithPredicates(pollerPredicate),
 		).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		WithOptions(controller.Options{
@@ -206,7 +203,7 @@ func (r *RobustScalingNormalizerReconciler) mapPrometheusPolls(
 	}
 
 	for _, normalizer := range normalizers.Items {
-		if normalizer.Spec.PollerRef.APIGroup == ptr.To(object.GetObjectKind().GroupVersionKind().Group) &&
+		if *normalizer.Spec.PollerRef.APIGroup == object.GetObjectKind().GroupVersionKind().Group &&
 			normalizer.Spec.PollerRef.Kind == object.GetObjectKind().GroupVersionKind().Kind &&
 			normalizer.Spec.PollerRef.Name == object.GetName() {
 			req := reconcile.Request{

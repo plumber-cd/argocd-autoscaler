@@ -18,6 +18,7 @@ package autoscaler
 
 import (
 	"context"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -78,9 +79,9 @@ func (r *SecretTypeClusterDiscoveryReconciler) Reconcile(ctx context.Context, re
 		})
 		if err := r.Status().Update(ctx, discovery); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{}, err
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	// Find all clusters
@@ -104,7 +105,7 @@ func (r *SecretTypeClusterDiscoveryReconciler) Reconcile(ctx context.Context, re
 		})
 		if err := r.Status().Update(ctx, discovery); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{}, err
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 		return ctrl.Result{}, err
 	}
@@ -138,7 +139,7 @@ func (r *SecretTypeClusterDiscoveryReconciler) Reconcile(ctx context.Context, re
 	})
 	if err := r.Status().Update(ctx, discovery); err != nil {
 		log.Error(err, "Failed to update resource status")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -146,20 +147,16 @@ func (r *SecretTypeClusterDiscoveryReconciler) Reconcile(ctx context.Context, re
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *SecretTypeClusterDiscoveryReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	secretPredicate := predicate.NewPredicateFuncs(func(object client.Object) bool {
-		// We have to watch all secrets - users may configure arbitrary label selectors
-		return true
-	})
-
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&autoscaler.PrometheusPoll{}).
 		Named("argocd_autoscaler_secret_type_cluster_discovery").
+		For(
+			&autoscaler.SecretTypeClusterDiscovery{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
 		Watches(
 			&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.mapClusterSecret),
-			builder.WithPredicates(secretPredicate),
 		).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,
 		}).
