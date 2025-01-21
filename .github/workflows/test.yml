@@ -1,9 +1,10 @@
 name: Tests
 
-# Disable for now, until we have something to test
-# on:
-#   push:
-#   pull_request:
+on:
+  # Disable for now, until we have something to test
+  # push:
+  # pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
