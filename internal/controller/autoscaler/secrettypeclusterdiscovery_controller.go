@@ -26,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -111,14 +110,11 @@ func (r *SecretTypeClusterDiscoveryReconciler) Reconcile(ctx context.Context, re
 	}
 	log.V(1).Info("Found clusters", "count", len(clusters.Items))
 
-	shards := []autoscaler.DiscovererShard{}
+	shards := []autoscaler.DiscoveredShard{}
 	for _, cluster := range clusters.Items {
-		shard := autoscaler.DiscovererShard{
-			SourceRef: corev1.TypedLocalObjectReference{
-				APIGroup: ptr.To(cluster.GetObjectKind().GroupVersionKind().Group),
-				Kind:     cluster.GetObjectKind().GroupVersionKind().Kind,
-				Name:     cluster.GetName(),
-			},
+		shard := autoscaler.DiscoveredShard{
+			ID:  cluster.Name,
+			UID: cluster.GetUID(),
 			Data: map[string]string{
 				"name":   string(cluster.Data["name"]),
 				"server": string(cluster.Data["server"]),

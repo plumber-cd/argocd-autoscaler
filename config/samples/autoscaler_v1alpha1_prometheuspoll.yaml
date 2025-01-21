@@ -6,6 +6,10 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: prometheuspoll-sample
 spec:
+  discovererRef:
+    apiGroup: autoscaler.argoproj.io
+    kind: SecretTypeClusterDiscovery
+    name: secrettypeclusterdiscovery-sample
   initialDelay: 5s
   period: 30s
   address: http://localhost:9090
@@ -15,7 +19,7 @@ spec:
       quantile_over_time(
         0.95,
         (
-          sum by() (argocd_app_info{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .server }}"})
+          sum by() (argocd_app_info{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .data.server }}"})
         )[24h:1m]
       )
   - id: argocd_cluster_api_resource_objects
@@ -23,7 +27,7 @@ spec:
       quantile_over_time(
         0.95,
         (
-          sum by() (argocd_cluster_api_resource_objects{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .server }}"})
+          sum by() (argocd_cluster_api_resource_objects{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .data.server }}"})
         )[24h:1m]
       )
   - id: argocd_cluster_api_resources
@@ -31,7 +35,7 @@ spec:
       quantile_over_time(
         0.95,
         (
-          sum by() (argocd_cluster_api_resources{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .server }}"})
+          sum by() (argocd_cluster_api_resources{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .data.server }}"})
         )[24h:1m]
       )
   - id: argocd_app_reconcile_count
@@ -39,7 +43,7 @@ spec:
       quantile_over_time(
         0.95,
         (
-          sum(increase(argocd_app_reconcile_count{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .server }}"}[1m]))
+          sum(increase(argocd_app_reconcile_count{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .data.server }}"}[1m]))
         )[24h:1m]
       )
   - id: argocd_cluster_events_total
@@ -47,15 +51,15 @@ spec:
       quantile_over_time(
         0.95,
         (
-          sum(increase(argocd_cluster_events_total{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .server }}"}[1m]))
+          sum(increase(argocd_cluster_events_total{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .data.server }}"}[1m]))
         )[24h:1m]
       )
   - id: argocd_app_k8s_request_total
     noData: "0"
     query: |-
-      {{- $server := .server -}}
+      {{- $server := .data.server -}}
       {{- /* This metric label is broken and reports as IP:port instead of the original connection string */ -}}
-      {{- if eq .server "https://kubernetes.default.svc" -}}
+      {{- if eq $server "https://kubernetes.default.svc" -}}
         {{- $server = "https://100.64.0.1:443" -}}
       {{- end -}}
       quantile_over_time(
@@ -66,7 +70,7 @@ spec:
       )
   - id: rest_client_requests_total
     query: |-
-      {{- $url := (urlParse .server) -}}
+      {{- $url := (urlParse .data.server) -}}
       {{- $host := $url.host -}}
       {{- /* This metric label is broken and reports as IP:port instead of the original connection string */ -}}
       {{- if eq $host "kubernetes.default.svc" -}}

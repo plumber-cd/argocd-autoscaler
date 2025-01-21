@@ -13,9 +13,7 @@ import (
 
 	pm "github.com/prometheus/client_golang/api/prometheus/v1"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
@@ -28,7 +26,7 @@ type Poller struct{}
 func (r *Poller) Poll(
 	ctx context.Context,
 	poll autoscaler.PrometheusPoll,
-	clusters []corev1.Secret,
+	shards []autoscaler.DiscoveredShard,
 ) ([]autoscaler.MetricValue, error) {
 
 	log := log.FromContext(ctx).WithValues("poller", "prometheus")
@@ -44,11 +42,11 @@ func (r *Poller) Poll(
 
 	metrics := []autoscaler.MetricValue{}
 	for _, metric := range poll.Spec.Metrics {
-		for _, cluster := range clusters {
-			tmplParams := map[string]string{
-				"namespace": cluster.Namespace,
-				"cluster":   string(cluster.Data["name"]),
-				"server":    string(cluster.Data["server"]),
+		for _, shard := range shards {
+			tmplParams := map[string]interface{}{
+				"id":        shard.ID,
+				"namespace": poll.Namespace,
+				"data":      shard.Data,
 			}
 
 			tmpl, err := template.New("query_" + metric.ID).Funcs(sprig.FuncMap()).Parse(metric.Query)
@@ -106,15 +104,9 @@ func (r *Poller) Poll(
 				return nil, err
 			}
 
-			ownerRef := corev1.TypedLocalObjectReference{
-				APIGroup: ptr.To(cluster.GroupVersionKind().Group),
-				Kind:     cluster.Kind,
-				Name:     cluster.GetName(),
-			}
-
 			metrics = append(metrics, autoscaler.MetricValue{
 				Poller:   "prometheus",
-				OwnerRef: ownerRef,
+				ShardUID: shard.UID,
 				ID:       metric.ID,
 				Query:    query,
 				Value:    valueAsResource,

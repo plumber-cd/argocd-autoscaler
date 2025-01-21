@@ -26,8 +26,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -124,29 +124,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// Find all clusters
-	clusters := &corev1.SecretList{}
-	if err := r.List(ctx, clusters, &client.ListOptions{
-		Namespace: poll.Namespace,
-		LabelSelector: labels.Set(client.MatchingLabels{
-			common.LabelKeySecretType: common.LabelValueSecretTypeCluster,
-		}).AsSelector(),
-	}); err != nil {
-		log.Error(err, "Failed to list clusters")
-		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "NoPollingConfiguration",
-			Message: err.Error(),
-		})
-		if err := r.Status().Update(ctx, poll); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, err
-	}
-	log.V(1).Info("Found clusters", "count", len(clusters.Items))
-
+	shards, err := r.GetShards(ctx, req, *poll)
 	if poll.Status.LastPollingTime != nil {
 
 		sinceLastPoll := time.Since(poll.Status.LastPollingTime.Time)
@@ -154,39 +132,35 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 		if sinceLastPoll < poll.Spec.Period.Duration {
 
-			// Check if the list of clusters has changed since the last poll
-			previouslyObservedClusters := []string{}
+			// Check if the list of shards has changed since the last poll
+			previouslyObservedShards := []types.UID{}
 			for _, metricValue := range poll.Status.Values {
-				refStr := fmt.Sprintf("%s/%s",
-					metricValue.OwnerRef.Kind,
-					metricValue.OwnerRef.Name)
-				if !slices.Contains(previouslyObservedClusters, refStr) {
-					previouslyObservedClusters = append(previouslyObservedClusters, refStr)
+				if !slices.Contains(previouslyObservedShards, metricValue.ShardUID) {
+					previouslyObservedShards = append(previouslyObservedShards, metricValue.ShardUID)
 				}
 			}
-			slices.Sort(previouslyObservedClusters)
-			currentlyObservedClusters := []string{}
-			for _, cluster := range clusters.Items {
-				refStr := fmt.Sprintf("%s/%s",
-					cluster.Kind,
-					cluster.Name)
-				if !slices.Contains(currentlyObservedClusters, refStr) {
-					currentlyObservedClusters = append(currentlyObservedClusters, refStr)
+			slices.Sort(previouslyObservedShards)
+
+			currentlyObservedShards := []types.UID{}
+			for _, shard := range shards {
+				if !slices.Contains(currentlyObservedShards, shard.UID) {
+					currentlyObservedShards = append(currentlyObservedShards, shard.UID)
 				}
 			}
-			slices.Sort(currentlyObservedClusters)
-			if slices.Equal(previouslyObservedClusters, currentlyObservedClusters) {
+			slices.Sort(currentlyObservedShards)
+
+			if slices.Equal(previouslyObservedShards, currentlyObservedShards) {
 				remainingWaitTime := poll.Spec.Period.Duration - sinceLastPoll
 				log.V(1).Info("Not enough time has passed since last poll, queuing up for remaining time",
 					"remaining", remainingWaitTime)
 				return ctrl.Result{RequeueAfter: remainingWaitTime}, nil
 			}
-			log.V(1).Info("Clusters have changed since last poll, re-queuing for immediate poll")
+			log.V(1).Info("Shards have changed since last poll, re-queuing for immediate poll")
 		}
 	}
 
 	poller := prometheus.Poller{}
-	metrics, err := poller.Poll(ctx, *poll, clusters.Items)
+	metrics, err := poller.Poll(ctx, *poll, shards)
 	if err != nil {
 		log.Error(err, "Failed to poll metrics")
 		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
@@ -224,6 +198,51 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	return ctrl.Result{RequeueAfter: poll.Spec.Period.Duration}, nil
+}
+
+func (r *PrometheusPollReconciler) GetShards(ctx context.Context, req ctrl.Request,
+	poll autoscaler.PrometheusPoll) ([]autoscaler.DiscoveredShard, error) {
+
+	log := log.FromContext(ctx)
+
+	gk := schema.GroupKind{
+		Group: *poll.Spec.DiscovererRef.APIGroup,
+		Kind:  poll.Spec.DiscovererRef.Kind,
+	}
+
+	mapping, err := r.RESTMapper().RESTMapping(gk, "")
+	if err != nil {
+		log.Error(err, "Failed to map GVK to REST mapping")
+		return nil, err
+	}
+
+	gvk := schema.GroupVersionKind{
+		Group:   *poll.Spec.DiscovererRef.APIGroup,
+		Version: mapping.GroupVersionKind.Version,
+		Kind:    poll.Spec.DiscovererRef.Kind,
+	}
+
+	obj, err := r.Scheme.New(gvk)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create object for GVK %s: %w", gvk.String(), err)
+	}
+
+	clientObj, ok := obj.(client.Object)
+	if !ok {
+		return nil, fmt.Errorf("object for GVK %s does not implement client.Object", gvk.String())
+	}
+
+	key := types.NamespacedName{Name: poll.Spec.DiscovererRef.Name, Namespace: poll.Namespace}
+	if err := r.Client.Get(ctx, key, clientObj); err != nil {
+		return nil, fmt.Errorf("failed to fetch resource %s: %w", key, err)
+	}
+
+	discoverer, ok := clientObj.(Discoverer)
+	if !ok {
+		return nil, fmt.Errorf("resource %s does not implement Discoverer interface", key)
+	}
+
+	return discoverer.GetShards(), nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

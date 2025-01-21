@@ -17,12 +17,13 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Metric is a configuration for polling from Prometheus
-type Metric struct {
+// PrometheusMetric is a configuration for polling from Prometheus
+type PrometheusMetric struct {
 	// ID of this metric.
 	// +kubebuilder:validation:Required
 	ID string `json:"id,omitempty"`
@@ -40,6 +41,9 @@ type Metric struct {
 
 // PrometheusPollSpec defines the configuration for this poller.
 type PrometheusPollSpec struct {
+	// DiscovererRef is a reference to the discoverer that will be used to fetch the list of clusters.
+	// +kubebuilder:validation:Required
+	DiscovererRef corev1.TypedLocalObjectReference `json:"discovererRef,omitempty"`
 	// InitialDelay is the initial delay before polling after creating a poll or adding a new cluster.
 	// +kubebuilder:validation:Required
 	InitialDelay metav1.Duration `json:"initialDelay,omitempty"`
@@ -51,7 +55,7 @@ type PrometheusPollSpec struct {
 	Address string `json:"address,omitempty"`
 	// Metrics is the list of metrics to poll from Prometheus.
 	// +kubebuilder:validation:Required
-	Metrics []Metric `json:"metrics,omitempty"`
+	Metrics []PrometheusMetric `json:"metrics,omitempty"`
 }
 
 // PrometheusPollStatus defines the observed state of PrometheusPoll.

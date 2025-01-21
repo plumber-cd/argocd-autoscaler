@@ -31,7 +31,7 @@ type SecretTypeClusterDiscoverySpec struct {
 type SecretTypeClusterDiscoveryStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 	// Shards shards that are discovered.
-	Shards []DiscovererShard `json:"shards,omitempty"`
+	Shards []DiscoveredShard `json:"shards,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -47,6 +47,10 @@ type SecretTypeClusterDiscovery struct {
 
 	Spec   SecretTypeClusterDiscoverySpec   `json:"spec,omitempty"`
 	Status SecretTypeClusterDiscoveryStatus `json:"status,omitempty"`
+}
+
+func (d *SecretTypeClusterDiscovery) GetShards() []DiscoveredShard {
+	return d.Status.Shards
 }
 
 // +kubebuilder:object:root=true

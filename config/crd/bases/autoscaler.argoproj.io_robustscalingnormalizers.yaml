@@ -144,27 +144,6 @@ spec:
                     id:
                       description: ID of this metric.
                       type: string
-                    ownerRef:
-                      description: OwnerRef is the reference to the owner of this
-                        metric.
-                      properties:
-                        apiGroup:
-                          description: |-
-                            APIGroup is the group for the resource being referenced.
-                            If APIGroup is not specified, the specified Kind must be in the core API group.
-                            For any other third-party types, APIGroup is required.
-                          type: string
-                        kind:
-                          description: Kind is the type of resource being referenced
-                          type: string
-                        name:
-                          description: Name is the name of resource being referenced
-                          type: string
-                      required:
-                      - kind
-                      - name
-                      type: object
-                      x-kubernetes-map-type: atomic
                     poller:
                       description: Poller is the identification of the poller that
                         was used to fetch this metric.
@@ -173,6 +152,12 @@ spec:
                       description: |-
                         Query is the query that was used to fetch this value.
                         It will be different for individual implementations.
+                      type: string
+                    shardUID:
+                      description: |-
+                        ShardUID uuid of this shard for this metric value.
+                        It is used to uniquely identify the shard that was used to fetch this value.
+                        When the discovery was external - this may be arbitrary string unique to that shard.
                       type: string
                     value:
                       anyOf:
@@ -183,6 +168,11 @@ spec:
                       pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                       type: number
                       x-kubernetes-int-or-string: true
+                  required:
+                  - id
+                  - poller
+                  - shardUID
+                  - value
                   type: object
                 type: array
             type: object
