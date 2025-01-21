@@ -8,7 +8,7 @@ import (
 type LoadIndex struct {
 	// Shard is the shard that this load index is calculated for.
 	// +kubebuilder:validation:Required
-	Shard DiscoveredShard `json:"shard,omitempty"`
+	Shard Shard `json:"shard,omitempty"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Type:=number
 	// +kubebuilder:validation:Format:=float

@@ -26,7 +26,7 @@ type Poller struct{}
 func (r *Poller) Poll(
 	ctx context.Context,
 	poll autoscaler.PrometheusPoll,
-	shards []autoscaler.DiscoveredShard,
+	shards []autoscaler.Shard,
 ) ([]autoscaler.MetricValue, error) {
 
 	log := log.FromContext(ctx).WithValues("poller", "prometheus")

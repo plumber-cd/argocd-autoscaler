@@ -189,7 +189,7 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 
 	metricsByShardByID := map[types.UID]map[string][]autoscaler.MetricValue{}
 	metricsByShard := map[types.UID][]autoscaler.MetricValue{}
-	shardsByUID := map[types.UID]autoscaler.DiscoveredShard{}
+	shardsByUID := map[types.UID]autoscaler.Shard{}
 	for _, m := range values {
 		if _, exists := metricsByShardByID[m.Shard.UID]; !exists {
 			metricsByShardByID[m.Shard.UID] = map[string][]autoscaler.MetricValue{}

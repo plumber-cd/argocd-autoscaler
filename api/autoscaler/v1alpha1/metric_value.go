@@ -11,7 +11,7 @@ type MetricValue struct {
 	Poller string `json:"poller,omitempty"`
 	// Shard is this shard for this metric value.
 	// +kubebuilder:validation:Required
-	Shard DiscoveredShard `json:"shard,omitempty"`
+	Shard Shard `json:"shard,omitempty"`
 	// ID of this metric.
 	// +kubebuilder:validation:Required
 	ID string `json:"id,omitempty"`

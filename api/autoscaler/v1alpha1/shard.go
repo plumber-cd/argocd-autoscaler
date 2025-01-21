@@ -4,10 +4,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// DiscoveredShard is a shard of something discovered by a discoverer.
+// Shard is a shard of something discovered by a discoverer.
 // It is suitable to be used by Pollers.
 // Attributes may be used in Go Templates for the poller if it supports that.
-type DiscoveredShard struct {
+type Shard struct {
 	// ID of this shard. It may or may not be unique, depending on the discoverer.
 	// It is expected to be used to populate Go Templates params for the poller (if the poller supports that).
 	// +kubebuilder:validation:Required

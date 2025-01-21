@@ -111,9 +111,9 @@ func (r *SecretTypeClusterDiscoveryReconciler) Reconcile(ctx context.Context, re
 	}
 	log.V(1).Info("Found clusters", "count", len(clusters.Items))
 
-	shards := []autoscaler.DiscoveredShard{}
+	shards := []autoscaler.Shard{}
 	for _, cluster := range clusters.Items {
-		shard := autoscaler.DiscoveredShard{
+		shard := autoscaler.Shard{
 			ID:  cluster.Name,
 			UID: cluster.GetUID(),
 			Data: map[string]string{

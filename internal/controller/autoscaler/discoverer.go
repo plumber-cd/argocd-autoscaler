@@ -10,5 +10,5 @@ type Discoverer interface {
 	// GetConditions returns a list of conditions for this dicsoverer.
 	GetConditions() []metav1.Condition
 	// GetShards returns a list of shards discovered by this discoverer.
-	GetShards() []autoscaler.DiscoveredShard
+	GetShards() []autoscaler.Shard
 }
