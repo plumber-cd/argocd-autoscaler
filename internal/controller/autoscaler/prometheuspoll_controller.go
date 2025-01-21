@@ -321,7 +321,8 @@ func (r *PrometheusPollReconciler) mapDiscoverer(ctx context.Context, object cli
 
 	for _, poll := range polls.Items {
 		for _, _gvk := range gvk {
-			if *poll.Spec.DiscovererRef.APIGroup == _gvk.Group && poll.Spec.DiscovererRef.Kind == _gvk.Kind &&
+			if *poll.Spec.DiscovererRef.APIGroup == _gvk.Group &&
+				poll.Spec.DiscovererRef.Kind == _gvk.Kind &&
 				poll.Spec.DiscovererRef.Name == object.GetName() {
 				req := reconcile.Request{
 					NamespacedName: types.NamespacedName{
