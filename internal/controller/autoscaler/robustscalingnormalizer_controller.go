@@ -255,18 +255,19 @@ func (r *RobustScalingNormalizerReconciler) normalize(ctx context.Context,
 			} else {
 				normalized = (metric.Value.AsApproximateFloat64() - median) / iqr
 			}
-			normalizedAsResource, err := resource.ParseQuantity(
-				strconv.FormatFloat(normalized, 'f', -1, 32))
+			normalizedAsString := strconv.FormatFloat(normalized, 'f', -1, 64)
+			normalizedAsResource, err := resource.ParseQuantity(normalizedAsString)
 			if err != nil {
 				log.Error(err, "Failed to parse normalized value as resource", "normalized", normalized)
 				return nil, err
 			}
 			normalizedMetrics = append(normalizedMetrics, autoscaler.MetricValue{
-				Poller:   metric.Poller,
-				ShardUID: metric.ShardUID,
-				ID:       metric.ID,
-				Query:    metric.Query,
-				Value:    normalizedAsResource,
+				Poller:       metric.Poller,
+				Shard:        metric.Shard,
+				ID:           metric.ID,
+				Query:        metric.Query,
+				Value:        normalizedAsResource,
+				DisplayValue: normalizedAsString,
 			})
 		}
 	}

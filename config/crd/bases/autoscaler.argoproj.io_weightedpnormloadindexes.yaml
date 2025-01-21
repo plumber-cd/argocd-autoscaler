@@ -187,10 +187,38 @@ spec:
                   description: LoadIndex is a representation of a shared with calculated
                     load index to it.
                   properties:
-                    uid:
-                      description: UID unieue identifier of this shard so it can be
-                        uniquely identified in the list of shards.
+                    displayValue:
+                      description: |-
+                        DisplayValue is the string representation of the without precision guarantee.
+                        This is meaningless and exists purely for convenience of someone who is looking at the kubectl get output.
                       type: string
+                    shard:
+                      description: Shard is the shard that this load index is calculated
+                        for.
+                      properties:
+                        data:
+                          additionalProperties:
+                            type: string
+                          description: Data is a map that will be used to populate
+                            Go Templates params for the poller (if the poller supports
+                            that).
+                          type: object
+                        id:
+                          description: |-
+                            ID of this shard. It may or may not be unique, depending on the discoverer.
+                            It is expected to be used to populate Go Templates params for the poller (if the poller supports that).
+                          type: string
+                        uid:
+                          description: |-
+                            UID unieue identifier of this shard so it can be uniquely identified in the list of shards.
+                            The reason this is not baked into SourceRef is because actual resource may or may not exists.
+                            When the discovery was external - this may be arbitrary string unique to that shard.
+                          type: string
+                      required:
+                      - data
+                      - id
+                      - uid
+                      type: object
                     value:
                       anyOf:
                       - type: integer
@@ -200,7 +228,8 @@ spec:
                       type: number
                       x-kubernetes-int-or-string: true
                   required:
-                  - uid
+                  - displayValue
+                  - shard
                   - value
                   type: object
                 type: array

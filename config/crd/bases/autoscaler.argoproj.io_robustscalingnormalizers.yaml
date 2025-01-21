@@ -143,6 +143,11 @@ spec:
                 items:
                   description: MetricValue is a resulting value for the metric.
                   properties:
+                    displayValue:
+                      description: |-
+                        DisplayValue is the string representation of the without precision guarantee.
+                        This is meaningless and exists purely for convenience of someone who is looking at the kubectl get output.
+                      type: string
                     id:
                       description: ID of this metric.
                       type: string
@@ -155,12 +160,32 @@ spec:
                         Query is the query that was used to fetch this value.
                         It will be different for individual implementations.
                       type: string
-                    shardUID:
-                      description: |-
-                        ShardUID uuid of this shard for this metric value.
-                        It is used to uniquely identify the shard that was used to fetch this value.
-                        When the discovery was external - this may be arbitrary string unique to that shard.
-                      type: string
+                    shard:
+                      description: Shard is this shard for this metric value.
+                      properties:
+                        data:
+                          additionalProperties:
+                            type: string
+                          description: Data is a map that will be used to populate
+                            Go Templates params for the poller (if the poller supports
+                            that).
+                          type: object
+                        id:
+                          description: |-
+                            ID of this shard. It may or may not be unique, depending on the discoverer.
+                            It is expected to be used to populate Go Templates params for the poller (if the poller supports that).
+                          type: string
+                        uid:
+                          description: |-
+                            UID unieue identifier of this shard so it can be uniquely identified in the list of shards.
+                            The reason this is not baked into SourceRef is because actual resource may or may not exists.
+                            When the discovery was external - this may be arbitrary string unique to that shard.
+                          type: string
+                      required:
+                      - data
+                      - id
+                      - uid
+                      type: object
                     value:
                       anyOf:
                       - type: integer
@@ -171,9 +196,10 @@ spec:
                       type: number
                       x-kubernetes-int-or-string: true
                   required:
+                  - displayValue
                   - id
                   - poller
-                  - shardUID
+                  - shard
                   - value
                   type: object
                 type: array

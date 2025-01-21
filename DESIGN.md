@@ -84,11 +84,8 @@ The actual queries for the autoscaler need to be tweaked a little.
 
 ArgoCD is not really a spiky workload, and scaling it often due to sharding implementation is not really a good idea.
 So, we can probably use percentiles over large time frame.
-What exact percentile and over what exact time frame would largely depend on the user.
-Do you want stable over provisioned setup? Give it a 99th percentile over a week.
-Do you like living on the edge? Give it a 50th percentile over a hour.
-Optimal values would probably be something in the middle.
-I am personally leaning towards 95th percentile over last 24h.
+What exact percentile and over what exact time frame would largely depend on the user, choice of metrics,
+normalization and aggregation choices, as well as final consensus algorithm.
 
 Let's tweak queries accordingly.
 
@@ -96,7 +93,7 @@ For gauges:
 
 ```
 quantile_over_time(
-  0.95,
+  0.50,
   (
     sum by() (argocd_app_info{job="argocd-metrics",namespace="argocd",dest_server="https://kubernetes.default.svc"})
   )[24h:1m]
@@ -107,7 +104,7 @@ For counters:
 
 ```
 quantile_over_time(
-  0.95,
+  0.50,
   (
     sum(increase(argocd_cluster_events_total{job="argocd-metrics",namespace="argocd",server="https://kubernetes.default.svc"}[1m]))
   )[24h:1m]

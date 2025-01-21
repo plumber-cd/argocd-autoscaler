@@ -17,7 +17,7 @@ spec:
   - id: argocd_app_info
     query: |-
       quantile_over_time(
-        0.95,
+        0.50,
         (
           sum by() (argocd_app_info{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .data.server }}"})
         )[24h:1m]
@@ -25,7 +25,7 @@ spec:
   - id: argocd_cluster_api_resource_objects
     query: |-
       quantile_over_time(
-        0.95,
+        0.50,
         (
           sum by() (argocd_cluster_api_resource_objects{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .data.server }}"})
         )[24h:1m]
@@ -33,7 +33,7 @@ spec:
   - id: argocd_cluster_api_resources
     query: |-
       quantile_over_time(
-        0.95,
+        0.50,
         (
           sum by() (argocd_cluster_api_resources{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .data.server }}"})
         )[24h:1m]
@@ -41,7 +41,7 @@ spec:
   - id: argocd_app_reconcile_count
     query: |-
       quantile_over_time(
-        0.95,
+        0.50,
         (
           sum(increase(argocd_app_reconcile_count{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .data.server }}"}[1m]))
         )[24h:1m]
@@ -49,7 +49,7 @@ spec:
   - id: argocd_cluster_events_total
     query: |-
       quantile_over_time(
-        0.95,
+        0.50,
         (
           sum(increase(argocd_cluster_events_total{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .data.server }}"}[1m]))
         )[24h:1m]
@@ -63,7 +63,7 @@ spec:
         {{- $server = "https://100.64.0.1:443" -}}
       {{- end -}}
       quantile_over_time(
-        0.95,
+        0.50,
         (
           sum(increase(argocd_app_k8s_request_total{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ $server }}"}[1m]))
         )[24h:1m]
@@ -77,7 +77,7 @@ spec:
         {{- $host = "100.64.0.1:443" -}}
       {{- end -}}
       quantile_over_time(
-        0.95,
+        0.50,
         (
           sum(increase(rest_client_requests_total{job="argocd-metrics",namespace="{{ .namespace }}",host="{{ $host }}"}[1m]))
         )[24h:1m]

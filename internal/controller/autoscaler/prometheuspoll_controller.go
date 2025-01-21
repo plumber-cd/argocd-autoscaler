@@ -242,8 +242,8 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			// Check if the list of shards has changed since the last poll
 			previouslyObservedShards := []types.UID{}
 			for _, metricValue := range poll.Status.Values {
-				if !slices.Contains(previouslyObservedShards, metricValue.ShardUID) {
-					previouslyObservedShards = append(previouslyObservedShards, metricValue.ShardUID)
+				if !slices.Contains(previouslyObservedShards, metricValue.Shard.UID) {
+					previouslyObservedShards = append(previouslyObservedShards, metricValue.Shard.UID)
 				}
 			}
 			slices.Sort(previouslyObservedShards)

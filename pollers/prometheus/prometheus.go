@@ -97,19 +97,20 @@ func (r *Poller) Poll(
 
 			log.V(2).Info("Prometheus query response", "metric", metric.ID, "value", value, "query", query)
 
-			valueAsResource, err := resource.ParseQuantity(
-				strconv.FormatFloat(value, 'f', -1, 32))
+			valueAsString := strconv.FormatFloat(value, 'f', -1, 64)
+			valueAsResource, err := resource.ParseQuantity(valueAsString)
 			if err != nil {
 				log.Error(err, "Failed to parse value as resource", "metric", metric.ID, "value", value)
 				return nil, err
 			}
 
 			metrics = append(metrics, autoscaler.MetricValue{
-				Poller:   "prometheus",
-				ShardUID: shard.UID,
-				ID:       metric.ID,
-				Query:    query,
-				Value:    valueAsResource,
+				Poller:       "prometheus",
+				Shard:        shard,
+				ID:           metric.ID,
+				Query:        query,
+				Value:        valueAsResource,
+				DisplayValue: valueAsString,
 			})
 		}
 	}

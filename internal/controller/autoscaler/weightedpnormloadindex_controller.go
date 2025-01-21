@@ -189,18 +189,22 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 
 	metricsByShardByID := map[types.UID]map[string][]autoscaler.MetricValue{}
 	metricsByShard := map[types.UID][]autoscaler.MetricValue{}
+	shardsByUID := map[types.UID]autoscaler.DiscoveredShard{}
 	for _, m := range values {
-		if _, exists := metricsByShardByID[m.ShardUID]; !exists {
-			metricsByShardByID[m.ShardUID] = map[string][]autoscaler.MetricValue{}
+		if _, exists := metricsByShardByID[m.Shard.UID]; !exists {
+			metricsByShardByID[m.Shard.UID] = map[string][]autoscaler.MetricValue{}
 		}
-		if _, exists := metricsByShardByID[m.ShardUID][m.ID]; !exists {
-			metricsByShardByID[m.ShardUID][m.ID] = []autoscaler.MetricValue{}
+		if _, exists := metricsByShardByID[m.Shard.UID][m.ID]; !exists {
+			metricsByShardByID[m.Shard.UID][m.ID] = []autoscaler.MetricValue{}
 		}
-		metricsByShardByID[m.ShardUID][m.ID] = append(metricsByShardByID[m.ShardUID][m.ID], m)
-		if _, exists := metricsByShard[m.ShardUID]; !exists {
-			metricsByShard[m.ShardUID] = []autoscaler.MetricValue{}
+		metricsByShardByID[m.Shard.UID][m.ID] = append(metricsByShardByID[m.Shard.UID][m.ID], m)
+		if _, exists := metricsByShard[m.Shard.UID]; !exists {
+			metricsByShard[m.Shard.UID] = []autoscaler.MetricValue{}
 		}
-		metricsByShard[m.ShardUID] = append(metricsByShard[m.ShardUID], m)
+		metricsByShard[m.Shard.UID] = append(metricsByShard[m.Shard.UID], m)
+		if _, exists := shardsByUID[m.Shard.UID]; !exists {
+			shardsByUID[m.Shard.UID] = m.Shard
+		}
 	}
 	for shardUID, shardMetricsByID := range metricsByShardByID {
 		for metricID := range weightsByID {
@@ -245,11 +249,12 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 			// Re-quering won't help if this is a math problem
 			return ctrl.Result{}, nil
 		}
-		valueAsResource, err := resource.ParseQuantity(
-			strconv.FormatFloat(value, 'f', -1, 32))
+		valueAsString := strconv.FormatFloat(value, 'f', -1, 64)
+		valueAsResource, err := resource.ParseQuantity(valueAsString)
 		loadIndexes = append(loadIndexes, autoscaler.LoadIndex{
-			UID:   shardUID,
-			Value: valueAsResource,
+			Shard:        shardsByUID[shardUID],
+			Value:        valueAsResource,
+			DisplayValue: valueAsString,
 		})
 	}
 
@@ -286,14 +291,14 @@ func (r *WeightedPNormLoadIndexReconciler) calculate(
 	for _, m := range values {
 		weight, ok := weights[m.ID]
 		if !ok {
-			return 0, fmt.Errorf("failed to find weight for metric ID '%s'", m.ID)
+			continue
 		}
 		weightValue := weight.Weight.AsApproximateFloat64()
 		value := m.Value.AsApproximateFloat64()
 		if weight.Negative != nil && !*weight.Negative && value < 0 {
 			value = float64(0)
 		}
-		sum += weightValue * math.Pow(value, float64(p))
+		sum += weightValue * math.Pow(math.Abs(value), float64(p))
 	}
 
 	return math.Pow(sum, float64(1)/float64(p)), nil
