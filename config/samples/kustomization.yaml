@@ -3,4 +3,5 @@ resources:
 - secret_type_cluster.yaml
 - autoscaler_v1alpha1_prometheuspoll.yaml
 - autoscaler_v1alpha1_robustscalingnormalizer.yaml
+- autoscaler_v1alpha1_secrettypeclusterdiscovery.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

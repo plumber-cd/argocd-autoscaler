@@ -17,6 +17,7 @@ rules:
   resources:
   - prometheuspolls
   - robustscalingnormalizers
+  - secrettypeclusterdiscoveries
   verbs:
   - create
   - delete
@@ -30,6 +31,7 @@ rules:
   resources:
   - prometheuspolls/finalizers
   - robustscalingnormalizers/finalizers
+  - secrettypeclusterdiscoveries/finalizers
   verbs:
   - update
 - apiGroups:
@@ -37,6 +39,7 @@ rules:
   resources:
   - prometheuspolls/status
   - robustscalingnormalizers/status
+  - secrettypeclusterdiscoveries/status
   verbs:
   - get
   - patch

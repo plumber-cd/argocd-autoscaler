@@ -15,6 +15,15 @@ resources:
   controller: true
   domain: argoproj.io
   group: autoscaler
+  kind: SecretTypeClusterDiscovery
+  path: github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: argoproj.io
+  group: autoscaler
   kind: PrometheusPoll
   path: github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1
   version: v1alpha1
