@@ -17,18 +17,30 @@ We need something better. And also configurable.
 
 # Solution
 
-Autoscaler will be operating in six phases, for each individually there could be multiple configurable implementations:
+Autoscaler will be operating in multiple phases, for each phane there could be multiple configurable implementations:
 
-1. Poll - gather metrics.
+1. Discovery - find shards aka clusters.
+1. Poll - gather metrics from shards.
 2. Normalize - make metrics comparable.
 3. Load Index - combine metrics from each cluster into a single index.
 4. Partition - distribute shards based accordingly each cluster index.
 5. Evaluate - observe over time that the desired partition is the best choice.
 6. Apply - assign shards to clusters in ArgoCD and restart controllers.
 
-Each phase is a separate API and a controller.
+Each phase is a separate API and a controller to allow for extendability.
 
 For initial implementation, we will pick one particular algorithm for each phase.
+
+## Discovery
+
+First of all - we need to find our clusters. There are multiple ways to add clusters in ArgoCD,
+I am using secrets labeled with `argocd.argoproj.io/secret-type: cluster` standard label.
+
+### Secret Type Cluster
+
+We would find all secrets with `argocd.argoproj.io/secret-type: cluster` label.
+Shard ID would be the name of the secret, UID would be UID of the secret,
+and for `.data` - we would use `.data.name` and `.data.server` from that very secret.
 
 ## Poll
 
