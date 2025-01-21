@@ -82,6 +82,16 @@ type WeightedPNormLoadIndex struct {
 	Status WeightedPNormLoadIndexStatus `json:"status,omitempty"`
 }
 
+// GetConditions returns .Status.Conditions
+func (li *WeightedPNormLoadIndex) GetConditions() []metav1.Condition {
+	return li.Status.Conditions
+}
+
+// GetValues returns .Status.Values
+func (li *WeightedPNormLoadIndex) GetValues() []LoadIndex {
+	return li.Status.Values
+}
+
 // +kubebuilder:object:root=true
 
 // WeightedPNormLoadIndexList contains a list of WeightedPNormLoadIndex.

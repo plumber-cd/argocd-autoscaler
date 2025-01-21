@@ -6,6 +6,7 @@ resources:
 - bases/autoscaler.argoproj.io_robustscalingnormalizers.yaml
 - bases/autoscaler.argoproj.io_secrettypeclusterdiscoveries.yaml
 - bases/autoscaler.argoproj.io_weightedpnormloadindexes.yaml
+- bases/autoscaler.argoproj.io_longestprocessingtimepartitions.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

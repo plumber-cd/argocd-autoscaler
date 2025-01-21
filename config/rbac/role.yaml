@@ -15,6 +15,7 @@ rules:
 - apiGroups:
   - autoscaler.argoproj.io
   resources:
+  - longestprocessingtimepartitions
   - prometheuspolls
   - robustscalingnormalizers
   - secrettypeclusterdiscoveries
@@ -30,6 +31,7 @@ rules:
 - apiGroups:
   - autoscaler.argoproj.io
   resources:
+  - longestprocessingtimepartitions/finalizers
   - prometheuspolls/finalizers
   - robustscalingnormalizers/finalizers
   - secrettypeclusterdiscoveries/finalizers
@@ -39,6 +41,7 @@ rules:
 - apiGroups:
   - autoscaler.argoproj.io
   resources:
+  - longestprocessingtimepartitions/status
   - prometheuspolls/status
   - robustscalingnormalizers/status
   - secrettypeclusterdiscoveries/status
