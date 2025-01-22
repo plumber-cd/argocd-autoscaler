@@ -2,9 +2,12 @@
 
 # Problem
 
-Although over time this project could expand in other ArgoCD controllers, initially the focus is Application Controller.
+Current focus of this project is ArgoCD Application Controllers.
+For the most part, other components can be scaled by either HPA or KEDA.
 
-ArgoCD Application Controller is only capable to shard based on destination clusters,
+Challenge with scaling Application Controller has to do with its sharding implementation.
+
+Application Controller is only capable to shard based on destination clusters,
 i.e. all the apps destined to a particular cluster will always be reconciled by the same shard.
 ArgoCD Application Controller has three sharding algorithms (at the moment of creating of this repository).
 The first two `legacy` and `round-robin` -
@@ -13,7 +16,10 @@ The new (and still beta) `consistent-hashing` algorithm is trying to use data,
 but it makes a wrongful assumption that all Applications do generate equal amount of reconciliation work,
 which is simply not true.
 
-We need something better. And also configurable.
+We need something better. And also flexible and configurable.
+
+Lastly, the way to update configuration and force desired replica/shard distribution is bespoke.
+Even updating the number of repcas in the StatefulSet is bespoke, due to the need to set the environment variable.
 
 # Solution
 
