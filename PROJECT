@@ -55,4 +55,13 @@ resources:
   kind: LongestProcessingTimePartition
   path: github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: argoproj.io
+  group: autoscaler
+  kind: MostWantedTwoPhaseHysteresisEvaluation
+  path: github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1
+  version: v1alpha1
 version: "3"

@@ -206,21 +206,31 @@ Re-balancing shards is an expensive and disruptive operation, so we all want to 
 But - we don't want to just minimize re-balancing.
 We want to minimize meaningless re-balancing but still embrace change when it's actually needed.
 
-One idea was to use a Two-Phase Hysteresis.
-But that would have a major flaw, as we don't want to fall behind
-if pattern of the entire system at large indeed changed,
-but we cannot determine how exactly because of the transient spikes.
+One idea was to use a Two-Phase Hysteresis, which is to
+compute the new partition repeatedly, and if it remains the same for X consecutive checks or amount of time, then apply.
+But that would have a major flaw.
+If status quo is already fallen behind, but the new partitioning still can't get stable due to constraints,
+then we are stuck with the status quo.
+One way to overcome this would be to reduce the thresholds to apply, but that will cause too frequent re-shuffling.
 
-So, we will use a variation of Two-Phase Hysteresis.
+So, we will use a custom variation of Two-Phase Hysteresis.
 
-### Two-Phase Hysteresis "Most Wanted"
+### "Most Wanted" Two-Phase Hysteresis
 
 We will produce and store intended distribution of shards over a configurable amount of time.
-That will allow us to "learn" the most "normal" configuration we need and ignore transient spikes.
+That will allow us to "learn" the most "normal" configuration over time and ignore transient spikes.
 In the end - we will apply a configuration that was desired the most amount of samples over that time window.
+This will guarantee that we will apply an up to date configuration once every predetermined time window.
+It may not be the most efficient accordingly to the latest data, but it's reflecting well the most recent history,
+without risking to fall behind too much.
 
-In the combination with this evaluation implementation,
+In combination with this evaluation implementation,
 we should probably be able to increase frequency and granularity of the sampling in the polling phase.
+But that mostly depend on the polling parameters.
+Increasing poll frequency if our queries get percentiles over 24h - wouldn't change the outcome.
+Maybe a good idea would be to experiment with hybrid poll with queries for both historical and current metrics,
+with appropriate weights for each.
+That way the load index would represent both historical pattern as well as current load.
 
 ## Apply
 

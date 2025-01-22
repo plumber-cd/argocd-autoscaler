@@ -184,7 +184,7 @@ spec:
               values:
                 description: Value is the load index value.
                 items:
-                  description: LoadIndex is a representation of a shared with calculated
+                  description: LoadIndex is a representation of a shard with calculated
                     load index to it.
                   properties:
                     displayValue:

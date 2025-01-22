@@ -25,14 +25,14 @@ import (
 type LongestProcessingTimePartitionSpec struct {
 	// LoadIndexProvider is the reference to the resource that provides load index values.
 	// +kubebuilder:validation:Required
-	LoadIndexProvider corev1.TypedLocalObjectReference `json:"loadIndexProviderRef,omitempty"`
+	LoadIndexProviderRef corev1.TypedLocalObjectReference `json:"loadIndexProviderRef,omitempty"`
 }
 
 // LongestProcessingTimePartitionStatus defines the observed state of LongestProcessingTimePartition.
 type LongestProcessingTimePartitionStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
-	// Value is the calculated partitioning for this set of load indexes.
-	Value *Partition `json:"value,omitempty"`
+	// Replicas is the list of replicas with shard assignments produced by this partition.
+	Replicas []Replica `json:"replicas,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -48,6 +48,16 @@ type LongestProcessingTimePartition struct {
 
 	Spec   LongestProcessingTimePartitionSpec   `json:"spec,omitempty"`
 	Status LongestProcessingTimePartitionStatus `json:"status,omitempty"`
+}
+
+// GetConditions returns .Status.Conditions
+func (p *LongestProcessingTimePartition) GetConditions() []metav1.Condition {
+	return p.Status.Conditions
+}
+
+// GetReplicas returns .Status.Value
+func (p *LongestProcessingTimePartition) GetReplicas() []Replica {
+	return p.Status.Replicas
 }
 
 // +kubebuilder:object:root=true

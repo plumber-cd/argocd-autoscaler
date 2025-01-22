@@ -1,0 +1,15 @@
+apiVersion: autoscaler.argoproj.io/v1alpha1
+kind: MostWantedTwoPhaseHysteresisEvaluation
+metadata:
+  labels:
+    app.kubernetes.io/name: argocd-autoscaler
+    app.kubernetes.io/managed-by: kustomize
+  name: mostwantedtwophasehysteresisevaluation-sample
+spec:
+  paritionProviderRef:
+    apiGroup: autoscaler.argoproj.io
+    kind: LongestProcessingTimePartition
+    name: longestprocessingtimepartition-sample
+  pollingPeriod: 30s
+  stabilizationPeriod: 5m
+  minimumSampleSize: 10

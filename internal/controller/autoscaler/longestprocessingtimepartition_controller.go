@@ -104,7 +104,7 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 		r.RESTMapper(),
 		r.Client,
 		partition.Namespace,
-		partition.Spec.LoadIndexProvider,
+		partition.Spec.LoadIndexProviderRef,
 	)
 	if err != nil {
 		log.Error(err, "Failed to find load index provider by ref")
@@ -128,9 +128,9 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 			Status: metav1.ConditionFalse,
 			Reason: "LoadIndexProviderNotReady",
 			Message: fmt.Sprintf("Check the status of a load index provider %s (api=%s, kind=%s)",
-				partition.Spec.LoadIndexProvider.Name,
-				*partition.Spec.LoadIndexProvider.APIGroup,
-				partition.Spec.LoadIndexProvider.Kind,
+				partition.Spec.LoadIndexProviderRef.Name,
+				*partition.Spec.LoadIndexProviderRef.APIGroup,
+				partition.Spec.LoadIndexProviderRef.Kind,
 			),
 		})
 		if err := r.Status().Update(ctx, partition); err != nil {
@@ -177,11 +177,7 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 		return ctrl.Result{}, nil
 	}
 
-	partition.Status.Value = &autoscalerv1alpha1.Partition{
-		Partitioner: "longest-processing-time",
-		Replicas:    replicas,
-	}
-
+	partition.Status.Replicas = replicas
 	if !meta.IsStatusConditionPresentAndEqual(partition.Status.Conditions, typeAvailable, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&partition.Status.Conditions, metav1.Condition{
 			Type:   typeAvailable,
@@ -315,9 +311,9 @@ func (r *LongestProcessingTimePartitionReconciler) mapLoadIndexProvider(
 
 	for _, partition := range partitions.Items {
 		for _, _gvk := range gvk {
-			if *partition.Spec.LoadIndexProvider.APIGroup == _gvk.Group &&
-				partition.Spec.LoadIndexProvider.Kind == _gvk.Kind &&
-				partition.Spec.LoadIndexProvider.Name == object.GetName() {
+			if *partition.Spec.LoadIndexProviderRef.APIGroup == _gvk.Group &&
+				partition.Spec.LoadIndexProviderRef.Kind == _gvk.Kind &&
+				partition.Spec.LoadIndexProviderRef.Name == object.GetName() {
 				req := reconcile.Request{
 					NamespacedName: types.NamespacedName{
 						Name:      partition.GetName(),

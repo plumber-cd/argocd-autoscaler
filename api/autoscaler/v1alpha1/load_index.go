@@ -4,7 +4,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-// LoadIndex is a representation of a shared with calculated load index to it.
+// LoadIndex is a representation of a shard with calculated load index to it.
 type LoadIndex struct {
 	// Shard is the shard that this load index is calculated for.
 	// +kubebuilder:validation:Required
