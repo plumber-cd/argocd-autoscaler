@@ -117,8 +117,9 @@ func (r *SecretTypeClusterDiscoveryReconciler) Reconcile(ctx context.Context, re
 			ID:  cluster.Name,
 			UID: cluster.GetUID(),
 			Data: map[string]string{
-				"name":   string(cluster.Data["name"]),
-				"server": string(cluster.Data["server"]),
+				"namespace": cluster.Namespace,
+				"name":      string(cluster.Data["name"]),
+				"server":    string(cluster.Data["server"]),
 			},
 		}
 		shards = append(shards, shard)

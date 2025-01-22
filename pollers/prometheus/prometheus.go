@@ -44,9 +44,10 @@ func (r *Poller) Poll(
 	for _, metric := range poll.Spec.Metrics {
 		for _, shard := range shards {
 			tmplParams := map[string]interface{}{
-				"id":        shard.ID,
 				"namespace": poll.Namespace,
-				"data":      shard.Data,
+				"shardID":   shard.ID,
+				"shardUID":  shard.UID,
+				"shardData": shard.Data,
 			}
 
 			tmpl, err := template.New("query_" + metric.ID).Funcs(sprig.FuncMap()).Parse(metric.Query)
