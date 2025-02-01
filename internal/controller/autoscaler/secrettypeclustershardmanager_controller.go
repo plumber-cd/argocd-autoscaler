@@ -218,22 +218,22 @@ func (r *SecretTypeClusterShardManagerReconciler) mapClusterSecrets(
 		return requests
 	}
 
-	for _, discovery := range managers.Items {
+	for _, manager := range managers.Items {
 		labelSelector := labels.Set(client.MatchingLabels{
 			argo.LabelKeySecretType: argo.LabelValueSecretTypeCluster,
 		}).AsSelector()
-		if discovery.Spec.LabelSelector != nil {
-			log.V(2).Info("This discoverer uses custom labelSelector", "discoveryName", discovery.Name,
-				"discoveryKind", object.GetObjectKind().GroupVersionKind().Kind)
-			labelSelector = labels.Set(discovery.Spec.LabelSelector.MatchLabels).AsSelector()
+		if manager.Spec.LabelSelector != nil {
+			log.V(2).Info("This shard manager uses custom labelSelector", "shardManager", manager.Name,
+				"shardManagerKind", object.GetObjectKind().GroupVersionKind().Kind)
+			labelSelector = labels.Set(manager.Spec.LabelSelector.MatchLabels).AsSelector()
 		}
 		if labelSelector.Matches(labels.Set(object.GetLabels())) {
-			log.V(2).Info("Enqueueing discovery - match by labels", "discoveryName", discovery.Name,
-				"discoveryKind", object.GetObjectKind().GroupVersionKind().Kind)
+			log.V(2).Info("Enqueueing shard manager - match by labels", "shardManager", manager.Name,
+				"shardManagerKind", object.GetObjectKind().GroupVersionKind().Kind)
 			req := reconcile.Request{
 				NamespacedName: types.NamespacedName{
-					Name:      discovery.GetName(),
-					Namespace: discovery.GetNamespace(),
+					Name:      manager.GetName(),
+					Namespace: manager.GetNamespace(),
 				},
 			}
 			requests = append(requests, req)

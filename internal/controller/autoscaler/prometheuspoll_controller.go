@@ -180,7 +180,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			log.Error(err, "Failed to update resource status")
 			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
-		// We should get a new event when discoverer changes
+		// We should get a new event when shard manager changes
 		return ctrl.Result{}, nil
 	}
 
@@ -198,7 +198,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			log.Error(err, "Failed to update resource status")
 			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
-		// We should get a new event when discovery changes
+		// We should get a new event when shard manager changes
 		return ctrl.Result{}, nil
 	}
 
@@ -316,7 +316,7 @@ func (r *PrometheusPollReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 		c = c.Watches(
 			clientObj,
-			handler.EnqueueRequestsFromMapFunc(r.mapDiscoverer),
+			handler.EnqueueRequestsFromMapFunc(r.mapShardManager),
 		)
 	}
 
@@ -327,7 +327,7 @@ func (r *PrometheusPollReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return c.Complete(r)
 }
 
-func (r *PrometheusPollReconciler) mapDiscoverer(ctx context.Context, object client.Object) []reconcile.Request {
+func (r *PrometheusPollReconciler) mapShardManager(ctx context.Context, object client.Object) []reconcile.Request {
 	requests := []reconcile.Request{}
 
 	gvk, _, err := r.Scheme.ObjectKinds(object)

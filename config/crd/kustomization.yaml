@@ -2,13 +2,12 @@
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
 resources:
+- bases/autoscaler.argoproj.io_secrettypeclustershardmanagers.yaml
 - bases/autoscaler.argoproj.io_prometheuspolls.yaml
 - bases/autoscaler.argoproj.io_robustscalingnormalizers.yaml
-- bases/autoscaler.argoproj.io_secrettypeclusterdiscoveries.yaml
 - bases/autoscaler.argoproj.io_weightedpnormloadindexes.yaml
 - bases/autoscaler.argoproj.io_longestprocessingtimepartitions.yaml
 - bases/autoscaler.argoproj.io_mostwantedtwophasehysteresisevaluations.yaml
-- bases/autoscaler.argoproj.io_secrettypeclustershardmanagers.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

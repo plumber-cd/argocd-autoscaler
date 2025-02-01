@@ -6,10 +6,10 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: prometheuspoll-sample
 spec:
-  discovererRef:
+  shardManagerRef:
     apiGroup: autoscaler.argoproj.io
-    kind: SecretTypeClusterDiscovery
-    name: secrettypeclusterdiscovery-sample
+    kind: SecretTypeClusterShardManager
+    name: secrettypeclustershardmanager-sample
   initialDelay: 5s
   period: 30s
   address: http://localhost:9090

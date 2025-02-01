@@ -74,7 +74,7 @@ func init() {
 	RegisterShardManager(schema.GroupVersionKind{
 		Group:   "autoscaler.argoproj.io",
 		Version: "v1alpha1",
-		Kind:    "SecretTypeClusterDiscovery",
+		Kind:    "SecretTypeClusterShardManager",
 	})
 	RegisterMetricValuesProvider(schema.GroupVersionKind{
 		Group:   "autoscaler.argoproj.io",

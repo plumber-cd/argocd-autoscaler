@@ -34,9 +34,6 @@ resources:
 - autoscaler_weightedpnormloadindex_admin_role.yaml
 - autoscaler_weightedpnormloadindex_editor_role.yaml
 - autoscaler_weightedpnormloadindex_viewer_role.yaml
-- autoscaler_secrettypeclusterdiscovery_admin_role.yaml
-- autoscaler_secrettypeclusterdiscovery_editor_role.yaml
-- autoscaler_secrettypeclusterdiscovery_viewer_role.yaml
 - autoscaler_robustscalingnormalizer_admin_role.yaml
 - autoscaler_robustscalingnormalizer_editor_role.yaml
 - autoscaler_robustscalingnormalizer_viewer_role.yaml
