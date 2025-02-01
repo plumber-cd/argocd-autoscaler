@@ -19,7 +19,7 @@ spec:
       quantile_over_time(
         0.50,
         (
-          sum by() (argocd_app_info{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .data.server }}"})
+          sum(argocd_app_info{job="argocd-metrics",namespace="{{ .data.namespace }}",dest_server="{{ .data.server }}"})
         )[24h:1m]
       )
   - id: argocd_cluster_api_resource_objects
@@ -27,7 +27,7 @@ spec:
       quantile_over_time(
         0.50,
         (
-          sum by() (argocd_cluster_api_resource_objects{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .data.server }}"})
+          sum(argocd_cluster_api_resource_objects{job="argocd-metrics",namespace="{{ .data.namespace }}",server="{{ .data.server }}"})
         )[24h:1m]
       )
   - id: argocd_cluster_api_resources
@@ -35,7 +35,7 @@ spec:
       quantile_over_time(
         0.50,
         (
-          sum by() (argocd_cluster_api_resources{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .data.server }}"})
+          sum(argocd_cluster_api_resources{job="argocd-metrics",namespace="{{ .data.namespace }}",server="{{ .data.server }}"})
         )[24h:1m]
       )
   - id: argocd_app_reconcile_count
@@ -43,7 +43,7 @@ spec:
       quantile_over_time(
         0.50,
         (
-          sum(increase(argocd_app_reconcile_count{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .data.server }}"}[1m]))
+          sum(increase(argocd_app_reconcile_count{job="argocd-metrics",namespace="{{ .data.namespace }}",dest_server="{{ .data.server }}"}[1m]))
         )[24h:1m]
       )
   - id: argocd_cluster_events_total
@@ -51,7 +51,7 @@ spec:
       quantile_over_time(
         0.50,
         (
-          sum(increase(argocd_cluster_events_total{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .data.server }}"}[1m]))
+          sum(increase(argocd_cluster_events_total{job="argocd-metrics",namespace="{{ .data.namespace }}",server="{{ .data.server }}"}[1m]))
         )[24h:1m]
       )
   - id: argocd_app_k8s_request_total
@@ -65,7 +65,7 @@ spec:
       quantile_over_time(
         0.50,
         (
-          sum(increase(argocd_app_k8s_request_total{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ $server }}"}[1m]))
+          sum(increase(argocd_app_k8s_request_total{job="argocd-metrics",namespace="{{ .data.namespace }}",server="{{ $server }}"}[1m]))
         )[24h:1m]
       )
   - id: rest_client_requests_total
@@ -79,6 +79,6 @@ spec:
       quantile_over_time(
         0.50,
         (
-          sum(increase(rest_client_requests_total{job="argocd-metrics",namespace="{{ .namespace }}",host="{{ $host }}"}[1m]))
+          sum(increase(rest_client_requests_total{job="argocd-metrics",namespace="{{ .data.namespace }}",host="{{ $host }}"}[1m]))
         )[24h:1m]
       )

@@ -1,10 +1,10 @@
-package v1alpha1
+package common
 
 import "k8s.io/apimachinery/pkg/api/resource"
 
 // Replica is a representation of the replica for sharding
 type Replica struct {
-	// ID of the replica, starting from 0 and onwards.
+	// ID of the replica, starting from 0 and onward.
 	ID string `json:"id,omitempty"`
 	// LoadIndexes shards assigned to this replica wrapped into their load index.
 	// +kubebuilder:validation:Required

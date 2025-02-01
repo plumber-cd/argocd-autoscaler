@@ -20,14 +20,12 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"sync"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -38,36 +36,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	"github.com/plumber-cd/argocd-autoscaler/pollers/prometheus"
 )
-
-var (
-	knownDiscoverers      []schema.GroupVersionKind
-	knownDiscoverersMutex sync.Mutex
-)
-
-func RegisterDiscoverer(gvk schema.GroupVersionKind) {
-	knownDiscoverersMutex.Lock()
-	defer knownDiscoverersMutex.Unlock()
-	knownDiscoverers = append(knownDiscoverers, gvk)
-}
-
-func getDiscoverers() []schema.GroupVersionKind {
-	knownDiscoverersMutex.Lock()
-	defer knownDiscoverersMutex.Unlock()
-	_copy := make([]schema.GroupVersionKind, len(knownDiscoverers))
-	copy(_copy, knownDiscoverers)
-	return _copy
-}
-
-func init() {
-	RegisterDiscoverer(schema.GroupVersionKind{
-		Group:   "autoscaler.argoproj.io",
-		Version: "v1alpha1",
-		Kind:    "SecretTypeClusterDiscovery",
-	})
-}
 
 // PrometheusPollReconciler reconciles a PrometheusPoll object
 type PrometheusPollReconciler struct {
@@ -75,11 +47,9 @@ type PrometheusPollReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=prometheuspolls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=prometheuspolls/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=prometheuspolls/finalizers,verbs=update
-// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=secrettypeclusterdiscoveries,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -104,7 +74,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		log.Info("First reconciliation request, re-queuing for initial delay",
 			"cooldown", poll.Spec.InitialDelay)
 		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    typeAvailable,
+			Type:    StatusTypeAvailable,
 			Status:  metav1.ConditionUnknown,
 			Reason:  "InitialDelay",
 			Message: "Initial delay before initial reconciliation...",
@@ -121,7 +91,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		err := fmt.Errorf("No polling configuration present")
 		log.Error(err, "No polling configuration present, fail")
 		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
+			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "NoPollingConfiguration",
 			Message: err.Error(),
@@ -140,7 +110,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			err := fmt.Errorf("duplicate metric for ID '%s'", metric.ID)
 			log.Error(err, "No polling configuration present, fail")
 			meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-				Type:    typeReady,
+				Type:    StatusTypeReady,
 				Status:  metav1.ConditionFalse,
 				Reason:  "NoPollingConfiguration",
 				Message: err.Error(),
@@ -157,12 +127,12 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// First, change the availability condition from unknown to false -
 	// once it is set to true at the very end, we won't touch it ever again.
-	if meta.IsStatusConditionPresentAndEqual(poll.Status.Conditions, typeAvailable, metav1.ConditionUnknown) {
+	if meta.IsStatusConditionPresentAndEqual(poll.Status.Conditions, StatusTypeAvailable, metav1.ConditionUnknown) {
 		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    typeAvailable,
+			Type:    StatusTypeAvailable,
 			Status:  metav1.ConditionFalse,
-			Reason:  "InitialPoll",
-			Message: "This is the first poll",
+			Reason:  StatusTypeAvailableReasonInitialization,
+			Message: StatusTypeAvailableReasonInitialization,
 		})
 		if err := r.Status().Update(ctx, poll); err != nil {
 			log.Error(err, "Failed to update resource status")
@@ -171,39 +141,39 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
-	discoverer, err := findByRef[Discoverer](
+	shardsProvider, err := findByRef[common.ShardsProvider](
 		ctx,
 		r.Scheme,
 		r.RESTMapper(),
 		r.Client,
 		poll.Namespace,
-		poll.Spec.DiscovererRef,
+		*poll.Spec.ShardManagerRef,
 	)
 	if err != nil {
-		log.Error(err, "Failed to find discoverer by ref")
+		log.Error(err, "Failed to find shard manager by ref")
 		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
+			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "ErrorFindingDiscoverer",
+			Reason:  "ErrorFindingShardManager",
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, poll); err != nil {
 			log.Error(err, "Failed to update resource status")
 			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
-		// We should receive an event if discoverer is created
+		// We should receive an event if shard manager is created
 		return ctrl.Result{}, err
 	}
 
-	if !meta.IsStatusConditionPresentAndEqual((*discoverer).GetConditions(), typeReady, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(shardsProvider.GetStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:   typeReady,
+			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
-			Reason: "DiscoveredNotReady",
-			Message: fmt.Sprintf("Check the status of discoverer %s (api=%s, kind=%s)",
-				poll.Spec.DiscovererRef.Name,
-				*poll.Spec.DiscovererRef.APIGroup,
-				poll.Spec.DiscovererRef.Kind,
+			Reason: "ShardManagerNotReady",
+			Message: fmt.Sprintf("Check the status of shard manager %s (api=%s, kind=%s)",
+				poll.Spec.ShardManagerRef.Name,
+				*poll.Spec.ShardManagerRef.APIGroup,
+				poll.Spec.ShardManagerRef.Kind,
 			),
 		})
 		if err := r.Status().Update(ctx, poll); err != nil {
@@ -214,12 +184,12 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, nil
 	}
 
-	shards := (*discoverer).GetShards()
+	shards := shardsProvider.GetStatus().Shards
 	if len(shards) == 0 {
 		err := fmt.Errorf("No shards found")
 		log.Error(err, "No shards found, fail")
 		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
+			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "NoShardsFound",
 			Message: err.Error(),
@@ -271,7 +241,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if err != nil {
 		log.Error(err, "Failed to poll metrics")
 		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
+			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "PollingError",
 			Message: err.Error(),
@@ -287,7 +257,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		err := fmt.Errorf("No metrics found")
 		log.Error(err, "No metrics found, fail")
 		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
+			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "NoMetricsFound",
 			Message: err.Error(),
@@ -304,17 +274,17 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// Update the status with the new values
 	poll.Status.Values = metrics
 	poll.Status.LastPollingTime = &metav1.Time{Time: time.Now()}
-	if !meta.IsStatusConditionPresentAndEqual(poll.Status.Conditions, typeAvailable, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(poll.Status.Conditions, StatusTypeAvailable, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:   typeAvailable,
+			Type:   StatusTypeAvailable,
 			Status: metav1.ConditionTrue,
-			Reason: "InitialPollSuccessful",
+			Reason: StatusTypeAvailable,
 		})
 	}
 	meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-		Type:   typeReady,
+		Type:   StatusTypeReady,
 		Status: metav1.ConditionTrue,
-		Reason: "PollingSuccessful",
+		Reason: StatusTypeReady,
 	})
 	if err := r.Status().Update(ctx, poll); err != nil {
 		log.Error(err, "Failed to update resource status")
@@ -333,7 +303,7 @@ func (r *PrometheusPollReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		)
 
-	for _, gvk := range getDiscoverers() {
+	for _, gvk := range getShardManagers() {
 		obj, err := mgr.GetScheme().New(gvk)
 		if err != nil {
 			return fmt.Errorf("failed to create object for GVK %v: %w", gvk, err)
@@ -375,9 +345,9 @@ func (r *PrometheusPollReconciler) mapDiscoverer(ctx context.Context, object cli
 
 	for _, poll := range polls.Items {
 		for _, _gvk := range gvk {
-			if *poll.Spec.DiscovererRef.APIGroup == _gvk.Group &&
-				poll.Spec.DiscovererRef.Kind == _gvk.Kind &&
-				poll.Spec.DiscovererRef.Name == object.GetName() {
+			if *poll.Spec.ShardManagerRef.APIGroup == _gvk.Group &&
+				poll.Spec.ShardManagerRef.Kind == _gvk.Kind &&
+				poll.Spec.ShardManagerRef.Name == object.GetName() {
 				req := reconcile.Request{
 					NamespacedName: types.NamespacedName{
 						Name:      poll.GetName(),

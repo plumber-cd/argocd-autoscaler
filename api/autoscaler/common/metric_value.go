@@ -1,4 +1,4 @@
-package v1alpha1
+package common
 
 import (
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -6,15 +6,12 @@ import (
 
 // MetricValue is a resulting value for the metric.
 type MetricValue struct {
-	// Poller is the identification of the poller that was used to fetch this metric.
-	// +kubebuilder:validation:Required
-	Poller string `json:"poller,omitempty"`
-	// Shard is this shard for this metric value.
-	// +kubebuilder:validation:Required
-	Shard Shard `json:"shard,omitempty"`
 	// ID of this metric.
 	// +kubebuilder:validation:Required
 	ID string `json:"id,omitempty"`
+	// Shard is this shard for this metric value.
+	// +kubebuilder:validation:Required
+	Shard Shard `json:"shard,omitempty"`
 	// Query is the query that was used to fetch this value.
 	// It will be different for individual implementations.
 	Query string `json:"query,omitempty"`

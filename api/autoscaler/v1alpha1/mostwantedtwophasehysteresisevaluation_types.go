@@ -17,21 +17,22 @@ limitations under the License.
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
+	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // MostWantedTwoPhaseHysteresisEvaluationSpec defines the desired state of MostWantedTwoPhaseHysteresisEvaluation.
 type MostWantedTwoPhaseHysteresisEvaluationSpec struct {
-	// PartitionProviderRef is the reference to the resource that provides partitioning.
-	// +kubebuilder:validation:Required
-	PartitionProviderRef corev1.TypedLocalObjectReference `json:"paritionProviderRef,omitempty"`
+	common.EvaluatorSpec `json:",inline"`
+
 	// PollingPeriod is the period for polling the partitioning.
 	// +kubebuilder:validation:Required
 	PollingPeriod metav1.Duration `json:"pollingPeriod,omitempty"`
+
 	// StabilizationPeriod is the amount of time to wait before evaluating historical records.
 	// +kubebuilder:validation:Required
 	StabilizationPeriod metav1.Duration `json:"stabilizationPeriod,omitempty"`
+
 	// MinimumSampleSize is the minimum number of samples to consider before evaluating.
 	// +kubebuilder:validation:Required
 	MinimumSampleSize int32 `json:"minimumSampleSize,omitempty"`
@@ -41,22 +42,25 @@ type MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord struct {
 	// Timestamp is the time at which the record was created.
 	// +kubebuilder:validation:Required
 	Timestamp metav1.Time `json:"timestamp,omitempty"`
+
 	// Replicas is the partition as it was seen at this moment in time.
 	// +kubebuilder:validation:Required
-	Replicas []Replica `json:"replicas,omitempty"`
+	Replicas []common.Replica `json:"replicas,omitempty"`
 }
 
 // MostWantedTwoPhaseHysteresisEvaluationStatus defines the observed state of MostWantedTwoPhaseHysteresisEvaluation.
 type MostWantedTwoPhaseHysteresisEvaluationStatus struct {
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	common.PartitionProviderStatus `json:",inline"`
+
 	// History is historical observations of the partitioning changes over time.
 	History []MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord `json:"history,omitempty"`
-	// Replicas is the current partitioning choice.
-	Replicas []Replica `json:"replicas,omitempty"`
+
 	// LastEvaluationTimestamp is the time at which the last evaluation was performed.
+
 	LastEvaluationTimestamp *metav1.Time `json:"lastEvaluationTimestamp,omitempty"`
+
 	// Projection shows what the partitioning choice would have been if evaluation was performed during last poll.
-	Projection []Replica `json:"projection,omitempty"`
+	Projection []common.Replica `json:"projection,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -73,6 +77,14 @@ type MostWantedTwoPhaseHysteresisEvaluation struct {
 
 	Spec   MostWantedTwoPhaseHysteresisEvaluationSpec   `json:"spec,omitempty"`
 	Status MostWantedTwoPhaseHysteresisEvaluationStatus `json:"status,omitempty"`
+}
+
+func (p *MostWantedTwoPhaseHysteresisEvaluation) GetSpec() common.EvaluatorSpec {
+	return p.Spec.EvaluatorSpec
+}
+
+func (p *MostWantedTwoPhaseHysteresisEvaluation) GetStatus() common.PartitionProviderStatus {
+	return p.Status.PartitionProviderStatus
 }
 
 // +kubebuilder:object:root=true

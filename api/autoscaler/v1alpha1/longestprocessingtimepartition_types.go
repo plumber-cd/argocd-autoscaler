@@ -17,22 +17,18 @@ limitations under the License.
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
+	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // LongestProcessingTimePartitionSpec defines the desired state of LongestProcessingTimePartition.
 type LongestProcessingTimePartitionSpec struct {
-	// LoadIndexProvider is the reference to the resource that provides load index values.
-	// +kubebuilder:validation:Required
-	LoadIndexProviderRef corev1.TypedLocalObjectReference `json:"loadIndexProviderRef,omitempty"`
+	common.PartitionerSpec `json:",inline"`
 }
 
 // LongestProcessingTimePartitionStatus defines the observed state of LongestProcessingTimePartition.
 type LongestProcessingTimePartitionStatus struct {
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
-	// Replicas is the list of replicas with shard assignments produced by this partition.
-	Replicas []Replica `json:"replicas,omitempty"`
+	common.PartitionProviderStatus `json:",inline"`
 }
 
 // +kubebuilder:object:root=true
@@ -51,13 +47,13 @@ type LongestProcessingTimePartition struct {
 }
 
 // GetConditions returns .Status.Conditions
-func (p *LongestProcessingTimePartition) GetConditions() []metav1.Condition {
-	return p.Status.Conditions
+func (p *LongestProcessingTimePartition) GetSpec() common.PartitionerSpec {
+	return p.Spec.PartitionerSpec
 }
 
 // GetReplicas returns .Status.Value
-func (p *LongestProcessingTimePartition) GetReplicas() []Replica {
-	return p.Status.Replicas
+func (p *LongestProcessingTimePartition) GetStatus() common.PartitionProviderStatus {
+	return p.Status.PartitionProviderStatus
 }
 
 // +kubebuilder:object:root=true

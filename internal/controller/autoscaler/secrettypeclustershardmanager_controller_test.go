@@ -30,7 +30,7 @@ import (
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 )
 
-var _ = Describe("SecretTypeClusterDiscovery Controller", func() {
+var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -40,13 +40,13 @@ var _ = Describe("SecretTypeClusterDiscovery Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		secrettypeclusterdiscovery := &autoscalerv1alpha1.SecretTypeClusterDiscovery{}
+		secrettypeclustershardmanager := &autoscalerv1alpha1.SecretTypeClusterShardManager{}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind SecretTypeClusterDiscovery")
-			err := k8sClient.Get(ctx, typeNamespacedName, secrettypeclusterdiscovery)
+			By("creating the custom resource for the Kind SecretTypeClusterShardManager")
+			err := k8sClient.Get(ctx, typeNamespacedName, secrettypeclustershardmanager)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &autoscalerv1alpha1.SecretTypeClusterDiscovery{
+				resource := &autoscalerv1alpha1.SecretTypeClusterShardManager{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
@@ -59,16 +59,16 @@ var _ = Describe("SecretTypeClusterDiscovery Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &autoscalerv1alpha1.SecretTypeClusterDiscovery{}
+			resource := &autoscalerv1alpha1.SecretTypeClusterShardManager{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance SecretTypeClusterDiscovery")
+			By("Cleanup the specific resource instance SecretTypeClusterShardManager")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &SecretTypeClusterDiscoveryReconciler{
+			controllerReconciler := &SecretTypeClusterShardManagerReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}

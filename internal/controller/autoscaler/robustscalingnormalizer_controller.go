@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"sync"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -29,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -40,36 +38,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 )
-
-var (
-	knownPollers      []schema.GroupVersionKind
-	knownPollersMutex sync.Mutex
-)
-
-func RegisterPoller(gvk schema.GroupVersionKind) {
-	knownPollersMutex.Lock()
-	defer knownPollersMutex.Unlock()
-	knownPollers = append(knownPollers, gvk)
-}
-
-func getPollers() []schema.GroupVersionKind {
-	knownPollersMutex.Lock()
-	defer knownPollersMutex.Unlock()
-	_copy := make([]schema.GroupVersionKind, len(knownPollers))
-	copy(_copy, knownPollers)
-	return _copy
-}
-
-func init() {
-	RegisterPoller(schema.GroupVersionKind{
-		Group:   "autoscaler.argoproj.io",
-		Version: "v1alpha1",
-		Kind:    "PrometheusPoll",
-	})
-}
 
 // RobustScalingNormalizerReconciler reconciles a RobustScalingNormalizer object
 type RobustScalingNormalizerReconciler struct {
@@ -80,7 +52,6 @@ type RobustScalingNormalizerReconciler struct {
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=robustscalingnormalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=robustscalingnormalizers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=robustscalingnormalizers/finalizers,verbs=update
-// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=prometheuspolls,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -101,39 +72,39 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 		return ctrl.Result{}, err
 	}
 
-	poller, err := findByRef[Poller](
+	metricValuesProvider, err := findByRef[common.MetricValuesProvider](
 		ctx,
 		r.Scheme,
 		r.RESTMapper(),
 		r.Client,
 		normalizer.Namespace,
-		normalizer.Spec.PollerRef,
+		*normalizer.Spec.MetricValuesProviderRef,
 	)
 	if err != nil {
 		log.Error(err, "Failed to find poller by ref")
 		meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
+			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "ErrorFindingPoller",
+			Reason:  "ErrorFindingMetricsProvider",
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, normalizer); err != nil {
 			log.Error(err, "Failed to update resource status")
 			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
-		// We should get a new event when poller is created
+		// We should get a new event when metrics provider is created
 		return ctrl.Result{}, err
 	}
 
-	if !meta.IsStatusConditionPresentAndEqual((*poller).GetConditions(), typeReady, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(metricValuesProvider.GetStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
-			Type:   typeReady,
+			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
-			Reason: "PollerNotReady",
-			Message: fmt.Sprintf("Check the status of poller %s (api=%s, kind=%s)",
-				normalizer.Spec.PollerRef.Name,
-				*normalizer.Spec.PollerRef.APIGroup,
-				normalizer.Spec.PollerRef.Kind,
+			Reason: "MetricValuesProviderNotReady",
+			Message: fmt.Sprintf("Check the status of metric values provider %s (api=%s, kind=%s)",
+				normalizer.Spec.MetricValuesProviderRef.Name,
+				*normalizer.Spec.MetricValuesProviderRef.APIGroup,
+				normalizer.Spec.MetricValuesProviderRef.Kind,
 			),
 		})
 		if err := r.Status().Update(ctx, normalizer); err != nil {
@@ -144,13 +115,12 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 		return ctrl.Result{}, nil
 	}
 
-	values := (*poller).GetValues()
-
+	values := metricValuesProvider.GetStatus().Values
 	if len(values) == 0 {
 		err := fmt.Errorf("No metrics found")
 		log.Error(err, "No metrics found, fail")
 		meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
+			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "NoMetricsFound",
 			Message: err.Error(),
@@ -167,7 +137,7 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 	if err != nil {
 		log.Error(err, "Error during normalization")
 		meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
+			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "ErrorDuringNormalization",
 			Message: err.Error(),
@@ -181,17 +151,17 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 	}
 
 	normalizer.Status.Values = normalizedValues
-	if !meta.IsStatusConditionPresentAndEqual(normalizer.Status.Conditions, typeAvailable, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(normalizer.Status.Conditions, StatusTypeAvailable, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
-			Type:   typeAvailable,
+			Type:   StatusTypeAvailable,
 			Status: metav1.ConditionTrue,
-			Reason: "InitialNormalizationSuccessful",
+			Reason: StatusTypeAvailable,
 		})
 	}
 	meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
-		Type:   typeReady,
+		Type:   StatusTypeReady,
 		Status: metav1.ConditionTrue,
-		Reason: "NormalizationSuccessful",
+		Reason: StatusTypeReady,
 	})
 	if err := r.Status().Update(ctx, normalizer); err != nil {
 		log.Error(err, "Failed to update resource status")
@@ -203,21 +173,21 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 }
 
 func (r *RobustScalingNormalizerReconciler) normalize(ctx context.Context,
-	allMetrics []autoscaler.MetricValue) ([]autoscaler.MetricValue, error) {
+	allMetrics []common.MetricValue) ([]common.MetricValue, error) {
 
 	log := log.FromContext(ctx)
 
 	// First - we need to separate metrics by ID
-	metricsByID := map[string][]autoscaler.MetricValue{}
+	metricsByID := map[string][]common.MetricValue{}
 	for _, metric := range allMetrics {
 		if _, ok := metricsByID[metric.ID]; !ok {
-			metricsByID[metric.ID] = []autoscaler.MetricValue{}
+			metricsByID[metric.ID] = []common.MetricValue{}
 		}
 		metricsByID[metric.ID] = append(metricsByID[metric.ID], metric)
 	}
 
 	// Now, normalize them within their group
-	normalizedMetrics := []autoscaler.MetricValue{}
+	normalizedMetrics := []common.MetricValue{}
 	for _, metrics := range metricsByID {
 		all := []float64{}
 		for _, metric := range metrics {
@@ -261,10 +231,9 @@ func (r *RobustScalingNormalizerReconciler) normalize(ctx context.Context,
 				log.Error(err, "Failed to parse normalized value as resource", "normalized", normalized)
 				return nil, err
 			}
-			normalizedMetrics = append(normalizedMetrics, autoscaler.MetricValue{
-				Poller:       metric.Poller,
-				Shard:        metric.Shard,
+			normalizedMetrics = append(normalizedMetrics, common.MetricValue{
 				ID:           metric.ID,
+				Shard:        metric.Shard,
 				Query:        metric.Query,
 				Value:        normalizedAsResource,
 				DisplayValue: normalizedAsString,
@@ -319,7 +288,7 @@ func (r *RobustScalingNormalizerReconciler) SetupWithManager(mgr ctrl.Manager) e
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		)
 
-	for _, gvk := range getPollers() {
+	for _, gvk := range getMetricValuesProviders() {
 		obj, err := mgr.GetScheme().New(gvk)
 		if err != nil {
 			return fmt.Errorf("failed to create object for GVK %v: %w", gvk, err)
@@ -363,9 +332,9 @@ func (r *RobustScalingNormalizerReconciler) mapPoller(
 
 	for _, normalizer := range normalizers.Items {
 		for _, _gvk := range gvk {
-			if *normalizer.Spec.PollerRef.APIGroup == _gvk.Group &&
-				normalizer.Spec.PollerRef.Kind == _gvk.Kind &&
-				normalizer.Spec.PollerRef.Name == object.GetName() {
+			if *normalizer.Spec.MetricValuesProviderRef.APIGroup == _gvk.Group &&
+				normalizer.Spec.MetricValuesProviderRef.Kind == _gvk.Kind &&
+				normalizer.Spec.MetricValuesProviderRef.Name == object.GetName() {
 				req := reconcile.Request{
 					NamespacedName: types.NamespacedName{
 						Name:      normalizer.GetName(),

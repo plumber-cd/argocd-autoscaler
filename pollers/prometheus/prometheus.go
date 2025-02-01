@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	"github.com/prometheus/client_golang/api"
 	"github.com/prometheus/common/model"
@@ -26,8 +27,8 @@ type Poller struct{}
 func (r *Poller) Poll(
 	ctx context.Context,
 	poll autoscaler.PrometheusPoll,
-	shards []autoscaler.Shard,
-) ([]autoscaler.MetricValue, error) {
+	shards []common.Shard,
+) ([]common.MetricValue, error) {
 
 	log := log.FromContext(ctx).WithValues("poller", "prometheus")
 
@@ -40,14 +41,13 @@ func (r *Poller) Poll(
 
 	promAPI := pm.NewAPI(client)
 
-	metrics := []autoscaler.MetricValue{}
+	metrics := []common.MetricValue{}
 	for _, metric := range poll.Spec.Metrics {
 		for _, shard := range shards {
 			tmplParams := map[string]interface{}{
-				"namespace": poll.Namespace,
-				"shardID":   shard.ID,
-				"shardUID":  shard.UID,
-				"shardData": shard.Data,
+				"id":   shard.ID,
+				"uid":  shard.UID,
+				"data": shard.Data,
 			}
 
 			tmpl, err := template.New("query_" + metric.ID).Funcs(sprig.FuncMap()).Parse(metric.Query)
@@ -105,10 +105,9 @@ func (r *Poller) Poll(
 				return nil, err
 			}
 
-			metrics = append(metrics, autoscaler.MetricValue{
-				Poller:       "prometheus",
-				Shard:        shard,
+			metrics = append(metrics, common.MetricValue{
 				ID:           metric.ID,
+				Shard:        shard,
 				Query:        query,
 				Value:        valueAsResource,
 				DisplayValue: valueAsString,

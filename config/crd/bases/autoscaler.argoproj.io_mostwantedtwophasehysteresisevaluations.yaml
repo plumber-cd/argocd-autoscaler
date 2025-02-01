@@ -63,9 +63,9 @@ spec:
                   consider before evaluating.
                 format: int32
                 type: integer
-              paritionProviderRef:
-                description: PartitionProviderRef is the reference to the resource
-                  that provides partitioning.
+              partitionProviderRef:
+                description: PartitionProviderRef is the reference to the partition
+                  provider.
                 properties:
                   apiGroup:
                     description: |-
@@ -93,7 +93,7 @@ spec:
                 type: string
             required:
             - minimumSampleSize
-            - paritionProviderRef
+            - partitionProviderRef
             - pollingPeriod
             - stabilizationPeriod
             type: object
@@ -102,6 +102,7 @@ spec:
               observed state of MostWantedTwoPhaseHysteresisEvaluation.
             properties:
               conditions:
+                description: Conditions
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -170,7 +171,7 @@ spec:
                           sharding
                         properties:
                           id:
-                            description: ID of the replica, starting from 0 and onwards.
+                            description: ID of the replica, starting from 0 and onward.
                             type: string
                           loadIndexes:
                             description: LoadIndexes shards assigned to this replica
@@ -202,7 +203,7 @@ spec:
                                       type: string
                                     uid:
                                       description: |-
-                                        UID unieue identifier of this shard so it can be uniquely identified in the list of shards.
+                                        UID unique identifier of this shard so it can be uniquely identified in the list of shards.
                                         The reason this is not baked into SourceRef is because actual resource may or may not exists.
                                         When the discovery was external - this may be arbitrary string unique to that shard.
                                       type: string
@@ -215,6 +216,7 @@ spec:
                                   anyOf:
                                   - type: integer
                                   - type: string
+                                  description: Value is a value of this load index.
                                   format: float
                                   pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                                   type: number
@@ -254,8 +256,6 @@ spec:
                   type: object
                 type: array
               lastEvaluationTimestamp:
-                description: LastEvaluationTimestamp is the time at which the last
-                  evaluation was performed.
                 format: date-time
                 type: string
               projection:
@@ -265,7 +265,7 @@ spec:
                   description: Replica is a representation of the replica for sharding
                   properties:
                     id:
-                      description: ID of the replica, starting from 0 and onwards.
+                      description: ID of the replica, starting from 0 and onward.
                       type: string
                     loadIndexes:
                       description: LoadIndexes shards assigned to this replica wrapped
@@ -297,7 +297,7 @@ spec:
                                 type: string
                               uid:
                                 description: |-
-                                  UID unieue identifier of this shard so it can be uniquely identified in the list of shards.
+                                  UID unique identifier of this shard so it can be uniquely identified in the list of shards.
                                   The reason this is not baked into SourceRef is because actual resource may or may not exists.
                                   When the discovery was external - this may be arbitrary string unique to that shard.
                                 type: string
@@ -310,6 +310,7 @@ spec:
                             anyOf:
                             - type: integer
                             - type: string
+                            description: Value is a value of this load index.
                             format: float
                             pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                             type: number
@@ -340,12 +341,12 @@ spec:
                   type: object
                 type: array
               replicas:
-                description: Replicas is the current partitioning choice.
+                description: Replicas is the list of replicas partitioned.
                 items:
                   description: Replica is a representation of the replica for sharding
                   properties:
                     id:
-                      description: ID of the replica, starting from 0 and onwards.
+                      description: ID of the replica, starting from 0 and onward.
                       type: string
                     loadIndexes:
                       description: LoadIndexes shards assigned to this replica wrapped
@@ -377,7 +378,7 @@ spec:
                                 type: string
                               uid:
                                 description: |-
-                                  UID unieue identifier of this shard so it can be uniquely identified in the list of shards.
+                                  UID unique identifier of this shard so it can be uniquely identified in the list of shards.
                                   The reason this is not baked into SourceRef is because actual resource may or may not exists.
                                   When the discovery was external - this may be arbitrary string unique to that shard.
                                 type: string
@@ -390,6 +391,7 @@ spec:
                             anyOf:
                             - type: integer
                             - type: string
+                            description: Value is a value of this load index.
                             format: float
                             pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                             type: number

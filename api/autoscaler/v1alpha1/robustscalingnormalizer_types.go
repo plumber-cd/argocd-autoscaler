@@ -17,22 +17,18 @@ limitations under the License.
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
+	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // RobustScalingNormalizerSpec defines the desired state of RobustScalingNormalizer.
 type RobustScalingNormalizerSpec struct {
-	// PollerRef is the reference to the poller that we need to normalize.
-	// +kubebuilder:validation:Required
-	PollerRef corev1.TypedLocalObjectReference `json:"pollerRef,omitempty"`
+	common.NormalizerSpec `json:",inline"`
 }
 
 // RobustScalingNormalizerStatus defines the observed state of RobustScalingNormalizer.
 type RobustScalingNormalizerStatus struct {
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
-	// Values of the metrics normalized.
-	Values []MetricValue `json:"values,omitempty"`
+	common.MetricValuesProviderStatus `json:",inline"`
 }
 
 // +kubebuilder:object:root=true
@@ -52,13 +48,13 @@ type RobustScalingNormalizer struct {
 }
 
 // GetConditions returns .Status.Conditions
-func (n *RobustScalingNormalizer) GetConditions() []metav1.Condition {
-	return n.Status.Conditions
+func (p *RobustScalingNormalizer) GetSpec() common.NormalizerSpec {
+	return p.Spec.NormalizerSpec
 }
 
 // GetValues returns .Status.Values
-func (n *RobustScalingNormalizer) GetValues() []MetricValue {
-	return n.Status.Values
+func (p *RobustScalingNormalizer) GetStatus() common.MetricValuesProviderStatus {
+	return p.Status.MetricValuesProviderStatus
 }
 
 // +kubebuilder:object:root=true

@@ -54,9 +54,9 @@ spec:
             description: RobustScalingNormalizerSpec defines the desired state of
               RobustScalingNormalizer.
             properties:
-              pollerRef:
-                description: PollerRef is the reference to the poller that we need
-                  to normalize.
+              metricValuesProviderRef:
+                description: MetricValuesProviderRef is a reference to the metric
+                  values provider.
                 properties:
                   apiGroup:
                     description: |-
@@ -76,13 +76,14 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
             required:
-            - pollerRef
+            - metricValuesProviderRef
             type: object
           status:
             description: RobustScalingNormalizerStatus defines the observed state
               of RobustScalingNormalizer.
             properties:
               conditions:
+                description: Conditions
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -139,7 +140,7 @@ spec:
                   type: object
                 type: array
               values:
-                description: Values of the metrics normalized.
+                description: Values is the list of metric values.
                 items:
                   description: MetricValue is a resulting value for the metric.
                   properties:
@@ -150,10 +151,6 @@ spec:
                       type: string
                     id:
                       description: ID of this metric.
-                      type: string
-                    poller:
-                      description: Poller is the identification of the poller that
-                        was used to fetch this metric.
                       type: string
                     query:
                       description: |-
@@ -177,7 +174,7 @@ spec:
                           type: string
                         uid:
                           description: |-
-                            UID unieue identifier of this shard so it can be uniquely identified in the list of shards.
+                            UID unique identifier of this shard so it can be uniquely identified in the list of shards.
                             The reason this is not baked into SourceRef is because actual resource may or may not exists.
                             When the discovery was external - this may be arbitrary string unique to that shard.
                           type: string
@@ -198,7 +195,6 @@ spec:
                   required:
                   - displayValue
                   - id
-                  - poller
                   - shard
                   - value
                   type: object

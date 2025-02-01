@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"sync"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -29,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -40,36 +38,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 )
-
-var (
-	knownLoadIndexProviders      []schema.GroupVersionKind
-	knownLoadIndexProvidersMutex sync.Mutex
-)
-
-func RegisterLoadIndexProvider(gvk schema.GroupVersionKind) {
-	knownLoadIndexProvidersMutex.Lock()
-	defer knownLoadIndexProvidersMutex.Unlock()
-	knownLoadIndexProviders = append(knownLoadIndexProviders, gvk)
-}
-
-func getLoadIndexProviders() []schema.GroupVersionKind {
-	knownLoadIndexProvidersMutex.Lock()
-	defer knownLoadIndexProvidersMutex.Unlock()
-	_copy := make([]schema.GroupVersionKind, len(knownLoadIndexProviders))
-	copy(_copy, knownLoadIndexProviders)
-	return _copy
-}
-
-func init() {
-	RegisterLoadIndexProvider(schema.GroupVersionKind{
-		Group:   "autoscaler.argoproj.io",
-		Version: "v1alpha1",
-		Kind:    "WeightedPNormLoadIndex",
-	})
-}
 
 // LongestProcessingTimePartitionReconciler reconciles a LongestProcessingTimePartition object
 type LongestProcessingTimePartitionReconciler struct {
@@ -80,7 +52,6 @@ type LongestProcessingTimePartitionReconciler struct {
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=longestprocessingtimepartitions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=longestprocessingtimepartitions/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=longestprocessingtimepartitions/finalizers,verbs=update
-// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=weightedpnormloadindexes,verbs=get;list;watch
 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.4/pkg/reconcile
@@ -98,18 +69,18 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 		return ctrl.Result{}, err
 	}
 
-	loadIndexProvider, err := findByRef[LoadIndexProvider](
+	loadIndexProvider, err := findByRef[common.LoadIndexProvider](
 		ctx,
 		r.Scheme,
 		r.RESTMapper(),
 		r.Client,
 		partition.Namespace,
-		partition.Spec.LoadIndexProviderRef,
+		*partition.Spec.LoadIndexProviderRef,
 	)
 	if err != nil {
 		log.Error(err, "Failed to find load index provider by ref")
 		meta.SetStatusCondition(&partition.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
+			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "ErrorFindingLoadIndexProvider",
 			Message: err.Error(),
@@ -122,9 +93,9 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 		return ctrl.Result{}, err
 	}
 
-	if !meta.IsStatusConditionPresentAndEqual((*loadIndexProvider).GetConditions(), typeReady, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(loadIndexProvider.GetStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&partition.Status.Conditions, metav1.Condition{
-			Type:   typeReady,
+			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
 			Reason: "LoadIndexProviderNotReady",
 			Message: fmt.Sprintf("Check the status of a load index provider %s (api=%s, kind=%s)",
@@ -141,15 +112,15 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 		return ctrl.Result{}, nil
 	}
 
-	loadIndexes := (*loadIndexProvider).GetValues()
+	loadIndexes := loadIndexProvider.GetStatus().Values
 
 	if len(loadIndexes) == 0 {
 		err := fmt.Errorf("No load indexes found")
 		log.Error(err, "No load indexes found, fail")
 		meta.SetStatusCondition(&partition.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
+			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "NoLoadIndexFound",
+			Reason:  "NoLoadIndexesFound",
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, partition); err != nil {
@@ -164,7 +135,7 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 	if err != nil {
 		log.Error(err, "Failure during partitioning")
 		meta.SetStatusCondition(&partition.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
+			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "ErrorDuringPartitioning",
 			Message: err.Error(),
@@ -178,17 +149,17 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 	}
 
 	partition.Status.Replicas = replicas
-	if !meta.IsStatusConditionPresentAndEqual(partition.Status.Conditions, typeAvailable, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(partition.Status.Conditions, StatusTypeAvailable, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&partition.Status.Conditions, metav1.Condition{
-			Type:   typeAvailable,
+			Type:   StatusTypeAvailable,
 			Status: metav1.ConditionTrue,
-			Reason: "InitialPartitioningSuccessful",
+			Reason: StatusTypeAvailable,
 		})
 	}
 	meta.SetStatusCondition(&partition.Status.Conditions, metav1.Condition{
-		Type:   typeReady,
+		Type:   StatusTypeReady,
 		Status: metav1.ConditionTrue,
-		Reason: "PartitioningSuccessful",
+		Reason: StatusTypeReady,
 	})
 	if err := r.Status().Update(ctx, partition); err != nil {
 		log.Error(err, "Failed to update resource status")
@@ -200,17 +171,17 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 }
 
 func (r *LongestProcessingTimePartitionReconciler) LPTPartition(ctx context.Context,
-	shards []autoscalerv1alpha1.LoadIndex) ([]autoscaler.Replica, error) {
+	shards []common.LoadIndex) ([]common.Replica, error) {
 
 	log := log.FromContext(ctx)
 
-	replicas := []autoscaler.Replica{}
+	replicas := []common.Replica{}
 
 	if len(shards) == 0 {
 		return replicas, nil
 	}
 
-	sort.Sort(LoadIndexesDesc(shards))
+	sort.Sort(common.LoadIndexesDesc(shards))
 	bucketSize := shards[0].Value.AsApproximateFloat64()
 
 	replicaCount := int32(0)
@@ -231,9 +202,9 @@ func (r *LongestProcessingTimePartitionReconciler) LPTPartition(ctx context.Cont
 		if selectedReplicaIndex < 0 {
 			// Create a new replica for this shard.
 			replicaCount++
-			newReplica := autoscaler.Replica{
+			newReplica := common.Replica{
 				ID:                    strconv.FormatInt(int64(replicaCount-1), 32),
-				LoadIndexes:           []autoscaler.LoadIndex{shard},
+				LoadIndexes:           []common.LoadIndex{shard},
 				TotalLoad:             shard.Value,
 				TotalLoadDisplayValue: strconv.FormatFloat(shard.Value.AsApproximateFloat64(), 'f', -1, 64),
 			}

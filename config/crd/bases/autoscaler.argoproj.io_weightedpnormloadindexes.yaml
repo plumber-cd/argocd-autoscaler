@@ -53,10 +53,9 @@ spec:
           spec:
             description: WeightedPNormLoadIndexSpec defines the desired state of WeightedPNormLoadIndex.
             properties:
-              metricProviderRef:
-                description: |-
-                  MetricProviderRef is the reference to the resource that provides metric values.
-                  It could be either Normalizer or a Poller.
+              metricValuesProviderRef:
+                description: MetricValuesProviderRef is the reference to the metric
+                  values provider
                 properties:
                   apiGroup:
                     description: |-
@@ -117,7 +116,7 @@ spec:
                   type: object
                 type: array
             required:
-            - metricProviderRef
+            - metricValuesProviderRef
             - p
             - weights
             type: object
@@ -126,6 +125,7 @@ spec:
               WeightedPNormLoadIndex.
             properties:
               conditions:
+                description: Conditions
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -182,7 +182,7 @@ spec:
                   type: object
                 type: array
               values:
-                description: Value is the load index value.
+                description: Values is the list of load index values.
                 items:
                   description: LoadIndex is a representation of a shard with calculated
                     load index to it.
@@ -210,7 +210,7 @@ spec:
                           type: string
                         uid:
                           description: |-
-                            UID unieue identifier of this shard so it can be uniquely identified in the list of shards.
+                            UID unique identifier of this shard so it can be uniquely identified in the list of shards.
                             The reason this is not baked into SourceRef is because actual resource may or may not exists.
                             When the discovery was external - this may be arbitrary string unique to that shard.
                           type: string
@@ -223,6 +223,7 @@ spec:
                       anyOf:
                       - type: integer
                       - type: string
+                      description: Value is a value of this load index.
                       format: float
                       pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                       type: number

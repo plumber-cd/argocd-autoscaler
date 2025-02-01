@@ -1,8 +1,10 @@
 package autoscaler
 
 const (
-	// typeAvailable represents the status of the resource reconciliation
-	typeAvailable = "Available"
-	// typeReady represents the status of the resourece
-	typeReady = "Ready"
+	// StatusTypeAvailable represents the status of the resource reconciliation
+	StatusTypeAvailable = "Available"
+	// StatusTypeAvailableReasonInitialization indicates the resource is being initialized
+	StatusTypeAvailableReasonInitialization = "Initialization"
+	// StatusTypeReady represents the status of the resource
+	StatusTypeReady = "Ready"
 )

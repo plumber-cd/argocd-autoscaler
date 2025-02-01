@@ -19,7 +19,7 @@ rules:
   - mostwantedtwophasehysteresisevaluations
   - prometheuspolls
   - robustscalingnormalizers
-  - secrettypeclusterdiscoveries
+  - secrettypeclustershardmanagers
   - weightedpnormloadindexes
   verbs:
   - create
@@ -36,7 +36,7 @@ rules:
   - mostwantedtwophasehysteresisevaluations/finalizers
   - prometheuspolls/finalizers
   - robustscalingnormalizers/finalizers
-  - secrettypeclusterdiscoveries/finalizers
+  - secrettypeclustershardmanagers/finalizers
   - weightedpnormloadindexes/finalizers
   verbs:
   - update
@@ -47,7 +47,7 @@ rules:
   - mostwantedtwophasehysteresisevaluations/status
   - prometheuspolls/status
   - robustscalingnormalizers/status
-  - secrettypeclusterdiscoveries/status
+  - secrettypeclustershardmanagers/status
   - weightedpnormloadindexes/status
   verbs:
   - get

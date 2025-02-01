@@ -8,6 +8,7 @@ resources:
 - bases/autoscaler.argoproj.io_weightedpnormloadindexes.yaml
 - bases/autoscaler.argoproj.io_longestprocessingtimepartitions.yaml
 - bases/autoscaler.argoproj.io_mostwantedtwophasehysteresisevaluations.yaml
+- bases/autoscaler.argoproj.io_secrettypeclustershardmanagers.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

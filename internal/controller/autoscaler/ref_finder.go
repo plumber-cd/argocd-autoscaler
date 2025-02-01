@@ -21,7 +21,7 @@ func findByRef[to any](
 	k8sClient client.Client,
 	namespace string,
 	ref corev1.TypedLocalObjectReference,
-) (*to, error) {
+) (to, error) {
 
 	log := log.FromContext(ctx)
 
@@ -38,7 +38,7 @@ func findByRef[to any](
 	mapping, err := restMapper.RESTMapping(gk, "")
 	if err != nil {
 		log.Error(err, "Failed to map GVK to REST mapping")
-		return nil, err
+		return *new(to), err
 	}
 
 	gvk := schema.GroupVersionKind{
@@ -49,24 +49,24 @@ func findByRef[to any](
 
 	obj, err := scheme.New(gvk)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create object for GVK %s: %w", gvk.String(), err)
+		return *new(to), fmt.Errorf("failed to create object for GVK %s: %w", gvk.String(), err)
 	}
 
 	clientObj, ok := obj.(client.Object)
 	if !ok {
-		return nil, fmt.Errorf("object for GVK %s does not implement client.Object", gvk.String())
+		return *new(to), fmt.Errorf("object for GVK %s does not implement client.Object", gvk.String())
 	}
 
 	key := types.NamespacedName{Name: ref.Name, Namespace: namespace}
 	if err := k8sClient.Get(ctx, key, clientObj); err != nil {
-		return nil, fmt.Errorf("failed to fetch resource %s: %w", key, err)
+		return *new(to), fmt.Errorf("failed to fetch resource %s: %w", key, err)
 	}
 
 	target, ok := any(clientObj).(to)
 	if !ok {
 		log.Error(nil, "Resource does not implement the required type", "Type", reflect.TypeOf((*to)(nil)).Elem())
-		return nil, fmt.Errorf("resource %s does not implement required type %T", key, new(to))
+		return *new(to), fmt.Errorf("resource %s does not implement required type %T", key, new(to))
 	}
 
-	return &target, nil
+	return target, nil
 }

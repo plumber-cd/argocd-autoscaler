@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"math"
 	"strconv"
-	"sync"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -29,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -40,41 +38,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 )
-
-var (
-	knownMetricProviders      []schema.GroupVersionKind
-	knownMetricProvidersMutex sync.Mutex
-)
-
-func RegisterMetricProvider(gvk schema.GroupVersionKind) {
-	knownMetricProvidersMutex.Lock()
-	defer knownMetricProvidersMutex.Unlock()
-	knownMetricProviders = append(knownMetricProviders, gvk)
-}
-
-func getMetricProviders() []schema.GroupVersionKind {
-	knownMetricProvidersMutex.Lock()
-	defer knownMetricProvidersMutex.Unlock()
-	_copy := make([]schema.GroupVersionKind, len(knownMetricProviders))
-	copy(_copy, knownMetricProviders)
-	return _copy
-}
-
-func init() {
-	RegisterMetricProvider(schema.GroupVersionKind{
-		Group:   "autoscaler.argoproj.io",
-		Version: "v1alpha1",
-		Kind:    "PrometheusPoll",
-	})
-	RegisterMetricProvider(schema.GroupVersionKind{
-		Group:   "autoscaler.argoproj.io",
-		Version: "v1alpha1",
-		Kind:    "RobustScalingNormalizer",
-	})
-}
 
 // WeightedPNormLoadIndexReconciler reconciles a WeightedPNormLoadIndex object
 type WeightedPNormLoadIndexReconciler struct {
@@ -85,8 +52,6 @@ type WeightedPNormLoadIndexReconciler struct {
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=weightedpnormloadindexes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=weightedpnormloadindexes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=weightedpnormloadindexes/finalizers,verbs=update
-// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=prometheuspolls,verbs=get;list;watch
-// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=robustscalingnormalizers,verbs=get;list;watch
 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.4/pkg/reconcile
@@ -110,9 +75,9 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 			err := fmt.Errorf("duplicate weight definition for metric ID '%s'", weight.ID)
 			log.Error(err, "Resource malformed")
 			meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
-				Type:    typeReady,
+				Type:    StatusTypeReady,
 				Status:  metav1.ConditionFalse,
-				Reason:  "ResourceMalformed",
+				Reason:  "WeightsMalformed",
 				Message: err.Error(),
 			})
 			if err := r.Status().Update(ctx, loadIndex); err != nil {
@@ -125,18 +90,18 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 		weightsByID[weight.ID] = weight
 	}
 
-	metricProvider, err := findByRef[MetricProvider](
+	metricValuesProvider, err := findByRef[common.MetricValuesProvider](
 		ctx,
 		r.Scheme,
 		r.RESTMapper(),
 		r.Client,
 		loadIndex.Namespace,
-		loadIndex.Spec.MetricProviderRef,
+		*loadIndex.Spec.MetricValuesProviderRef,
 	)
 	if err != nil {
 		log.Error(err, "Failed to find metric provider by ref")
 		meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
+			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "ErrorFindingMetricProvider",
 			Message: err.Error(),
@@ -149,15 +114,15 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 		return ctrl.Result{}, err
 	}
 
-	if !meta.IsStatusConditionPresentAndEqual((*metricProvider).GetConditions(), typeReady, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(metricValuesProvider.GetStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
-			Type:   typeReady,
+			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
-			Reason: "MetricProviderNotReady",
+			Reason: "MetricValuesProviderNotReady",
 			Message: fmt.Sprintf("Check the status of a metric provider %s (api=%s, kind=%s)",
-				loadIndex.Spec.MetricProviderRef.Name,
-				*loadIndex.Spec.MetricProviderRef.APIGroup,
-				loadIndex.Spec.MetricProviderRef.Kind,
+				loadIndex.Spec.MetricValuesProviderRef.Name,
+				*loadIndex.Spec.MetricValuesProviderRef.APIGroup,
+				loadIndex.Spec.MetricValuesProviderRef.Kind,
 			),
 		})
 		if err := r.Status().Update(ctx, loadIndex); err != nil {
@@ -168,15 +133,15 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 		return ctrl.Result{}, nil
 	}
 
-	values := (*metricProvider).GetValues()
+	values := metricValuesProvider.GetStatus().Values
 
 	if len(values) == 0 {
 		err := fmt.Errorf("No metrics found")
 		log.Error(err, "No metrics found, fail")
 		meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
+			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "NoMetricsFound",
+			Reason:  "NoMetricValuesFound",
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, loadIndex); err != nil {
@@ -187,19 +152,19 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 		return ctrl.Result{}, nil
 	}
 
-	metricsByShardByID := map[types.UID]map[string][]autoscaler.MetricValue{}
-	metricsByShard := map[types.UID][]autoscaler.MetricValue{}
-	shardsByUID := map[types.UID]autoscaler.Shard{}
+	metricsByShardByID := map[types.UID]map[string][]common.MetricValue{}
+	metricsByShard := map[types.UID][]common.MetricValue{}
+	shardsByUID := map[types.UID]common.Shard{}
 	for _, m := range values {
 		if _, exists := metricsByShardByID[m.Shard.UID]; !exists {
-			metricsByShardByID[m.Shard.UID] = map[string][]autoscaler.MetricValue{}
+			metricsByShardByID[m.Shard.UID] = map[string][]common.MetricValue{}
 		}
 		if _, exists := metricsByShardByID[m.Shard.UID][m.ID]; !exists {
-			metricsByShardByID[m.Shard.UID][m.ID] = []autoscaler.MetricValue{}
+			metricsByShardByID[m.Shard.UID][m.ID] = []common.MetricValue{}
 		}
 		metricsByShardByID[m.Shard.UID][m.ID] = append(metricsByShardByID[m.Shard.UID][m.ID], m)
 		if _, exists := metricsByShard[m.Shard.UID]; !exists {
-			metricsByShard[m.Shard.UID] = []autoscaler.MetricValue{}
+			metricsByShard[m.Shard.UID] = []common.MetricValue{}
 		}
 		metricsByShard[m.Shard.UID] = append(metricsByShard[m.Shard.UID], m)
 		if _, exists := shardsByUID[m.Shard.UID]; !exists {
@@ -212,7 +177,7 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 				err := fmt.Errorf("metric ID '%s' should exist exactly one time in shard %s", metricID, shardUID)
 				log.Error(err, "Shard malformed")
 				meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
-					Type:    typeReady,
+					Type:    StatusTypeReady,
 					Status:  metav1.ConditionFalse,
 					Reason:  "ShardMalformed",
 					Message: err.Error(),
@@ -227,7 +192,7 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 		}
 	}
 
-	loadIndexes := []autoscaler.LoadIndex{}
+	loadIndexes := []common.LoadIndex{}
 	for shardUID, values := range metricsByShard {
 		value, err := r.calculate(
 			loadIndex.Spec.P,
@@ -237,7 +202,7 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 		if err != nil {
 			log.Error(err, "Load Index calculation failed")
 			meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
-				Type:    typeReady,
+				Type:    StatusTypeReady,
 				Status:  metav1.ConditionFalse,
 				Reason:  "CalculationError",
 				Message: err.Error(),
@@ -251,7 +216,7 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 		}
 		valueAsString := strconv.FormatFloat(value, 'f', -1, 64)
 		valueAsResource, err := resource.ParseQuantity(valueAsString)
-		loadIndexes = append(loadIndexes, autoscaler.LoadIndex{
+		loadIndexes = append(loadIndexes, common.LoadIndex{
 			Shard:        shardsByUID[shardUID],
 			Value:        valueAsResource,
 			DisplayValue: valueAsString,
@@ -260,17 +225,17 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 
 	loadIndex.Status.Values = loadIndexes
 
-	if !meta.IsStatusConditionPresentAndEqual(loadIndex.Status.Conditions, typeAvailable, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(loadIndex.Status.Conditions, StatusTypeAvailable, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
-			Type:   typeAvailable,
+			Type:   StatusTypeAvailable,
 			Status: metav1.ConditionTrue,
-			Reason: "InitialCalculationSuccessful",
+			Reason: StatusTypeAvailable,
 		})
 	}
 	meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
-		Type:   typeReady,
+		Type:   StatusTypeReady,
 		Status: metav1.ConditionTrue,
-		Reason: "CalculationSuccessful",
+		Reason: StatusTypeReady,
 	})
 	if err := r.Status().Update(ctx, loadIndex); err != nil {
 		log.Error(err, "Failed to update resource status")
@@ -284,7 +249,7 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 func (r *WeightedPNormLoadIndexReconciler) calculate(
 	p int32,
 	weights map[string]autoscaler.WeightedPNormLoadIndexWeight,
-	values []autoscaler.MetricValue,
+	values []common.MetricValue,
 ) (float64, error) {
 
 	sum := 0.0
@@ -313,7 +278,7 @@ func (r *WeightedPNormLoadIndexReconciler) SetupWithManager(mgr ctrl.Manager) er
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		)
 
-	for _, gvk := range getMetricProviders() {
+	for _, gvk := range getMetricValuesProviders() {
 		obj, err := mgr.GetScheme().New(gvk)
 		if err != nil {
 			return fmt.Errorf("failed to create object for GVK %v: %w", gvk, err)
@@ -357,9 +322,9 @@ func (r *WeightedPNormLoadIndexReconciler) mapMetricProvider(
 
 	for _, loadIndex := range loadIndexes.Items {
 		for _, _gvk := range gvk {
-			if *loadIndex.Spec.MetricProviderRef.APIGroup == _gvk.Group &&
-				loadIndex.Spec.MetricProviderRef.Kind == _gvk.Kind &&
-				loadIndex.Spec.MetricProviderRef.Name == object.GetName() {
+			if *loadIndex.Spec.MetricValuesProviderRef.APIGroup == _gvk.Group &&
+				loadIndex.Spec.MetricValuesProviderRef.Kind == _gvk.Kind &&
+				loadIndex.Spec.MetricValuesProviderRef.Name == object.GetName() {
 				req := reconcile.Request{
 					NamespacedName: types.NamespacedName{
 						Name:      loadIndex.GetName(),

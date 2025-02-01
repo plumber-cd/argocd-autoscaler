@@ -17,7 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
+	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -27,11 +27,13 @@ type WeightedPNormLoadIndexWeight struct {
 	// ID of the metric.
 	// +kubebuilder:validation:Required
 	ID string `json:"id,omitempty"`
+
 	// Weight of this metric.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Type:=number
 	// +kubebuilder:validation:Format:=float
 	Weight resource.Quantity `json:"weight,omitempty"`
+
 	// Negative by default is true,
 	// meaning that if there are negative input values (based on previous normalization),
 	// they will be reducing the load index accordingly to their weight.
@@ -46,14 +48,13 @@ type WeightedPNormLoadIndexWeight struct {
 
 // WeightedPNormLoadIndexSpec defines the desired state of WeightedPNormLoadIndex.
 type WeightedPNormLoadIndexSpec struct {
-	// MetricProviderRef is the reference to the resource that provides metric values.
-	// It could be either Normalizer or a Poller.
-	// +kubebuilder:validation:Required
-	MetricProviderRef corev1.TypedLocalObjectReference `json:"metricProviderRef,omitempty"`
+	common.LoadIndexerSpec `json:",inline"`
+
 	// P is the vaue of p in the p-norm
 	// I.e. 1 for linear, 2 for euclidean, 3 for cubic etc.
 	// +kubebuilder:validation:Required
 	P int32 `json:"p,omitempty"`
+
 	// Weigths is the list of metrics and their weights to use in this load index.
 	// +kubebuilder:validation:Required
 	Weights []WeightedPNormLoadIndexWeight `json:"weights,omitempty"`
@@ -61,9 +62,7 @@ type WeightedPNormLoadIndexSpec struct {
 
 // WeightedPNormLoadIndexStatus defines the observed state of WeightedPNormLoadIndex.
 type WeightedPNormLoadIndexStatus struct {
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
-	// Value is the load index value.
-	Values []LoadIndex `json:"values,omitempty"`
+	common.LoadIndexProviderStatus `json:",inline"`
 }
 
 // +kubebuilder:object:root=true
@@ -83,13 +82,13 @@ type WeightedPNormLoadIndex struct {
 }
 
 // GetConditions returns .Status.Conditions
-func (li *WeightedPNormLoadIndex) GetConditions() []metav1.Condition {
-	return li.Status.Conditions
+func (li *WeightedPNormLoadIndex) GetSpec() common.LoadIndexerSpec {
+	return li.Spec.LoadIndexerSpec
 }
 
 // GetValues returns .Status.Values
-func (li *WeightedPNormLoadIndex) GetValues() []LoadIndex {
-	return li.Status.Values
+func (li *WeightedPNormLoadIndex) GetStatus() common.LoadIndexProviderStatus {
+	return li.Status.LoadIndexProviderStatus
 }
 
 // +kubebuilder:object:root=true

@@ -21,14 +21,12 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -40,36 +38,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 )
-
-var (
-	knownPartitionProviders      []schema.GroupVersionKind
-	knownPartitionProvidersMutex sync.Mutex
-)
-
-func RegisterPartitionProvider(gvk schema.GroupVersionKind) {
-	knownPartitionProvidersMutex.Lock()
-	defer knownPartitionProvidersMutex.Unlock()
-	knownPartitionProviders = append(knownPartitionProviders, gvk)
-}
-
-func getPartitionProviders() []schema.GroupVersionKind {
-	knownPartitionProvidersMutex.Lock()
-	defer knownPartitionProvidersMutex.Unlock()
-	_copy := make([]schema.GroupVersionKind, len(knownPartitionProviders))
-	copy(_copy, knownPartitionProviders)
-	return _copy
-}
-
-func init() {
-	RegisterPartitionProvider(schema.GroupVersionKind{
-		Group:   "autoscaler.argoproj.io",
-		Version: "v1alpha1",
-		Kind:    "LongestProcessingTimePartition",
-	})
-}
 
 // MostWantedTwoPhaseHysteresisEvaluationReconciler reconciles a MostWantedTwoPhaseHysteresisEvaluation object
 type MostWantedTwoPhaseHysteresisEvaluationReconciler struct {
@@ -80,7 +52,6 @@ type MostWantedTwoPhaseHysteresisEvaluationReconciler struct {
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=mostwantedtwophasehysteresisevaluations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=mostwantedtwophasehysteresisevaluations/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=mostwantedtwophasehysteresisevaluations/finalizers,verbs=update
-// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=longestprocessingtimepartitions,verbs=get;list;watch
 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.4/pkg/reconcile
@@ -98,18 +69,18 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		return ctrl.Result{}, err
 	}
 
-	partitionProvider, err := findByRef[PartitionProvider](
+	partitionProvider, err := findByRef[common.PartitionProvider](
 		ctx,
 		r.Scheme,
 		r.RESTMapper(),
 		r.Client,
 		evaluation.Namespace,
-		evaluation.Spec.PartitionProviderRef,
+		*evaluation.Spec.PartitionProviderRef,
 	)
 	if err != nil {
 		log.Error(err, "Failed to find partition provider by ref")
 		meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
+			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "ErrorFindingPartitionProvider",
 			Message: err.Error(),
@@ -122,9 +93,9 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		return ctrl.Result{}, err
 	}
 
-	if !meta.IsStatusConditionPresentAndEqual((*partitionProvider).GetConditions(), typeReady, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(partitionProvider.GetStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
-			Type:   typeReady,
+			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
 			Reason: "PartitionProviderNotReady",
 			Message: fmt.Sprintf("Check the status of a partition provider %s (api=%s, kind=%s)",
@@ -141,12 +112,12 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		return ctrl.Result{}, nil
 	}
 
-	replicas := (*partitionProvider).GetReplicas()
+	replicas := partitionProvider.GetStatus().Replicas
 	if len(replicas) == 0 {
 		err := fmt.Errorf("No replicas found")
 		log.Error(err, "No replicas found, fail")
 		meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
+			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "NoReplicasFound",
 			Message: err.Error(),
@@ -176,7 +147,7 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		err := fmt.Errorf("Minimum sample size not reached")
 		log.Error(err, "Minimum sample size not reached, waiting for another poll...")
 		meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
-			Type:    typeReady,
+			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "MinimumSampleSizeNotReached",
 			Message: err.Error(),
@@ -220,17 +191,17 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		evaluation.Status.LastEvaluationTimestamp = ptr.To(metav1.Now())
 	}
 
-	if !meta.IsStatusConditionPresentAndEqual(evaluation.Status.Conditions, typeAvailable, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(evaluation.Status.Conditions, StatusTypeAvailable, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
-			Type:   typeAvailable,
+			Type:   StatusTypeAvailable,
 			Status: metav1.ConditionTrue,
-			Reason: "InitialEvaluationSuccessful",
+			Reason: StatusTypeAvailable,
 		})
 	}
 	meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
-		Type:   typeReady,
+		Type:   StatusTypeReady,
 		Status: metav1.ConditionTrue,
-		Reason: "EvaluationSuccessful",
+		Reason: StatusTypeReady,
 	})
 	if err := r.Status().Update(ctx, evaluation); err != nil {
 		log.Error(err, "Failed to update resource status")

@@ -22,6 +22,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the {{ .ProjectName }} itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- autoscaler_secrettypeclustershardmanager_admin_role.yaml
+- autoscaler_secrettypeclustershardmanager_editor_role.yaml
+- autoscaler_secrettypeclustershardmanager_viewer_role.yaml
 - autoscaler_mostwantedtwophasehysteresisevaluation_admin_role.yaml
 - autoscaler_mostwantedtwophasehysteresisevaluation_editor_role.yaml
 - autoscaler_mostwantedtwophasehysteresisevaluation_viewer_role.yaml

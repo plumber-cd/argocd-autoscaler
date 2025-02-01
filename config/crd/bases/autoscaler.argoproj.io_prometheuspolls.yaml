@@ -59,27 +59,6 @@ spec:
               address:
                 description: Address is the address of the Prometheus server.
                 type: string
-              discovererRef:
-                description: DiscovererRef is a reference to the discoverer that will
-                  be used to fetch the list of clusters.
-                properties:
-                  apiGroup:
-                    description: |-
-                      APIGroup is the group for the resource being referenced.
-                      If APIGroup is not specified, the specified Kind must be in the core API group.
-                      For any other third-party types, APIGroup is required.
-                    type: string
-                  kind:
-                    description: Kind is the type of resource being referenced
-                    type: string
-                  name:
-                    description: Name is the name of resource being referenced
-                    type: string
-                required:
-                - kind
-                - name
-                type: object
-                x-kubernetes-map-type: atomic
               initialDelay:
                 description: InitialDelay is the initial delay before polling after
                   creating a poll or adding a new cluster.
@@ -118,17 +97,38 @@ spec:
               period:
                 description: Period is the period of polling.
                 type: string
+              shardManagerRef:
+                description: ShardManagerRef is a reference to the shard manager.
+                properties:
+                  apiGroup:
+                    description: |-
+                      APIGroup is the group for the resource being referenced.
+                      If APIGroup is not specified, the specified Kind must be in the core API group.
+                      For any other third-party types, APIGroup is required.
+                    type: string
+                  kind:
+                    description: Kind is the type of resource being referenced
+                    type: string
+                  name:
+                    description: Name is the name of resource being referenced
+                    type: string
+                required:
+                - kind
+                - name
+                type: object
+                x-kubernetes-map-type: atomic
             required:
             - address
-            - discovererRef
             - initialDelay
             - metrics
             - period
+            - shardManagerRef
             type: object
           status:
             description: PrometheusPollStatus defines the observed state of PrometheusPoll.
             properties:
               conditions:
+                description: Conditions
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -190,7 +190,7 @@ spec:
                 format: date-time
                 type: string
               values:
-                description: Values of the metrics polled.
+                description: Values is the list of metric values.
                 items:
                   description: MetricValue is a resulting value for the metric.
                   properties:
@@ -201,10 +201,6 @@ spec:
                       type: string
                     id:
                       description: ID of this metric.
-                      type: string
-                    poller:
-                      description: Poller is the identification of the poller that
-                        was used to fetch this metric.
                       type: string
                     query:
                       description: |-
@@ -228,7 +224,7 @@ spec:
                           type: string
                         uid:
                           description: |-
-                            UID unieue identifier of this shard so it can be uniquely identified in the list of shards.
+                            UID unique identifier of this shard so it can be uniquely identified in the list of shards.
                             The reason this is not baked into SourceRef is because actual resource may or may not exists.
                             When the discovery was external - this may be arbitrary string unique to that shard.
                           type: string
@@ -249,7 +245,6 @@ spec:
                   required:
                   - displayValue
                   - id
-                  - poller
                   - shard
                   - value
                   type: object

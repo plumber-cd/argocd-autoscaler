@@ -17,20 +17,23 @@ limitations under the License.
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
+	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // PrometheusMetric is a configuration for polling from Prometheus
 type PrometheusMetric struct {
+
 	// ID of this metric.
 	// +kubebuilder:validation:Required
 	ID string `json:"id,omitempty"`
+
 	// Query is the query used to fetch the metric. It is a Go Template with Sprig functions binding.
 	// A `.namespace`, `.name` and `.server` are available for the template.
 	// +kubebuilder:validation:Required
 	Query string `json:"query,omitempty"`
+
 	// NoData if set will be used as the value when no data is available in Prometheus.
 	// If not set - missing data will result in error.
 	// There are metrics like argocd_app_k8s_request_total that might have a bug and not being reported for prolonged periods of time.
@@ -41,18 +44,20 @@ type PrometheusMetric struct {
 
 // PrometheusPollSpec defines the configuration for this poller.
 type PrometheusPollSpec struct {
-	// DiscovererRef is a reference to the discoverer that will be used to fetch the list of clusters.
-	// +kubebuilder:validation:Required
-	DiscovererRef corev1.TypedLocalObjectReference `json:"discovererRef,omitempty"`
+	common.PollerSpec `json:",inline"`
+
 	// InitialDelay is the initial delay before polling after creating a poll or adding a new cluster.
 	// +kubebuilder:validation:Required
 	InitialDelay metav1.Duration `json:"initialDelay,omitempty"`
+
 	// Period is the period of polling.
 	// +kubebuilder:validation:Required
 	Period metav1.Duration `json:"period,omitempty"`
+
 	// Address is the address of the Prometheus server.
 	// +kubebuilder:validation:Required
 	Address string `json:"address,omitempty"`
+
 	// Metrics is the list of metrics to poll from Prometheus.
 	// +kubebuilder:validation:Required
 	Metrics []PrometheusMetric `json:"metrics,omitempty"`
@@ -60,9 +65,8 @@ type PrometheusPollSpec struct {
 
 // PrometheusPollStatus defines the observed state of PrometheusPoll.
 type PrometheusPollStatus struct {
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
-	// Values of the metrics polled.
-	Values []MetricValue `json:"values,omitempty"`
+	common.MetricValuesProviderStatus `json:",inline"`
+
 	// LastPollingTime is the last time the polling was performed for this configuration.
 	LastPollingTime *metav1.Time `json:"lastPollingTime,omitempty"`
 }
@@ -85,13 +89,13 @@ type PrometheusPoll struct {
 }
 
 // GetConditions returns .Status.Conditions
-func (p *PrometheusPoll) GetConditions() []metav1.Condition {
-	return p.Status.Conditions
+func (p *PrometheusPoll) GetSpec() common.PollerSpec {
+	return p.Spec.PollerSpec
 }
 
 // GetValues returns .Status.Values
-func (p *PrometheusPoll) GetValues() []MetricValue {
-	return p.Status.Values
+func (p *PrometheusPoll) GetStatus() common.MetricValuesProviderStatus {
+	return p.Status.MetricValuesProviderStatus
 }
 
 // +kubebuilder:object:root=true
