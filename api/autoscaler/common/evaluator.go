@@ -10,5 +10,5 @@ type EvaluatorSpec struct {
 
 // +k8s:deepcopy-gen=false
 type Evaluator interface {
-	GetSpec() *EvaluatorSpec
+	GetEvaluatorSpec() *EvaluatorSpec
 }

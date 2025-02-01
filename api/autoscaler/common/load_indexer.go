@@ -10,5 +10,5 @@ type LoadIndexerSpec struct {
 
 // +k8s:deepcopy-gen=false
 type LoadIndexer interface {
-	GetSpec() *LoadIndexerSpec
+	GetLoadIndexerSpec() *LoadIndexerSpec
 }

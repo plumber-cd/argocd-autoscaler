@@ -89,12 +89,12 @@ type PrometheusPoll struct {
 }
 
 // GetConditions returns .Status.Conditions
-func (p *PrometheusPoll) GetSpec() *common.PollerSpec {
+func (p *PrometheusPoll) GetPollerSpec() *common.PollerSpec {
 	return &p.Spec.PollerSpec
 }
 
 // GetValues returns .Status.Values
-func (p *PrometheusPoll) GetStatus() *common.MetricValuesProviderStatus {
+func (p *PrometheusPoll) GetMetricValuesProviderStatus() *common.MetricValuesProviderStatus {
 	return &p.Status.MetricValuesProviderStatus
 }
 

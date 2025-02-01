@@ -96,7 +96,7 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 		return ctrl.Result{}, err
 	}
 
-	if !meta.IsStatusConditionPresentAndEqual(metricValuesProvider.GetStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(metricValuesProvider.GetMetricValuesProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
@@ -115,7 +115,7 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 		return ctrl.Result{}, nil
 	}
 
-	values := metricValuesProvider.GetStatus().Values
+	values := metricValuesProvider.GetMetricValuesProviderStatus().Values
 	if len(values) == 0 {
 		err := fmt.Errorf("No metrics found")
 		log.Error(err, "No metrics found, fail")

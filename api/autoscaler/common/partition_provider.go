@@ -13,5 +13,5 @@ type PartitionProviderStatus struct {
 
 // +k8s:deepcopy-gen=false
 type PartitionProvider interface {
-	GetStatus() *PartitionProviderStatus
+	GetPartitionProviderStatus() *PartitionProviderStatus
 }

@@ -15,7 +15,7 @@ type ShardManagerStatus struct {
 
 // +k8s:deepcopy-gen=false
 type ShardManager interface {
-	GetSpec() *ShardManagerSpec
-	GetStatus() *ShardManagerStatus
-	GetClientObject() client.Object
+	GetShardManagerSpec() *ShardManagerSpec
+	GetShardManagerStatus() *ShardManagerStatus
+	GetShardManagerClientObject() client.Object
 }

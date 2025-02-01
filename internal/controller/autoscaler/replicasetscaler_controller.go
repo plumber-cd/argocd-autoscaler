@@ -135,7 +135,7 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	if !meta.IsStatusConditionPresentAndEqual(partitionProvider.GetStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(partitionProvider.GetPartitionProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
@@ -282,9 +282,9 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Check if shard manager desired state meets partition provider requirements
-	if partitionProvider.GetStatus().Replicas.SerializeToString() != shardManager.GetSpec().Replicas.SerializeToString() {
-		shardManager.GetSpec().Replicas = partitionProvider.GetStatus().Replicas
-		if err := r.Client.Update(ctx, shardManager.GetClientObject()); err != nil {
+	if partitionProvider.GetPartitionProviderStatus().Replicas.SerializeToString() != shardManager.GetShardManagerSpec().Replicas.SerializeToString() {
+		shardManager.GetShardManagerSpec().Replicas = partitionProvider.GetPartitionProviderStatus().Replicas
+		if err := r.Client.Update(ctx, shardManager.GetShardManagerClientObject()); err != nil {
 			log.Error(err, "Failed to update shard manager desired state",
 				"shardManagerKind", scaler.Spec.ShardManagerRef.Kind,
 				"shardManagerName", scaler.Spec.ShardManagerRef.Name)
@@ -304,7 +304,7 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Check if shard manager actual state meets partition provider requirements
-	if partitionProvider.GetStatus().Replicas.SerializeToString() != shardManager.GetStatus().Replicas.SerializeToString() {
+	if partitionProvider.GetPartitionProviderStatus().Replicas.SerializeToString() != shardManager.GetShardManagerStatus().Replicas.SerializeToString() {
 		meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
@@ -322,7 +322,7 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// - Apply change to replica set manager, set condition, re-queue
 
 	// Check if RS is already scaled, and if not - apply the change
-	desiredReplicas := int32(len(partitionProvider.GetStatus().Replicas))
+	desiredReplicas := int32(len(partitionProvider.GetPartitionProviderStatus().Replicas))
 	if r.GetRSControllerDesiredReplicas(replicaSetController) != desiredReplicas {
 		restart := mode == ReplicaSetReconcilerModeDefault &&
 			scaler.Spec.Mode.Default.RolloutRestart != nil &&

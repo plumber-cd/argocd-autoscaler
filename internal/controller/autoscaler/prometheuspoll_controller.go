@@ -165,7 +165,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
-	if !meta.IsStatusConditionPresentAndEqual(shardsProvider.GetStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(shardsProvider.GetShardProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
@@ -184,7 +184,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, nil
 	}
 
-	shards := shardsProvider.GetStatus().Shards
+	shards := shardsProvider.GetShardProviderStatus().Shards
 	if len(shards) == 0 {
 		err := fmt.Errorf("No shards found")
 		log.Error(err, "No shards found, fail")

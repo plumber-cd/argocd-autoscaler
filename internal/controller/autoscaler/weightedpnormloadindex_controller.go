@@ -114,7 +114,7 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 		return ctrl.Result{}, err
 	}
 
-	if !meta.IsStatusConditionPresentAndEqual(metricValuesProvider.GetStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(metricValuesProvider.GetMetricValuesProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
@@ -133,7 +133,7 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 		return ctrl.Result{}, nil
 	}
 
-	values := metricValuesProvider.GetStatus().Values
+	values := metricValuesProvider.GetMetricValuesProviderStatus().Values
 
 	if len(values) == 0 {
 		err := fmt.Errorf("No metrics found")

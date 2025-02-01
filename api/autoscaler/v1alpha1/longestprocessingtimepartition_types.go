@@ -47,12 +47,12 @@ type LongestProcessingTimePartition struct {
 }
 
 // GetConditions returns .Status.Conditions
-func (p *LongestProcessingTimePartition) GetSpec() *common.PartitionerSpec {
+func (p *LongestProcessingTimePartition) GetPartitionerSpec() *common.PartitionerSpec {
 	return &p.Spec.PartitionerSpec
 }
 
 // GetReplicas returns .Status.Value
-func (p *LongestProcessingTimePartition) GetStatus() *common.PartitionProviderStatus {
+func (p *LongestProcessingTimePartition) GetPartitionProviderStatus() *common.PartitionProviderStatus {
 	return &p.Status.PartitionProviderStatus
 }
 

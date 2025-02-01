@@ -13,5 +13,5 @@ type LoadIndexProviderStatus struct {
 
 // +k8s:deepcopy-gen=false
 type LoadIndexProvider interface {
-	GetStatus() *LoadIndexProviderStatus
+	GetLoadIndexProviderStatus() *LoadIndexProviderStatus
 }

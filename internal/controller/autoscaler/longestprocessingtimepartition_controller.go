@@ -93,7 +93,7 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 		return ctrl.Result{}, err
 	}
 
-	if !meta.IsStatusConditionPresentAndEqual(loadIndexProvider.GetStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(loadIndexProvider.GetLoadIndexProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&partition.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
@@ -112,7 +112,7 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 		return ctrl.Result{}, nil
 	}
 
-	loadIndexes := loadIndexProvider.GetStatus().Values
+	loadIndexes := loadIndexProvider.GetLoadIndexProviderStatus().Values
 
 	if len(loadIndexes) == 0 {
 		err := fmt.Errorf("No load indexes found")

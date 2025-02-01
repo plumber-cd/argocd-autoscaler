@@ -10,5 +10,5 @@ type PartitionerSpec struct {
 
 // +k8s:deepcopy-gen=false
 type Partitioner interface {
-	GetSpec() *PartitionerSpec
+	GetPartitionerSpec() *PartitionerSpec
 }

@@ -82,12 +82,12 @@ type WeightedPNormLoadIndex struct {
 }
 
 // GetConditions returns .Status.Conditions
-func (li *WeightedPNormLoadIndex) GetSpec() *common.LoadIndexerSpec {
+func (li *WeightedPNormLoadIndex) GetLoadIndexerSpec() *common.LoadIndexerSpec {
 	return &li.Spec.LoadIndexerSpec
 }
 
 // GetValues returns .Status.Values
-func (li *WeightedPNormLoadIndex) GetStatus() *common.LoadIndexProviderStatus {
+func (li *WeightedPNormLoadIndex) GetLoadIndexProviderStatus() *common.LoadIndexProviderStatus {
 	return &li.Status.LoadIndexProviderStatus
 }
 

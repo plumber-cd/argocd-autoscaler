@@ -48,12 +48,12 @@ type RobustScalingNormalizer struct {
 }
 
 // GetConditions returns .Status.Conditions
-func (p *RobustScalingNormalizer) GetSpec() *common.NormalizerSpec {
+func (p *RobustScalingNormalizer) GetNormalizerSpec() *common.NormalizerSpec {
 	return &p.Spec.NormalizerSpec
 }
 
 // GetValues returns .Status.Values
-func (p *RobustScalingNormalizer) GetStatus() *common.MetricValuesProviderStatus {
+func (p *RobustScalingNormalizer) GetMetricValuesProviderStatus() *common.MetricValuesProviderStatus {
 	return &p.Status.MetricValuesProviderStatus
 }
 

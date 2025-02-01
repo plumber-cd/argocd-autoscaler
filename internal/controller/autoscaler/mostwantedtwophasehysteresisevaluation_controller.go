@@ -91,7 +91,7 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		return ctrl.Result{}, err
 	}
 
-	if !meta.IsStatusConditionPresentAndEqual(partitionProvider.GetStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(partitionProvider.GetPartitionProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
@@ -110,7 +110,7 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		return ctrl.Result{}, nil
 	}
 
-	replicas := partitionProvider.GetStatus().Replicas
+	replicas := partitionProvider.GetPartitionProviderStatus().Replicas
 	if len(replicas) == 0 {
 		err := fmt.Errorf("No replicas found")
 		log.Error(err, "No replicas found, fail")

@@ -79,11 +79,11 @@ type MostWantedTwoPhaseHysteresisEvaluation struct {
 	Status MostWantedTwoPhaseHysteresisEvaluationStatus `json:"status,omitempty"`
 }
 
-func (p *MostWantedTwoPhaseHysteresisEvaluation) GetSpec() *common.EvaluatorSpec {
+func (p *MostWantedTwoPhaseHysteresisEvaluation) GetEvaluatorSpec() *common.EvaluatorSpec {
 	return &p.Spec.EvaluatorSpec
 }
 
-func (p *MostWantedTwoPhaseHysteresisEvaluation) GetStatus() *common.PartitionProviderStatus {
+func (p *MostWantedTwoPhaseHysteresisEvaluation) GetPartitionProviderStatus() *common.PartitionProviderStatus {
 	return &p.Status.PartitionProviderStatus
 }
 

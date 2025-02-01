@@ -13,5 +13,5 @@ type MetricValuesProviderStatus struct {
 
 // +k8s:deepcopy-gen=false
 type MetricValuesProvider interface {
-	GetStatus() *MetricValuesProviderStatus
+	GetMetricValuesProviderStatus() *MetricValuesProviderStatus
 }

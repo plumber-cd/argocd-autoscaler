@@ -10,5 +10,5 @@ type NormalizerSpec struct {
 
 // +k8s:deepcopy-gen=false
 type Normalizer interface {
-	GetSpec() *NormalizerSpec
+	GetNormalizerSpec() *NormalizerSpec
 }
