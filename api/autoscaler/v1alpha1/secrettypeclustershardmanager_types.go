@@ -49,16 +49,16 @@ type SecretTypeClusterShardManager struct {
 	Status SecretTypeClusterShardManagerStatus `json:"status,omitempty"`
 }
 
-func (s *SecretTypeClusterShardManager) GetShardManagerSpec() common.ShardManagerSpec {
-	return s.Spec.ShardManagerSpec
+func (s *SecretTypeClusterShardManager) GetShardManagerSpec() *common.ShardManagerSpec {
+	return &s.Spec.ShardManagerSpec
 }
 
-func (s *SecretTypeClusterShardManager) GetShardManagerStatus() common.ShardManagerStatus {
-	return s.Status.ShardManagerStatus
+func (s *SecretTypeClusterShardManager) GetShardManagerStatus() *common.ShardManagerStatus {
+	return &s.Status.ShardManagerStatus
 }
 
-func (s *SecretTypeClusterShardManager) GetShardProviderStatus() common.ShardsProviderStatus {
-	return s.Status.ShardsProviderStatus
+func (s *SecretTypeClusterShardManager) GetShardProviderStatus() *common.ShardsProviderStatus {
+	return &s.Status.ShardsProviderStatus
 }
 
 func (s *SecretTypeClusterShardManager) GetClientObject() client.Object {
