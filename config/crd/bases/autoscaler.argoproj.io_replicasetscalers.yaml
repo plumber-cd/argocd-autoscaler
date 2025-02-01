@@ -202,6 +202,89 @@ spec:
                   - type
                   type: object
                 type: array
+              replicas:
+                description: |-
+                  Replicas is the list of replicas as it was applied to the Shard Manager.
+                  Used for tracking whether the change was applied.
+                items:
+                  description: Replica is a representation of the replica for sharding
+                  properties:
+                    id:
+                      description: ID of the replica, starting from 0 and onward.
+                      type: string
+                    loadIndexes:
+                      description: LoadIndexes shards assigned to this replica wrapped
+                        into their load index.
+                      items:
+                        description: LoadIndex is a representation of a shard with
+                          calculated load index to it.
+                        properties:
+                          displayValue:
+                            description: |-
+                              DisplayValue is the string representation of the without precision guarantee.
+                              This is meaningless and exists purely for convenience of someone who is looking at the kubectl get output.
+                            type: string
+                          shard:
+                            description: Shard is the shard that this load index is
+                              calculated for.
+                            properties:
+                              data:
+                                additionalProperties:
+                                  type: string
+                                description: Data is a map that will be used to populate
+                                  Go Templates params for the poller (if the poller
+                                  supports that).
+                                type: object
+                              id:
+                                description: |-
+                                  ID of this shard. It may or may not be unique, depending on the discoverer.
+                                  It is expected to be used to populate Go Templates params for the poller (if the poller supports that).
+                                type: string
+                              uid:
+                                description: |-
+                                  UID unique identifier of this shard so it can be uniquely identified in the list of shards.
+                                  The reason this is not baked into SourceRef is because actual resource may or may not exists.
+                                  When the discovery was external - this may be arbitrary string unique to that shard.
+                                type: string
+                            required:
+                            - data
+                            - id
+                            - uid
+                            type: object
+                          value:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: Value is a value of this load index.
+                            format: float
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            type: number
+                            x-kubernetes-int-or-string: true
+                        required:
+                        - displayValue
+                        - shard
+                        - value
+                        type: object
+                      type: array
+                    totalLoad:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      description: TotalLoad is the sum of all load indexes assigned
+                        to this replica.
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    totalLoadDisplayValue:
+                      description: |-
+                        DisplayValue is the string representation of the total load without precision guarantee.
+                        This is meaningless and exists purely for convenience of someone who is looking at the kubectl get output.
+                      type: string
+                  required:
+                  - loadIndexes
+                  - totalLoad
+                  - totalLoadDisplayValue
+                  type: object
+                type: array
             type: object
         type: object
     served: true

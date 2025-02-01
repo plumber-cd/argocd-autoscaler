@@ -111,6 +111,11 @@ func init() {
 		Version: "v1alpha1",
 		Kind:    "LongestProcessingTimePartition",
 	})
+	RegisterPartitionProvider(schema.GroupVersionKind{
+		Group:   "autoscaler.argoproj.io",
+		Version: "v1alpha1",
+		Kind:    "MostWantedTwoPhaseHysteresisEvaluation",
+	})
 	RegisterReplicaSetController(schema.GroupVersionKind{
 		Group:   "apps",
 		Version: "v1",

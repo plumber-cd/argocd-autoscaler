@@ -6,4 +6,19 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: replicasetscaler-sample
 spec:
-  # TODO(user): Add fields here
+  partitionProviderRef:
+    apiGroup: autoscaler.argoproj.io
+    kind: MostWantedTwoPhaseHysteresisEvaluation
+    name: mostwantedtwophasehysteresisevaluation-sample
+  shardManagerRef:
+    apiGroup: autoscaler.argoproj.io
+    kind: SecretTypeClusterShardManager
+    name: secrettypeclustershardmanager-sample
+  replicaSetControllerRef:
+    apiGroup: apps
+    kind: StatefulSet
+    name: argocd-application-controller
+  mode:
+    # default:
+    #   rolloutRestart: true
+    x0y: {}

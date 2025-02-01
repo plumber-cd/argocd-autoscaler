@@ -61,7 +61,7 @@ func (s *SecretTypeClusterShardManager) GetShardProviderStatus() *common.ShardsP
 	return &s.Status.ShardsProviderStatus
 }
 
-func (s *SecretTypeClusterShardManager) GetClientObject() client.Object {
+func (s *SecretTypeClusterShardManager) GetShardManagerClientObject() client.Object {
 	return s
 }
 

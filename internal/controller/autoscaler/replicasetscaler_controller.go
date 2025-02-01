@@ -52,8 +52,8 @@ const (
 
 type ReplicaSetController struct {
 	Kind        string
-	Deployment  appsv1.Deployment
-	StatefulSet appsv1.StatefulSet
+	Deployment  *appsv1.Deployment
+	StatefulSet *appsv1.StatefulSet
 }
 
 // ReplicaSetScalerReconciler reconciles a ReplicaSetScaler object
@@ -189,13 +189,13 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	switch replicaSetController.Kind {
 	case "Deployment":
-		deploymentController, err := findByRef[appsv1.Deployment](
+		deploymentController, err := findByRef[*appsv1.Deployment](
 			ctx,
 			r.Scheme,
 			r.RESTMapper(),
 			r.Client,
 			scaler.Namespace,
-			*scaler.Spec.PartitionProviderRef,
+			*scaler.Spec.ReplicaSetControllerRef,
 		)
 		if err != nil {
 			log.Error(err, "Failed to find Deployment by ref")
@@ -214,13 +214,13 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		replicaSetController.Deployment = deploymentController
 	case "StatefulSet":
-		statefulSetController, err := findByRef[appsv1.StatefulSet](
+		statefulSetController, err := findByRef[*appsv1.StatefulSet](
 			ctx,
 			r.Scheme,
 			r.RESTMapper(),
 			r.Client,
 			scaler.Namespace,
-			*scaler.Spec.PartitionProviderRef,
+			*scaler.Spec.ReplicaSetControllerRef,
 		)
 		if err != nil {
 			log.Error(err, "Failed to find StatefulSet by ref")
@@ -242,8 +242,12 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		panic("unreachable")
 	}
 
-	// - If mode x0y - check the RS status and re-queue
-	if mode == ReplicaSetReconcilerModeX0Y {
+	// If mode x0y - check the RS status and re-queue, but not if we think that this phase was already completed.
+	// We do that by comparing the desired state that came from partitioner with the state we have in the status.
+	// We will update the status with the actual state after we update the Shard Manager.
+	if mode == ReplicaSetReconcilerModeX0Y &&
+		partitionProvider.GetPartitionProviderStatus().Replicas.SerializeToString() != scaler.Status.Replicas.SerializeToString() {
+
 		// Check if RS is set to zero already, and if not - scale it to zero
 		if r.GetRSControllerDesiredReplicas(replicaSetController) > 0 {
 			if err := r.ScaleTo(ctx, replicaSetController, int32(0), false); err != nil {
@@ -318,8 +322,21 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
-	// - If replica set condition is set - check the replica set, re-queue
-	// - Apply change to replica set manager, set condition, re-queue
+	// Assume that at this point the sharding was sent to the Shard Manager
+	if scaler.Status.Replicas.SerializeToString() != shardManager.GetShardManagerStatus().Replicas.SerializeToString() {
+		scaler.Status.Replicas = shardManager.GetShardManagerSpec().Replicas
+		meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
+			Type:   StatusTypeReady,
+			Status: metav1.ConditionFalse,
+			Reason: "BeginningRSControllerScaling",
+		})
+		if err := r.Status().Update(ctx, scaler); err != nil {
+			log.Error(err, "Failed to update resource status")
+			return ctrl.Result{RequeueAfter: time.Second}, nil
+		}
+		// Re-queue to continue
+		return ctrl.Result{RequeueAfter: time.Second}, nil
+	}
 
 	// Check if RS is already scaled, and if not - apply the change
 	desiredReplicas := int32(len(partitionProvider.GetPartitionProviderStatus().Replicas))
@@ -403,9 +420,12 @@ func (r *ReplicaSetScalerReconciler) ScaleTo(ctx context.Context, replicaSetCont
 	case "Deployment":
 		replicaSetController.Deployment.Spec.Replicas = ptr.To(replicas)
 		if restart {
+			if replicaSetController.Deployment.Spec.Template.Annotations == nil {
+				replicaSetController.Deployment.Spec.Template.Annotations = make(map[string]string)
+			}
 			replicaSetController.Deployment.Spec.Template.Annotations["autoscaler.argoproj.io/restartedAt"] = fmt.Sprintf("%d", time.Now().Unix())
 		}
-		obj = &replicaSetController.Deployment
+		obj = replicaSetController.Deployment
 	case "StatefulSet":
 		replicaSetController.StatefulSet.Spec.Replicas = ptr.To(replicas)
 		for containerIndex, container := range replicaSetController.StatefulSet.Spec.Template.Spec.Containers {
@@ -424,9 +444,12 @@ func (r *ReplicaSetScalerReconciler) ScaleTo(ctx context.Context, replicaSetCont
 			}
 		}
 		if restart {
+			if replicaSetController.StatefulSet.Spec.Template.Annotations == nil {
+				replicaSetController.StatefulSet.Spec.Template.Annotations = make(map[string]string)
+			}
 			replicaSetController.StatefulSet.Spec.Template.Annotations["autoscaler.argoproj.io/restartedAt"] = fmt.Sprintf("%d", time.Now().Unix())
 		}
-		obj = &replicaSetController.StatefulSet
+		obj = replicaSetController.StatefulSet
 	default:
 		panic("unreachable")
 	}

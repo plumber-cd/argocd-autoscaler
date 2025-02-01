@@ -55,6 +55,9 @@ type ReplicaSetScalerSpec struct {
 type ReplicaSetScalerStatus struct {
 	// Conditions
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	// Replicas is the list of replicas as it was applied to the Shard Manager.
+	// Used for tracking whether the change was applied.
+	Replicas common.ReplicaList `json:"replicas,omitempty"`
 }
 
 // +kubebuilder:object:root=true
