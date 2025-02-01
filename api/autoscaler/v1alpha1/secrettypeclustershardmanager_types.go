@@ -53,8 +53,8 @@ func (s *SecretTypeClusterShardManager) GetSpec() common.ShardManagerSpec {
 	return s.Spec.ShardManagerSpec
 }
 
-func (s *SecretTypeClusterShardManager) GetStatus() common.ShardsProviderStatus {
-	return s.Status.ShardsProviderStatus
+func (s *SecretTypeClusterShardManager) GetStatus() common.ShardManagerStatus {
+	return s.Status.ShardManagerStatus
 }
 
 func (s *SecretTypeClusterShardManager) GetClientObject() client.Object {

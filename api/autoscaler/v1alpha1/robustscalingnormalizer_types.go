@@ -48,13 +48,13 @@ type RobustScalingNormalizer struct {
 }
 
 // GetConditions returns .Status.Conditions
-func (p *RobustScalingNormalizer) GetSpec() common.NormalizerSpec {
-	return p.Spec.NormalizerSpec
+func (p *RobustScalingNormalizer) GetSpec() *common.NormalizerSpec {
+	return &p.Spec.NormalizerSpec
 }
 
 // GetValues returns .Status.Values
-func (p *RobustScalingNormalizer) GetStatus() common.MetricValuesProviderStatus {
-	return p.Status.MetricValuesProviderStatus
+func (p *RobustScalingNormalizer) GetStatus() *common.MetricValuesProviderStatus {
+	return &p.Status.MetricValuesProviderStatus
 }
 
 // +kubebuilder:object:root=true

@@ -82,13 +82,13 @@ type WeightedPNormLoadIndex struct {
 }
 
 // GetConditions returns .Status.Conditions
-func (li *WeightedPNormLoadIndex) GetSpec() common.LoadIndexerSpec {
-	return li.Spec.LoadIndexerSpec
+func (li *WeightedPNormLoadIndex) GetSpec() *common.LoadIndexerSpec {
+	return &li.Spec.LoadIndexerSpec
 }
 
 // GetValues returns .Status.Values
-func (li *WeightedPNormLoadIndex) GetStatus() common.LoadIndexProviderStatus {
-	return li.Status.LoadIndexProviderStatus
+func (li *WeightedPNormLoadIndex) GetStatus() *common.LoadIndexProviderStatus {
+	return &li.Status.LoadIndexProviderStatus
 }
 
 // +kubebuilder:object:root=true

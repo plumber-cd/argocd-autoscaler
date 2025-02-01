@@ -47,13 +47,13 @@ type LongestProcessingTimePartition struct {
 }
 
 // GetConditions returns .Status.Conditions
-func (p *LongestProcessingTimePartition) GetSpec() common.PartitionerSpec {
-	return p.Spec.PartitionerSpec
+func (p *LongestProcessingTimePartition) GetSpec() *common.PartitionerSpec {
+	return &p.Spec.PartitionerSpec
 }
 
 // GetReplicas returns .Status.Value
-func (p *LongestProcessingTimePartition) GetStatus() common.PartitionProviderStatus {
-	return p.Status.PartitionProviderStatus
+func (p *LongestProcessingTimePartition) GetStatus() *common.PartitionProviderStatus {
+	return &p.Status.PartitionProviderStatus
 }
 
 // +kubebuilder:object:root=true

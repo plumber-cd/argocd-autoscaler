@@ -89,13 +89,13 @@ type PrometheusPoll struct {
 }
 
 // GetConditions returns .Status.Conditions
-func (p *PrometheusPoll) GetSpec() common.PollerSpec {
-	return p.Spec.PollerSpec
+func (p *PrometheusPoll) GetSpec() *common.PollerSpec {
+	return &p.Spec.PollerSpec
 }
 
 // GetValues returns .Status.Values
-func (p *PrometheusPoll) GetStatus() common.MetricValuesProviderStatus {
-	return p.Status.MetricValuesProviderStatus
+func (p *PrometheusPoll) GetStatus() *common.MetricValuesProviderStatus {
+	return &p.Status.MetricValuesProviderStatus
 }
 
 // +kubebuilder:object:root=true

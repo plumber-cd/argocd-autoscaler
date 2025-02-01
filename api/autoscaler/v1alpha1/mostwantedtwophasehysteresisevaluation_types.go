@@ -79,12 +79,12 @@ type MostWantedTwoPhaseHysteresisEvaluation struct {
 	Status MostWantedTwoPhaseHysteresisEvaluationStatus `json:"status,omitempty"`
 }
 
-func (p *MostWantedTwoPhaseHysteresisEvaluation) GetSpec() common.EvaluatorSpec {
-	return p.Spec.EvaluatorSpec
+func (p *MostWantedTwoPhaseHysteresisEvaluation) GetSpec() *common.EvaluatorSpec {
+	return &p.Spec.EvaluatorSpec
 }
 
-func (p *MostWantedTwoPhaseHysteresisEvaluation) GetStatus() common.PartitionProviderStatus {
-	return p.Status.PartitionProviderStatus
+func (p *MostWantedTwoPhaseHysteresisEvaluation) GetStatus() *common.PartitionProviderStatus {
+	return &p.Status.PartitionProviderStatus
 }
 
 // +kubebuilder:object:root=true
