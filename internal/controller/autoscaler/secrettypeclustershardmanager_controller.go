@@ -164,6 +164,7 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 	}
 
 	manager.Status.Shards = shards
+	manager.Status.Replicas = manager.Spec.Replicas
 	if !meta.IsStatusConditionPresentAndEqual(manager.Status.Conditions, StatusTypeAvailable, metav1.ConditionTrue) {
 		meta.SetStatusCondition(&manager.Status.Conditions, metav1.Condition{
 			Type:    StatusTypeAvailable,

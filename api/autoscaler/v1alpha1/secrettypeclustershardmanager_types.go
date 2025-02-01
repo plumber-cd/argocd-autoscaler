@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -33,7 +34,7 @@ type SecretTypeClusterShardManagerSpec struct {
 
 // SecretTypeClusterShardManagerStatus defines the observed state of SecretTypeClusterShardManager.
 type SecretTypeClusterShardManagerStatus struct {
-	common.ShardsProviderStatus `json:",inline"`
+	common.ShardManagerStatus `json:",inline"`
 }
 
 // +kubebuilder:object:root=true
@@ -54,6 +55,10 @@ func (s *SecretTypeClusterShardManager) GetSpec() common.ShardManagerSpec {
 
 func (s *SecretTypeClusterShardManager) GetStatus() common.ShardsProviderStatus {
 	return s.Status.ShardsProviderStatus
+}
+
+func (s *SecretTypeClusterShardManager) GetClientObject() client.Object {
+	return s
 }
 
 // +kubebuilder:object:root=true

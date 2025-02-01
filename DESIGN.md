@@ -323,11 +323,12 @@ But you do you.
 Using input from `.spec.partitionProviderRef` - Scaler can ensure that intention becomes reality.
 To do that, it would be updating `.spec.replicas` on the `.spec.shardManagerRef`, as well as apply necessary changes to the `.spec.replicaSetControllerRef`.
 
-### Stateful Set Default
+### Replica Set Default
 
 Implementations may vary, but for initial "default" implementation I am going into this with following assumptions.
 
-We're assuming Application Controller is ran as STS and in `legacy` sharding mode.
+We're assuming Application Controller is ran as STS (although technically controller can use Deployment too,
+but result is undetermined if ArgoCD is in that mode) and in `legacy` sharding mode.
 Thus, we are making sure none of their baked-in dynamic re-balancing aren't getting in our way.
 
 What happens then upon creating a new cluster but without a shard assignment -
@@ -335,7 +336,7 @@ it will be assigned to __some__ replica and the process will eventually get to S
 
 This default implementation will do the following:
 
-- Change `.spec.replicas` on the STS.
+- Change `.spec.replicas` on the STS/Deployment.
 - Change `ARGOCD_CONTROLLER_REPLICAS` environment variable on the STS.
 - Change `.spec.replicas` on the Shard Manager.
 
@@ -345,18 +346,11 @@ Order of operations will vary on `.spec.mode`.
 
 If `.spec.mode` is set to `default: {}`, which is default, the Scaler will first apply changes to the Shard Manager,
 wait, then - to the replica controller, and do nothing else.
-This mode is implemented "just-in-case", and if my assumptions are correct, it is not going to work because
-replicas will not be making dynamic re-balancing.
-As things change in ArgoCD, maybe it would become more useful.
+If `.spec.mode.default.rolloutRestart` is set to `true` - additional annotation value will be added to the
+RS template, equivalent of what `kubectl` does on `rollout restart` command.
+It will trigger all pods to recycle even if `ARGOCD_CONTROLLER_REPLICAS` did not change.
 
-#### Rollout Restart
-
-If `.spec.mode` is set to `rolloutRestart: {}`, the Scaler first will apply changes to the Shard Manager and wait.
-Then - to the RS owner.
-Then, if either `ARGOCD_CONTROLLER_REPLICAS` or `spec.replicas` changed - it would wait for the RS to become ready.
-Lastly, if `.spec.mode.rolloutRestart.forceRebalance` is `true`, it will issue `rollout-restart`.
-
-It is hard for me to tell, if this actually going to work - some input from the community on this would be nice.
+This mode is implemented "just-in-case", and if my assumptions are correct, it is not going to work.
 I am suspecting that it may cause problems, because at some points in time,
 there would be replicas with different value in `ARGOCD_CONTROLLER_REPLICAS`,
 thus possibly making two or more replicas think they own the same shard.
@@ -364,6 +358,7 @@ I don't really know how it works or what would happen.
 You can check my comment for more details on kinds of issues I personally faced here:
 https://github.com/argoproj/argo-cd/issues/15464#issuecomment-2587501293
 So, I am personally adopting a more reliable (in my opinion) mechanism below that I call X-0-Y scaling.
+As things change in ArgoCD, maybe default mode would become more useful.
 
 #### X-0-Y
 

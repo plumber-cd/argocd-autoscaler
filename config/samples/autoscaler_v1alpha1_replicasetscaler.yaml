@@ -1,0 +1,9 @@
+apiVersion: autoscaler.argoproj.io/v1alpha1
+kind: ReplicaSetScaler
+metadata:
+  labels:
+    app.kubernetes.io/name: argocd-autoscaler
+    app.kubernetes.io/managed-by: kustomize
+  name: replicasetscaler-sample
+spec:
+  # TODO(user): Add fields here

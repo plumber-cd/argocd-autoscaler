@@ -171,11 +171,11 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 }
 
 func (r *LongestProcessingTimePartitionReconciler) LPTPartition(ctx context.Context,
-	shards []common.LoadIndex) ([]common.Replica, error) {
+	shards []common.LoadIndex) (common.ReplicaList, error) {
 
 	log := log.FromContext(ctx)
 
-	replicas := []common.Replica{}
+	replicas := common.ReplicaList{}
 
 	if len(shards) == 0 {
 		return replicas, nil

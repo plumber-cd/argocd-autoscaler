@@ -13,11 +13,23 @@ rules:
   - list
   - watch
 - apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - autoscaler.argoproj.io
   resources:
   - longestprocessingtimepartitions
   - mostwantedtwophasehysteresisevaluations
   - prometheuspolls
+  - replicasetscalers
   - robustscalingnormalizers
   - secrettypeclustershardmanagers
   - weightedpnormloadindexes
@@ -35,6 +47,7 @@ rules:
   - longestprocessingtimepartitions/finalizers
   - mostwantedtwophasehysteresisevaluations/finalizers
   - prometheuspolls/finalizers
+  - replicasetscalers/finalizers
   - robustscalingnormalizers/finalizers
   - secrettypeclustershardmanagers/finalizers
   - weightedpnormloadindexes/finalizers
@@ -46,6 +59,7 @@ rules:
   - longestprocessingtimepartitions/status
   - mostwantedtwophasehysteresisevaluations/status
   - prometheuspolls/status
+  - replicasetscalers/status
   - robustscalingnormalizers/status
   - secrettypeclustershardmanagers/status
   - weightedpnormloadindexes/status

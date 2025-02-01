@@ -1,6 +1,12 @@
 package common
 
-import "k8s.io/apimachinery/pkg/api/resource"
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	"k8s.io/apimachinery/pkg/api/resource"
+)
 
 // Replica is a representation of the replica for sharding
 type Replica struct {
@@ -16,4 +22,34 @@ type Replica struct {
 	// This is meaningless and exists purely for convenience of someone who is looking at the kubectl get output.
 	// +kubebuilder:validation:Required
 	TotalLoadDisplayValue string `json:"totalLoadDisplayValue,omitempty"`
+}
+
+type ReplicaList []Replica
+
+// SerializeToString serializes list of replicas into predictable deterministic string.
+// The format is: shardUID=replicaID,shardUID=replicaID,...
+// The order of the shards is sorted.
+// This is used to compare list of replicas when we need to know if two lists are equal.
+// Regardless of the order of the replicas, the serialized string will be the same.
+func (list ReplicaList) SerializeToString() string {
+
+	m := map[string]string{}
+	for _, replica := range list {
+		for _, loadIndex := range replica.LoadIndexes {
+			m[string(loadIndex.Shard.UID)] = replica.ID
+		}
+	}
+
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var serializedItems []string
+	for _, k := range keys {
+		serializedItems = append(serializedItems, fmt.Sprintf("%s=%v", k, m[k]))
+	}
+
+	return strings.Join(serializedItems, ",")
 }

@@ -13,5 +13,5 @@ type ShardsProviderStatus struct {
 
 // +k8s:deepcopy-gen=false
 type ShardsProvider interface {
-	GetStatus() ShardsProviderStatus
+	GetStatus() *ShardsProviderStatus
 }

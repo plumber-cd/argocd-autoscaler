@@ -19,5 +19,5 @@ type ScalerSpec struct {
 
 // +k8s:deepcopy-gen=false
 type Scaler interface {
-	GetSpec() ScalerSpec
+	GetSpec() *ScalerSpec
 }

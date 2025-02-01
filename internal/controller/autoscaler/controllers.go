@@ -12,6 +12,7 @@ var (
 	knownMetricValuesProviders []schema.GroupVersionKind
 	knownLoadIndexProviders    []schema.GroupVersionKind
 	knownPartitionProviders    []schema.GroupVersionKind
+	knownReplicaSetControllers []schema.GroupVersionKind
 )
 
 func RegisterShardManager(gvk schema.GroupVersionKind) {
@@ -70,6 +71,20 @@ func getPartitionProviders() []schema.GroupVersionKind {
 	return _copy
 }
 
+func RegisterReplicaSetController(gvk schema.GroupVersionKind) {
+	knownControllersMutex.Lock()
+	defer knownControllersMutex.Unlock()
+	knownReplicaSetControllers = append(knownReplicaSetControllers, gvk)
+}
+
+func getReplicaSetControllers() []schema.GroupVersionKind {
+	knownControllersMutex.Lock()
+	defer knownControllersMutex.Unlock()
+	_copy := make([]schema.GroupVersionKind, len(knownReplicaSetControllers))
+	copy(_copy, knownReplicaSetControllers)
+	return _copy
+}
+
 func init() {
 	RegisterShardManager(schema.GroupVersionKind{
 		Group:   "autoscaler.argoproj.io",
@@ -95,5 +110,15 @@ func init() {
 		Group:   "autoscaler.argoproj.io",
 		Version: "v1alpha1",
 		Kind:    "LongestProcessingTimePartition",
+	})
+	RegisterReplicaSetController(schema.GroupVersionKind{
+		Group:   "apps",
+		Version: "v1",
+		Kind:    "Deployment",
+	})
+	RegisterReplicaSetController(schema.GroupVersionKind{
+		Group:   "apps",
+		Version: "v1",
+		Kind:    "StatefulSet",
 	})
 }

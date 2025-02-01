@@ -19,8 +19,6 @@ package autoscaler
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strings"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -163,7 +161,7 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 	historyRecordsLastSeen := map[string]metav1.Time{}
 	historyRecorsSeenTimes := map[string]int{}
 	for _, record := range evaluation.Status.History {
-		serializedRecord := r.SerializeHistoricalRecord(&record)
+		serializedRecord := record.Replicas.SerializeToString()
 		if _, ok := historyRecordsLastSeen[serializedRecord]; !ok ||
 			record.Timestamp.After(historyRecordsLastSeen[serializedRecord].Time) {
 			historyRecords[serializedRecord] = record
@@ -210,35 +208,6 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 
 	// Re-queue for the next poll
 	return ctrl.Result{RequeueAfter: evaluation.Spec.PollingPeriod.Duration}, nil
-}
-
-// SerializeHistoricalRecord serializes historical record into a string.
-// The format is: shardUID=replicaID,shardUID=replicaID,...
-// The order of the shards is sorted.
-// This is used to compare historical records.
-// Regardless of the order of the replicas in the record, the serialized string will be the same.
-func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) SerializeHistoricalRecord(
-	record *autoscaler.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord) string {
-
-	m := map[string]string{}
-	for _, replica := range record.Replicas {
-		for _, loadIndex := range replica.LoadIndexes {
-			m[string(loadIndex.Shard.UID)] = replica.ID
-		}
-	}
-
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	var serializedItems []string
-	for _, k := range keys {
-		serializedItems = append(serializedItems, fmt.Sprintf("%s=%v", k, m[k]))
-	}
-
-	return strings.Join(serializedItems, ",")
 }
 
 // SetupWithManager sets up the controller with the Manager.

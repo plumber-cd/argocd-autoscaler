@@ -12,5 +12,5 @@ type PollerSpec struct {
 
 // +k8s:deepcopy-gen=false
 type Poller interface {
-	GetSpec() PollerSpec
+	GetSpec() *PollerSpec
 }

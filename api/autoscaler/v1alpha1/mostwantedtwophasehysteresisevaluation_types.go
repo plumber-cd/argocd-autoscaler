@@ -45,7 +45,7 @@ type MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord struct {
 
 	// Replicas is the partition as it was seen at this moment in time.
 	// +kubebuilder:validation:Required
-	Replicas []common.Replica `json:"replicas,omitempty"`
+	Replicas common.ReplicaList `json:"replicas,omitempty"`
 }
 
 // MostWantedTwoPhaseHysteresisEvaluationStatus defines the observed state of MostWantedTwoPhaseHysteresisEvaluation.
@@ -60,7 +60,7 @@ type MostWantedTwoPhaseHysteresisEvaluationStatus struct {
 	LastEvaluationTimestamp *metav1.Time `json:"lastEvaluationTimestamp,omitempty"`
 
 	// Projection shows what the partitioning choice would have been if evaluation was performed during last poll.
-	Projection []common.Replica `json:"projection,omitempty"`
+	Projection common.ReplicaList `json:"projection,omitempty"`
 }
 
 // +kubebuilder:object:root=true
