@@ -145,7 +145,7 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 	evaluation.Status.History = cleanHistory
 	if len(evaluation.Status.History) < int(evaluation.Spec.MinimumSampleSize) {
 		err := fmt.Errorf("Minimum sample size not reached")
-		log.Error(err, "Minimum sample size not reached, waiting for another poll...")
+		log.Info(err.Error())
 		meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
 			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,

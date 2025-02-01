@@ -6,7 +6,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: mostwantedtwophasehysteresisevaluation-sample
 spec:
-  paritionProviderRef:
+  partitionProviderRef:
     apiGroup: autoscaler.argoproj.io
     kind: LongestProcessingTimePartition
     name: longestprocessingtimepartition-sample

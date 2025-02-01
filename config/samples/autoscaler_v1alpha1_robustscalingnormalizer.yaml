@@ -6,7 +6,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: robustscalingnormalizer-sample
 spec:
-  pollerRef:
+  metricValuesProviderRef:
     apiGroup: autoscaler.argoproj.io
     kind: PrometheusPoll
     name: prometheuspoll-sample
