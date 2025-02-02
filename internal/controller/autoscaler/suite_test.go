@@ -72,19 +72,19 @@ func (c *objectContainer[K]) Generic() *objectContainer[client.Object] {
 	}
 }
 
-type fakeGetFn func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error
-type fakeListFn func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
-type fakeUpdateFn func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error
-type fakeUpdateSubResourceFn func(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error
-type fakeDeleteFn func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error
+type getFn func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error
+type listFn func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
+type updateFn func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error
+type updateSubResourceFn func(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error
+type deleteFn func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error
 
 type fakeClient struct {
-	client.Client
-	getFunctions          map[reflect.Type]map[client.ObjectKey]fakeGetFn
-	listFunctions         map[reflect.Type]fakeListFn
-	updateFunctions       map[reflect.Type]map[client.ObjectKey]fakeUpdateFn
-	statusUpdateFunctions map[reflect.Type]map[client.ObjectKey]fakeUpdateSubResourceFn
-	deleteFn              map[reflect.Type]map[client.ObjectKey]fakeDeleteFn
+	ksClient
+	getFunctions          map[reflect.Type]map[client.ObjectKey]getFn
+	listFunctions         map[reflect.Type]listFn
+	updateFunctions       map[reflect.Type]map[client.ObjectKey]updateFn
+	statusUpdateFunctions map[reflect.Type]map[client.ObjectKey]updateSubResourceFn
+	deleteFn              map[reflect.Type]map[client.ObjectKey]deleteFn
 }
 
 type fakeStatusWriter struct {
@@ -92,12 +92,12 @@ type fakeStatusWriter struct {
 	parent *fakeClient
 }
 
-func (f *fakeClient) WithGetFunction(container *objectContainer[client.Object], fn fakeGetFn) *fakeClient {
+func (f *fakeClient) WithGetFunction(container *objectContainer[client.Object], fn getFn) *fakeClient {
 	if f.getFunctions == nil {
-		f.getFunctions = make(map[reflect.Type]map[client.ObjectKey]fakeGetFn)
+		f.getFunctions = make(map[reflect.Type]map[client.ObjectKey]getFn)
 	}
 	if f.getFunctions[reflect.TypeOf(container.Object)] == nil {
-		f.getFunctions[reflect.TypeOf(container.Object)] = make(map[client.ObjectKey]fakeGetFn)
+		f.getFunctions[reflect.TypeOf(container.Object)] = make(map[client.ObjectKey]getFn)
 	}
 	f.getFunctions[reflect.TypeOf(container.Object)][container.ObjectKey] = fn
 	return f
@@ -114,9 +114,9 @@ func (f *fakeClient) Get(ctx context.Context, key client.ObjectKey, obj client.O
 	return f.Client.Get(ctx, key, obj, opts...)
 }
 
-func (f *fakeClient) WithListFunction(list client.ObjectList, fn fakeListFn) *fakeClient {
+func (f *fakeClient) WithListFunction(list client.ObjectList, fn listFn) *fakeClient {
 	if f.listFunctions == nil {
-		f.listFunctions = make(map[reflect.Type]fakeListFn)
+		f.listFunctions = make(map[reflect.Type]listFn)
 	}
 	f.listFunctions[reflect.TypeOf(list)] = fn
 	return f
@@ -131,12 +131,12 @@ func (f *fakeClient) List(ctx context.Context, list client.ObjectList, opts ...c
 	return f.Client.List(ctx, list, opts...)
 }
 
-func (f *fakeClient) WithUpdateFunction(container *objectContainer[client.Object], fn fakeUpdateFn) *fakeClient {
+func (f *fakeClient) WithUpdateFunction(container *objectContainer[client.Object], fn updateFn) *fakeClient {
 	if f.updateFunctions == nil {
-		f.updateFunctions = make(map[reflect.Type]map[client.ObjectKey]fakeUpdateFn)
+		f.updateFunctions = make(map[reflect.Type]map[client.ObjectKey]updateFn)
 	}
 	if f.updateFunctions[reflect.TypeOf(container.Object)] == nil {
-		f.updateFunctions[reflect.TypeOf(container.Object)] = make(map[client.ObjectKey]fakeUpdateFn)
+		f.updateFunctions[reflect.TypeOf(container.Object)] = make(map[client.ObjectKey]updateFn)
 	}
 	f.updateFunctions[reflect.TypeOf(container.Object)][container.ObjectKey] = fn
 	return f
@@ -160,12 +160,12 @@ func (f *fakeClient) Status() client.StatusWriter {
 	}
 }
 
-func (f *fakeClient) WithStatusUpdateFunction(container *objectContainer[client.Object], fn fakeUpdateSubResourceFn) *fakeClient {
+func (f *fakeClient) WithStatusUpdateFunction(container *objectContainer[client.Object], fn updateSubResourceFn) *fakeClient {
 	if f.statusUpdateFunctions == nil {
-		f.statusUpdateFunctions = make(map[reflect.Type]map[client.ObjectKey]fakeUpdateSubResourceFn)
+		f.statusUpdateFunctions = make(map[reflect.Type]map[client.ObjectKey]updateSubResourceFn)
 	}
 	if f.statusUpdateFunctions[reflect.TypeOf(container.Object)] == nil {
-		f.statusUpdateFunctions[reflect.TypeOf(container.Object)] = make(map[client.ObjectKey]fakeUpdateSubResourceFn)
+		f.statusUpdateFunctions[reflect.TypeOf(container.Object)] = make(map[client.ObjectKey]updateSubResourceFn)
 	}
 	f.statusUpdateFunctions[reflect.TypeOf(container.Object)][container.ObjectKey] = fn
 	return f
@@ -182,12 +182,12 @@ func (s *fakeStatusWriter) Update(ctx context.Context, obj client.Object, opts .
 	return s.StatusWriter.Update(ctx, obj, opts...)
 }
 
-func (f *fakeClient) WithDeleteFunction(container *objectContainer[client.Object], fn fakeDeleteFn) *fakeClient {
+func (f *fakeClient) WithDeleteFunction(container *objectContainer[client.Object], fn deleteFn) *fakeClient {
 	if f.deleteFn == nil {
-		f.deleteFn = make(map[reflect.Type]map[client.ObjectKey]fakeDeleteFn)
+		f.deleteFn = make(map[reflect.Type]map[client.ObjectKey]deleteFn)
 	}
 	if f.deleteFn[reflect.TypeOf(container.Object)] == nil {
-		f.deleteFn[reflect.TypeOf(container.Object)] = make(map[client.ObjectKey]fakeDeleteFn)
+		f.deleteFn[reflect.TypeOf(container.Object)] = make(map[client.ObjectKey]deleteFn)
 	}
 	f.deleteFn[reflect.TypeOf(container.Object)][container.ObjectKey] = fn
 	return f
@@ -202,6 +202,26 @@ func (f *fakeClient) Delete(ctx context.Context, obj client.Object, opts ...clie
 		}
 	}
 	return f.Client.Delete(ctx, obj, opts...)
+}
+
+type ksClient struct {
+	client.Client
+}
+
+func (c *ksClient) create(ctx context.Context, container *objectContainer[client.Object]) error {
+	return c.Client.Create(ctx, container.Object)
+}
+
+func (c *ksClient) get(ctx context.Context, container *objectContainer[client.Object]) error {
+	return c.Client.Get(ctx, container.ObjectKey, container.Object)
+}
+
+func (c *ksClient) update(ctx context.Context, container *objectContainer[client.Object]) error {
+	return c.Client.Update(ctx, container.Object)
+}
+
+func (c *ksClient) delete(ctx context.Context, container *objectContainer[client.Object]) error {
+	return c.Client.Delete(ctx, container.Object)
 }
 
 func newNamespaceWithRandomName() *objectContainer[*corev1.Namespace] {
@@ -235,7 +255,7 @@ func CheckFailureToGetResource[K client.Object, R reconcile.TypedReconciler[reco
 	r func(*fakeClient) R,
 ) {
 	fakeClient := &fakeClient{
-		Client: k8sClient,
+		ksClient: k8sClient,
 	}
 	fakeClient.
 		WithGetFunction(container.Generic(),
@@ -260,7 +280,7 @@ func CheckFailureToUpdateStatus[K client.Object, R reconcile.TypedReconciler[rec
 	r func(*fakeClient) R,
 ) {
 	fakeClient := &fakeClient{
-		Client: k8sClient,
+		ksClient: k8sClient,
 	}
 	fakeClient.
 		WithStatusUpdateFunction(container.Generic(),
@@ -287,7 +307,7 @@ var (
 	cancel    context.CancelFunc
 	testEnv   *envtest.Environment
 	cfg       *rest.Config
-	k8sClient client.Client
+	k8sClient ksClient
 )
 
 func TestControllers(t *testing.T) {
@@ -323,9 +343,11 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	_k8sClient, err := client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
-	Expect(k8sClient).NotTo(BeNil())
+	Expect(_k8sClient).NotTo(BeNil())
+
+	k8sClient = ksClient{Client: _k8sClient}
 })
 
 var _ = AfterSuite(func() {
