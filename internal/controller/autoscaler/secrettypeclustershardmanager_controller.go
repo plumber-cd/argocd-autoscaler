@@ -18,6 +18,7 @@ package autoscaler
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -66,7 +67,7 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get resource")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
 
 	// Find all clusters
@@ -100,6 +101,22 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 	replicasByUID := map[types.UID]common.Replica{}
 	for _, replica := range manager.Spec.Replicas {
 		for _, loadIndex := range replica.LoadIndexes {
+			if _, ok := replicasByUID[loadIndex.Shard.UID]; ok {
+				err := errors.New("duplicate replica found")
+				log.Error(err, "Failed to list replicas")
+				meta.SetStatusCondition(&manager.Status.Conditions, metav1.Condition{
+					Type:    StatusTypeReady,
+					Status:  metav1.ConditionFalse,
+					Reason:  "FailedToListReplicas",
+					Message: err.Error(),
+				})
+				if err := r.Status().Update(ctx, manager); err != nil {
+					log.Error(err, "Failed to update resource status")
+					return ctrl.Result{RequeueAfter: time.Second}, err
+				}
+				// Resource is malformed, no point in retrying
+				return ctrl.Result{}, nil
+			}
 			replicasByUID[loadIndex.Shard.UID] = replica
 		}
 	}

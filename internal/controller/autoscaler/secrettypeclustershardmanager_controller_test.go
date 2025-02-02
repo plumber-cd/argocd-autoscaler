@@ -42,19 +42,53 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 		var namespaceName client.ObjectKey
 		var namespacedName types.NamespacedName
 
+		var sampleNamespace *corev1.Namespace
+		var sampleSecret *corev1.Secret
+		var unlabeledSecret *corev1.Secret
+		var sampleShardManager *autoscalerv1alpha1.SecretTypeClusterShardManager
+		var shardManagerWithDesiredReplicas *autoscalerv1alpha1.SecretTypeClusterShardManager
+		var shardManagerWithMalformedDesiredReplicas *autoscalerv1alpha1.SecretTypeClusterShardManager
+
+		checkFailureToUpdateStatus := func(namespacedName types.NamespacedName) {
+			fakeClient := &fakeClient{
+				Client: k8sClient,
+			}
+			fakeClient.
+				WithStatusUpdateFunction(&autoscalerv1alpha1.SecretTypeClusterShardManager{},
+					namespacedName,
+					func(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+						return errors.NewBadRequest("fake error updating status")
+					},
+				)
+
+			controllerReconciler := &SecretTypeClusterShardManagerReconciler{
+				Client: fakeClient,
+				Scheme: fakeClient.Scheme(),
+			}
+
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: namespacedName,
+			})
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal("fake error updating status"))
+			Expect(result.RequeueAfter).To(Equal(time.Second))
+		}
+
 		BeforeEach(func() {
 			By("Creating resources")
 
 			namespaceName, namespacedName = newNamespace()
 
-			namespace := &corev1.Namespace{
+			sampleNamespace = &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: namespacedName.Namespace,
+					Name: namespaceName.Name,
 				},
 			}
-			Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+			Expect(k8sClient.Create(ctx, sampleNamespace)).To(Succeed())
+			Expect(k8sClient.Get(ctx, namespaceName, sampleNamespace)).To(Succeed())
 
-			secret := &corev1.Secret{
+			sampleSecret = &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      namespacedName.Name,
 					Namespace: namespacedName.Namespace,
@@ -67,9 +101,10 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 					"server": "http://mock-cluster:8000",
 				},
 			}
-			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+			Expect(k8sClient.Create(ctx, sampleSecret)).To(Succeed())
+			Expect(k8sClient.Get(ctx, namespacedName, sampleSecret)).To(Succeed())
 
-			unlabeledSecret := &corev1.Secret{
+			unlabeledSecret = &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "unlabeled-secret",
 					Namespace: namespacedName.Namespace,
@@ -83,8 +118,12 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, unlabeledSecret)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      unlabeledSecret.Name,
+				Namespace: unlabeledSecret.Namespace,
+			}, unlabeledSecret)).To(Succeed())
 
-			resource := &autoscalerv1alpha1.SecretTypeClusterShardManager{
+			sampleShardManager = &autoscalerv1alpha1.SecretTypeClusterShardManager{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      namespacedName.Name,
 					Namespace: namespacedName.Namespace,
@@ -97,7 +136,60 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			Expect(k8sClient.Create(ctx, sampleShardManager)).To(Succeed())
+			Expect(k8sClient.Get(ctx, namespacedName, sampleShardManager)).To(Succeed())
+
+			shardManagerWithDesiredReplicas = &autoscalerv1alpha1.SecretTypeClusterShardManager{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "shard-manager-with-desired-replicas",
+					Namespace: namespacedName.Namespace,
+				},
+				Spec: sampleShardManager.Spec,
+			}
+			shardManagerWithDesiredReplicas.Spec.ShardManagerSpec = common.ShardManagerSpec{
+				Replicas: common.ReplicaList{
+					{
+						ID: "0",
+						LoadIndexes: []common.LoadIndex{
+							{
+								Shard: common.Shard{
+									UID: sampleSecret.GetUID(),
+									ID:  sampleSecret.Name,
+									Data: map[string]string{
+										"fake": "data",
+									},
+								},
+								Value:        resource.MustParse("0"),
+								DisplayValue: "0",
+							},
+						},
+						TotalLoad:             resource.MustParse("0"),
+						TotalLoadDisplayValue: "0",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, shardManagerWithDesiredReplicas)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      shardManagerWithDesiredReplicas.Name,
+				Namespace: shardManagerWithDesiredReplicas.Namespace,
+			}, shardManagerWithDesiredReplicas)).To(Succeed())
+
+			shardManagerWithMalformedDesiredReplicas = &autoscalerv1alpha1.SecretTypeClusterShardManager{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "malformed-shard-manager",
+					Namespace: namespacedName.Namespace,
+				},
+				Spec: shardManagerWithDesiredReplicas.Spec,
+			}
+			shardManagerWithMalformedDesiredReplicas.Spec.ShardManagerSpec.Replicas[0].LoadIndexes = append(
+				shardManagerWithMalformedDesiredReplicas.Spec.ShardManagerSpec.Replicas[0].LoadIndexes,
+				shardManagerWithMalformedDesiredReplicas.Spec.ShardManagerSpec.Replicas[0].LoadIndexes[0],
+			)
+			Expect(k8sClient.Create(ctx, shardManagerWithMalformedDesiredReplicas)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      shardManagerWithMalformedDesiredReplicas.Name,
+				Namespace: shardManagerWithMalformedDesiredReplicas.Namespace,
+			}, shardManagerWithMalformedDesiredReplicas)).To(Succeed())
 		})
 
 		AfterEach(func() {
@@ -116,7 +208,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 				Scheme: k8sClient.Scheme(),
 			}
 
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name:      "non-existing-resource",
 					Namespace: "default",
@@ -124,6 +216,37 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			})
 
 			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
+			Expect(result.Requeue).To(BeFalse())
+		})
+
+		It("should handle error getting resource", func() {
+			By("Failing to get resource")
+
+			fakeClient := &fakeClient{
+				Client: k8sClient,
+			}
+			fakeClient.
+				WithGetFunction(&autoscalerv1alpha1.SecretTypeClusterShardManager{},
+					namespacedName,
+					func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+						return errors.NewBadRequest("fake error getting resource")
+					},
+				)
+
+			controllerReconciler := &SecretTypeClusterShardManagerReconciler{
+				Client: fakeClient,
+				Scheme: fakeClient.Scheme(),
+			}
+
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: namespacedName,
+			})
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal("fake error getting resource"))
+			Expect(result.RequeueAfter).To(Equal(time.Second))
+			Expect(result.Requeue).To(BeFalse())
 		})
 
 		It("should handle errors on listing secret", func() {
@@ -162,31 +285,15 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			Expect(resource.Status.Conditions[0].Message).To(Equal("fake error listing secrets"))
 
 			By("Reconciling resource again with expected failure to update the status")
-			fakeClient.
-				WithStatusUpdateFunction(&autoscalerv1alpha1.SecretTypeClusterShardManager{},
-					namespacedName,
-					func(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
-						return errors.NewBadRequest("fake error updating status")
-					},
-				)
-			result, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: namespacedName,
-			})
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("fake error updating status"))
-			Expect(result.RequeueAfter).To(Equal(time.Second))
+			checkFailureToUpdateStatus(namespacedName)
 		})
 
 		It("should successfully discover shards", func() {
 			By("Reconciling resource")
 
-			fakeClient := &fakeClient{
-				Client: k8sClient,
-			}
-
 			controllerReconciler := &SecretTypeClusterShardManagerReconciler{
-				Client: fakeClient,
-				Scheme: fakeClient.Scheme(),
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
 			}
 
 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -206,74 +313,22 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			Expect(resource.Status.Conditions[0].Reason).To(Equal(StatusTypeReady))
 
 			By("Reconciling resource again with expected failure to update the status")
-			fakeClient.
-				WithStatusUpdateFunction(&autoscalerv1alpha1.SecretTypeClusterShardManager{},
-					namespacedName,
-					func(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
-						return errors.NewBadRequest("fake error updating status")
-					},
-				)
-			result, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: namespacedName,
-			})
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("fake error updating status"))
-			Expect(result.RequeueAfter).To(Equal(time.Second))
+			checkFailureToUpdateStatus(namespacedName)
 		})
 
 		It("should successfully update shards on secrets", func() {
-			By("Reconciling resource")
-
-			fakeClient := &fakeClient{
-				Client: k8sClient,
-			}
-
-			controllerReconciler := &SecretTypeClusterShardManagerReconciler{
-				Client: fakeClient,
-				Scheme: fakeClient.Scheme(),
-			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: namespacedName,
-			})
-			Expect(err).ToNot(HaveOccurred())
-
-			By("Defining spec")
-
-			shardManager := &autoscalerv1alpha1.SecretTypeClusterShardManager{}
-			Expect(k8sClient.Get(ctx, namespacedName, shardManager)).To(Succeed())
-
-			shardManager.Spec.ShardManagerSpec = common.ShardManagerSpec{
-				Replicas: common.ReplicaList{
-					{
-						ID:                    "0",
-						LoadIndexes:           []common.LoadIndex{},
-						TotalLoad:             resource.MustParse("0"),
-						TotalLoadDisplayValue: "0",
-					},
-				},
-			}
-			for _, shard := range shardManager.Status.Shards {
-				shardManager.Spec.ShardManagerSpec.Replicas[0].LoadIndexes = append(
-					shardManager.Spec.ShardManagerSpec.Replicas[0].LoadIndexes,
-					common.LoadIndex{
-						Shard: common.Shard{
-							UID:  shard.UID,
-							ID:   shard.ID,
-							Data: shard.Data,
-						},
-						Value:        resource.MustParse("0"),
-						DisplayValue: "0",
-					},
-				)
-			}
-
-			Expect(k8sClient.Update(ctx, shardManager)).To(Succeed())
-
 			By("Reconciling with replicas set")
 
+			controllerReconciler := &SecretTypeClusterShardManagerReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: namespacedName,
+				NamespacedName: types.NamespacedName{
+					Name:      shardManagerWithDesiredReplicas.Name,
+					Namespace: shardManagerWithDesiredReplicas.Namespace,
+				},
 			})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
@@ -281,7 +336,10 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 
 			By("Checking ready condition")
 			resource := &autoscalerv1alpha1.SecretTypeClusterShardManager{}
-			err = k8sClient.Get(ctx, namespacedName, resource)
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      shardManagerWithDesiredReplicas.Name,
+				Namespace: shardManagerWithDesiredReplicas.Namespace,
+			}, resource)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resource.Status.Conditions).To(HaveLen(1))
 			Expect(resource.Status.Conditions[0].Type).To(Equal(StatusTypeReady))
@@ -295,56 +353,11 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 		})
 
 		It("should handle error updating the secret", func() {
-			By("Reconciling resource")
+			By("Reconciling with replicas set")
 
 			fakeClient := &fakeClient{
 				Client: k8sClient,
 			}
-
-			controllerReconciler := &SecretTypeClusterShardManagerReconciler{
-				Client: fakeClient,
-				Scheme: fakeClient.Scheme(),
-			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: namespacedName,
-			})
-			Expect(err).ToNot(HaveOccurred())
-
-			By("Defining spec")
-
-			shardManager := &autoscalerv1alpha1.SecretTypeClusterShardManager{}
-			Expect(k8sClient.Get(ctx, namespacedName, shardManager)).To(Succeed())
-
-			shardManager.Spec.ShardManagerSpec = common.ShardManagerSpec{
-				Replicas: common.ReplicaList{
-					{
-						ID:                    "0",
-						LoadIndexes:           []common.LoadIndex{},
-						TotalLoad:             resource.MustParse("0"),
-						TotalLoadDisplayValue: "0",
-					},
-				},
-			}
-			for _, shard := range shardManager.Status.Shards {
-				shardManager.Spec.ShardManagerSpec.Replicas[0].LoadIndexes = append(
-					shardManager.Spec.ShardManagerSpec.Replicas[0].LoadIndexes,
-					common.LoadIndex{
-						Shard: common.Shard{
-							UID:  shard.UID,
-							ID:   shard.ID,
-							Data: shard.Data,
-						},
-						Value:        resource.MustParse("0"),
-						DisplayValue: "0",
-					},
-				)
-			}
-
-			Expect(k8sClient.Update(ctx, shardManager)).To(Succeed())
-
-			By("Reconciling with replicas set")
-
 			fakeClient.
 				WithUpdateFunction(&corev1.Secret{},
 					namespacedName,
@@ -353,15 +366,27 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 					},
 				)
 
+			controllerReconciler := &SecretTypeClusterShardManagerReconciler{
+				Client: fakeClient,
+				Scheme: fakeClient.Scheme(),
+			}
+
 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: namespacedName,
+				NamespacedName: types.NamespacedName{
+					Name:      shardManagerWithDesiredReplicas.Name,
+					Namespace: shardManagerWithDesiredReplicas.Namespace,
+				},
 			})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("fake error updating secret"))
 			Expect(result.RequeueAfter).To(Equal(time.Second))
 
 			By("Checking ready condition")
-			Expect(k8sClient.Get(ctx, namespacedName, shardManager)).To(Succeed())
+			shardManager := &autoscalerv1alpha1.SecretTypeClusterShardManager{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      shardManagerWithDesiredReplicas.Name,
+				Namespace: shardManagerWithDesiredReplicas.Namespace,
+			}, shardManager)).To(Succeed())
 			Expect(shardManager.Status.Conditions).To(HaveLen(1))
 			Expect(shardManager.Status.Conditions[0].Type).To(Equal(StatusTypeReady))
 			Expect(shardManager.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
@@ -369,19 +394,48 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			Expect(shardManager.Status.Conditions[0].Message).To(Equal("fake error updating secret"))
 
 			By("Reconciling resource again with expected failure to update the status")
-			fakeClient.
-				WithStatusUpdateFunction(&autoscalerv1alpha1.SecretTypeClusterShardManager{},
-					namespacedName,
-					func(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
-						return errors.NewBadRequest("fake error updating status")
-					},
-				)
-			result, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: namespacedName,
+			checkFailureToUpdateStatus(types.NamespacedName{
+				Name:      shardManagerWithDesiredReplicas.Name,
+				Namespace: shardManagerWithDesiredReplicas.Namespace,
 			})
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("fake error updating status"))
-			Expect(result.RequeueAfter).To(Equal(time.Second))
+		})
+
+		It("should handle errors when desired replicas was malformed", func() {
+			By("Reconciling with replicas set")
+
+			controllerReconciler := &SecretTypeClusterShardManagerReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      shardManagerWithMalformedDesiredReplicas.Name,
+					Namespace: shardManagerWithMalformedDesiredReplicas.Namespace,
+				},
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
+			Expect(result.Requeue).To(BeFalse())
+
+			By("Checking ready condition")
+			resource := &autoscalerv1alpha1.SecretTypeClusterShardManager{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      shardManagerWithMalformedDesiredReplicas.Name,
+				Namespace: shardManagerWithMalformedDesiredReplicas.Namespace,
+			}, resource)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resource.Status.Conditions).To(HaveLen(1))
+			Expect(resource.Status.Conditions[0].Type).To(Equal(StatusTypeReady))
+			Expect(resource.Status.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
+			Expect(resource.Status.Conditions[0].Reason).To(Equal("FailedToListReplicas"))
+			Expect(resource.Status.Conditions[0].Message).To(Equal("duplicate replica found"))
+
+			By("Reconciling resource again with expected failure to update the status")
+			checkFailureToUpdateStatus(types.NamespacedName{
+				Name:      shardManagerWithMalformedDesiredReplicas.Name,
+				Namespace: shardManagerWithMalformedDesiredReplicas.Namespace,
+			})
 		})
 	})
 })
