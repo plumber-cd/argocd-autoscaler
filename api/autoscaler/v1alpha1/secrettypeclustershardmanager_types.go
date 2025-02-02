@@ -39,6 +39,8 @@ type SecretTypeClusterShardManagerStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status",description="Current status based on Ready condition"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Time since creation"
 
 // SecretTypeClusterShardManager is the Schema for the secrettypeclustershardmanagers API.
 type SecretTypeClusterShardManager struct {

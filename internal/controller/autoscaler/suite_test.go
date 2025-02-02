@@ -20,11 +20,14 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/util/uuid"
 
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,6 +38,149 @@ import (
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
+
+type fakeGetFn func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error
+type fakeListFn func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
+type fakeUpdateFn func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error
+type fakeUpdateSubResourceFn func(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error
+type fakeDeleteFn func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error
+
+type fakeClient struct {
+	client.Client
+	getFunctions          map[reflect.Type]map[client.ObjectKey]fakeGetFn
+	listFunctions         map[reflect.Type]fakeListFn
+	updateFunctions       map[reflect.Type]map[client.ObjectKey]fakeUpdateFn
+	statusUpdateFunctions map[reflect.Type]map[client.ObjectKey]fakeUpdateSubResourceFn
+	deleteFn              map[reflect.Type]map[client.ObjectKey]fakeDeleteFn
+}
+
+type fakeStatusWriter struct {
+	client.StatusWriter
+	parent *fakeClient
+}
+
+func (f *fakeClient) WithGetFunction(obj client.Object, key client.ObjectKey, fn fakeGetFn) *fakeClient {
+	if f.getFunctions == nil {
+		f.getFunctions = make(map[reflect.Type]map[client.ObjectKey]fakeGetFn)
+	}
+	if f.getFunctions[reflect.TypeOf(obj)] == nil {
+		f.getFunctions[reflect.TypeOf(obj)] = make(map[client.ObjectKey]fakeGetFn)
+	}
+	f.getFunctions[reflect.TypeOf(obj)][key] = fn
+	return f
+}
+
+func (f *fakeClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if f.getFunctions != nil {
+		if functions, ok := f.getFunctions[reflect.TypeOf(obj)]; ok {
+			if fn, ok := functions[key]; ok {
+				return fn(ctx, key, obj, opts...)
+			}
+		}
+	}
+	return f.Client.Get(ctx, key, obj, opts...)
+}
+
+func (f *fakeClient) WithListFunction(list client.ObjectList, fn fakeListFn) *fakeClient {
+	if f.listFunctions == nil {
+		f.listFunctions = make(map[reflect.Type]fakeListFn)
+	}
+	f.listFunctions[reflect.TypeOf(list)] = fn
+	return f
+}
+
+func (f *fakeClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	if f.listFunctions != nil {
+		if fn, ok := f.listFunctions[reflect.TypeOf(list)]; ok {
+			return fn(ctx, list, opts...)
+		}
+	}
+	return f.Client.List(ctx, list, opts...)
+}
+
+func (f *fakeClient) WithUpdateFunction(obj client.Object, key client.ObjectKey, fn fakeUpdateFn) *fakeClient {
+	if f.updateFunctions == nil {
+		f.updateFunctions = make(map[reflect.Type]map[client.ObjectKey]fakeUpdateFn)
+	}
+	if f.updateFunctions[reflect.TypeOf(obj)] == nil {
+		f.updateFunctions[reflect.TypeOf(obj)] = make(map[client.ObjectKey]fakeUpdateFn)
+	}
+	f.updateFunctions[reflect.TypeOf(obj)][key] = fn
+	return f
+}
+
+func (f *fakeClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if f.updateFunctions != nil {
+		if functions, ok := f.updateFunctions[reflect.TypeOf(obj)]; ok {
+			if fn, ok := functions[client.ObjectKeyFromObject(obj)]; ok {
+				return fn(ctx, obj, opts...)
+			}
+		}
+	}
+	return f.Client.Update(ctx, obj, opts...)
+}
+
+func (f *fakeClient) Status() client.StatusWriter {
+	return &fakeStatusWriter{
+		StatusWriter: f.Client.Status(),
+		parent:       f,
+	}
+}
+
+func (f *fakeClient) WithStatusUpdateFunction(obj client.Object, key client.ObjectKey, fn fakeUpdateSubResourceFn) *fakeClient {
+	if f.statusUpdateFunctions == nil {
+		f.statusUpdateFunctions = make(map[reflect.Type]map[client.ObjectKey]fakeUpdateSubResourceFn)
+	}
+	if f.statusUpdateFunctions[reflect.TypeOf(obj)] == nil {
+		f.statusUpdateFunctions[reflect.TypeOf(obj)] = make(map[client.ObjectKey]fakeUpdateSubResourceFn)
+	}
+	f.statusUpdateFunctions[reflect.TypeOf(obj)][key] = fn
+	return f
+}
+
+func (s *fakeStatusWriter) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+	if s.parent.statusUpdateFunctions != nil {
+		if functions, ok := s.parent.statusUpdateFunctions[reflect.TypeOf(obj)]; ok {
+			if fn, ok := functions[client.ObjectKeyFromObject(obj)]; ok {
+				return fn(ctx, obj, opts...)
+			}
+		}
+	}
+	return s.StatusWriter.Update(ctx, obj, opts...)
+}
+
+func (f *fakeClient) WithDeleteFunction(obj client.Object, key client.ObjectKey, fn fakeDeleteFn) *fakeClient {
+	if f.deleteFn == nil {
+		f.deleteFn = make(map[reflect.Type]map[client.ObjectKey]fakeDeleteFn)
+	}
+	if f.deleteFn[reflect.TypeOf(obj)] == nil {
+		f.deleteFn[reflect.TypeOf(obj)] = make(map[client.ObjectKey]fakeDeleteFn)
+	}
+	f.deleteFn[reflect.TypeOf(obj)][key] = fn
+	return f
+}
+
+func (f *fakeClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	if f.deleteFn != nil {
+		if functions, ok := f.deleteFn[reflect.TypeOf(obj)]; ok {
+			if fn, ok := functions[client.ObjectKeyFromObject(obj)]; ok {
+				return fn(ctx, obj, opts...)
+			}
+		}
+	}
+	return f.Client.Delete(ctx, obj, opts...)
+}
+
+func newNamespace() (client.ObjectKey, types.NamespacedName) {
+	namespaceName := client.ObjectKey{
+		Name: "test-" + string(uuid.NewUUID()),
+	}
+	namespacedName := types.NamespacedName{
+		Name:      "test",
+		Namespace: namespaceName.Name,
+	}
+	return namespaceName, namespacedName
+}
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.

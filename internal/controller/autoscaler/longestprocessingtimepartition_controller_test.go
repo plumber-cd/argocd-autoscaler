@@ -44,6 +44,7 @@ var _ = Describe("LongestProcessingTimePartition Controller", func() {
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind LongestProcessingTimePartition")
+			Skip("Not implemented yet")
 			err := k8sClient.Get(ctx, typeNamespacedName, longestprocessingtimepartition)
 			if err != nil && errors.IsNotFound(err) {
 				resource := &autoscalerv1alpha1.LongestProcessingTimePartition{

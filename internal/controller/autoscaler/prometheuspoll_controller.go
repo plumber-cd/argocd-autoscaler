@@ -45,6 +45,8 @@ import (
 type PrometheusPollReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	Poller prometheus.Poller
 }
 
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=prometheuspolls,verbs=get;list;watch;create;update;patch;delete
@@ -236,8 +238,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	}
 
-	poller := prometheus.Poller{}
-	metrics, err := poller.Poll(ctx, *poll, shards)
+	metrics, err := r.Poller.Poll(ctx, *poll, shards)
 	if err != nil {
 		log.Error(err, "Failed to poll metrics")
 		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{

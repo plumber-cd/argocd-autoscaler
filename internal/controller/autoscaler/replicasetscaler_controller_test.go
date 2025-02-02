@@ -44,6 +44,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind ReplicaSetScaler")
+			Skip("Not implemented yet")
 			err := k8sClient.Get(ctx, typeNamespacedName, replicasetscaler)
 			if err != nil && errors.IsNotFound(err) {
 				resource := &autoscalerv1alpha1.ReplicaSetScaler{

@@ -69,22 +69,6 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 		return ctrl.Result{}, err
 	}
 
-	// First, change the availability condition from unknown to false -
-	// once it is set to true at the very end, we won't touch it ever again.
-	if meta.IsStatusConditionPresentAndEqual(manager.Status.Conditions, StatusTypeAvailable, metav1.ConditionUnknown) {
-		meta.SetStatusCondition(&manager.Status.Conditions, metav1.Condition{
-			Type:    StatusTypeAvailable,
-			Status:  metav1.ConditionFalse,
-			Reason:  StatusTypeAvailableReasonInitialization,
-			Message: StatusTypeAvailableReasonInitialization,
-		})
-		if err := r.Status().Update(ctx, manager); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
-		}
-		return ctrl.Result{RequeueAfter: time.Second}, nil
-	}
-
 	// Find all clusters
 	secrets := &corev1.SecretList{}
 	labelSelector := labels.Set(client.MatchingLabels{
@@ -106,9 +90,10 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 		})
 		if err := r.Status().Update(ctx, manager); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
-		return ctrl.Result{}, err
+		// Connection error? Let's try again
+		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
 	log.V(1).Info("Found secrets", "count", len(secrets.Items))
 
@@ -157,31 +142,22 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 			})
 			if err := r.Status().Update(ctx, manager); err != nil {
 				log.Error(err, "Failed to update resource status")
-				return ctrl.Result{RequeueAfter: time.Second}, nil
+				return ctrl.Result{RequeueAfter: time.Second}, err
 			}
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 	}
 
 	manager.Status.Shards = shards
 	manager.Status.Replicas = manager.Spec.Replicas
-	if !meta.IsStatusConditionPresentAndEqual(manager.Status.Conditions, StatusTypeAvailable, metav1.ConditionTrue) {
-		meta.SetStatusCondition(&manager.Status.Conditions, metav1.Condition{
-			Type:    StatusTypeAvailable,
-			Status:  metav1.ConditionTrue,
-			Reason:  StatusTypeAvailable,
-			Message: StatusTypeAvailable,
-		})
-	}
 	meta.SetStatusCondition(&manager.Status.Conditions, metav1.Condition{
-		Type:    StatusTypeReady,
-		Status:  metav1.ConditionTrue,
-		Reason:  StatusTypeReady,
-		Message: StatusTypeReady,
+		Type:   StatusTypeReady,
+		Status: metav1.ConditionTrue,
+		Reason: StatusTypeReady,
 	})
 	if err := r.Status().Update(ctx, manager); err != nil {
 		log.Error(err, "Failed to update resource status")
-		return ctrl.Result{RequeueAfter: time.Second}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
 
 	return ctrl.Result{}, nil

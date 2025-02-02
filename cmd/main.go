@@ -39,6 +39,7 @@ import (
 
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	autoscalercontroller "github.com/plumber-cd/argocd-autoscaler/internal/controller/autoscaler"
+	"github.com/plumber-cd/argocd-autoscaler/pollers/prometheus"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -212,6 +213,7 @@ func main() {
 	if err = (&autoscalercontroller.PrometheusPollReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Poller: prometheus.Poller{},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrometheusPoll")
 		os.Exit(1)

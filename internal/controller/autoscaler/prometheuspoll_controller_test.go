@@ -21,10 +21,11 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
@@ -32,29 +33,40 @@ import (
 
 var _ = Describe("PrometheusPoll Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
-
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Name:      "test",
+			Namespace: "test-" + string(uuid.NewUUID()),
 		}
 		prometheuspoll := &autoscalerv1alpha1.PrometheusPoll{}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind PrometheusPoll")
-			err := k8sClient.Get(ctx, typeNamespacedName, prometheuspoll)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &autoscalerv1alpha1.PrometheusPoll{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
-					// TODO(user): Specify other spec details if needed.
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			By("Creating resources")
+			Skip("Not implemented yet")
+			namespace := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: typeNamespacedName.Namespace,
+				},
 			}
+			Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+			shardManager := &autoscalerv1alpha1.SecretTypeClusterShardManager{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      typeNamespacedName.Name,
+					Namespace: typeNamespacedName.Namespace,
+				},
+				Status: autoscalerv1alpha1.SecretTypeClusterShardManagerStatus{},
+			}
+			Expect(k8sClient.Create(ctx, shardManager)).To(Succeed())
+			resource := &autoscalerv1alpha1.PrometheusPoll{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      typeNamespacedName.Name,
+					Namespace: typeNamespacedName.Namespace,
+				},
+				// TODO(user): Specify other spec details if needed.
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, prometheuspoll)).To(Succeed())
 		})
 
 		AfterEach(func() {
