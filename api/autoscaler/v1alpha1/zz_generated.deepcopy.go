@@ -334,7 +334,6 @@ func (in *PrometheusPollList) DeepCopyObject() runtime.Object {
 func (in *PrometheusPollSpec) DeepCopyInto(out *PrometheusPollSpec) {
 	*out = *in
 	in.PollerSpec.DeepCopyInto(&out.PollerSpec)
-	out.InitialDelay = in.InitialDelay
 	out.Period = in.Period
 	if in.Metrics != nil {
 		in, out := &in.Metrics, &out.Metrics

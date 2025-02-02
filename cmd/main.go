@@ -213,7 +213,7 @@ func main() {
 	if err = (&autoscalercontroller.PrometheusPollReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Poller: prometheus.Poller{},
+		Poller: &prometheus.PollerImpl{},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrometheusPoll")
 		os.Exit(1)

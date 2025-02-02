@@ -66,81 +66,28 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get resource")
-		return ctrl.Result{}, err
-	}
-
-	// After initial creation of the new poll or individual cluster,
-	// we need to wait a little for some metrics to become available.
-	// We will check if this resource has no conditions and re-queue it for initial cooldown parameter.
-	if len(poll.Status.Conditions) == 0 {
-		log.Info("First reconciliation request, re-queuing for initial delay",
-			"cooldown", poll.Spec.InitialDelay)
-		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    StatusTypeAvailable,
-			Status:  metav1.ConditionUnknown,
-			Reason:  "InitialDelay",
-			Message: "Initial delay before initial reconciliation...",
-		})
-		if err := r.Status().Update(ctx, poll); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
-		}
-		return ctrl.Result{RequeueAfter: poll.Spec.InitialDelay.Duration}, nil
-	}
-
-	// If the resource malformed - bail out early
-	if len(poll.Spec.Metrics) == 0 {
-		err := fmt.Errorf("No polling configuration present")
-		log.Error(err, "No polling configuration present, fail")
-		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    StatusTypeReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "NoPollingConfiguration",
-			Message: err.Error(),
-		})
-		if err := r.Status().Update(ctx, poll); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
-		}
-		// Re-queuing will change nothing - resource is malformed
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
 
 	metricIDs := map[string]bool{}
 	for _, metric := range poll.Spec.Metrics {
 		if _, exists := metricIDs[metric.ID]; exists {
 			err := fmt.Errorf("duplicate metric for ID '%s'", metric.ID)
-			log.Error(err, "No polling configuration present, fail")
+			log.Error(err, "Malformed resource")
 			meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
 				Type:    StatusTypeReady,
 				Status:  metav1.ConditionFalse,
-				Reason:  "NoPollingConfiguration",
+				Reason:  "MalformedResource",
 				Message: err.Error(),
 			})
 			if err := r.Status().Update(ctx, poll); err != nil {
 				log.Error(err, "Failed to update resource status")
-				return ctrl.Result{RequeueAfter: time.Second}, nil
+				return ctrl.Result{RequeueAfter: time.Second}, err
 			}
 			// Re-queuing will change nothing - resource is malformed
 			return ctrl.Result{}, nil
 		}
 		metricIDs[metric.ID] = true
-	}
-
-	// First, change the availability condition from unknown to false -
-	// once it is set to true at the very end, we won't touch it ever again.
-	if meta.IsStatusConditionPresentAndEqual(poll.Status.Conditions, StatusTypeAvailable, metav1.ConditionUnknown) {
-		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    StatusTypeAvailable,
-			Status:  metav1.ConditionFalse,
-			Reason:  StatusTypeAvailableReasonInitialization,
-			Message: StatusTypeAvailableReasonInitialization,
-		})
-		if err := r.Status().Update(ctx, poll); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
-		}
-		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	shardsProvider, err := findByRef[common.ShardsProvider](
@@ -161,10 +108,10 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		})
 		if err := r.Status().Update(ctx, poll); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		// We should receive an event if shard manager is created
-		return ctrl.Result{}, err
+		return ctrl.Result{}, nil
 	}
 
 	if !meta.IsStatusConditionPresentAndEqual(shardsProvider.GetShardProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
@@ -180,7 +127,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		})
 		if err := r.Status().Update(ctx, poll); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		// We should get a new event when shard manager changes
 		return ctrl.Result{}, nil
@@ -198,7 +145,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		})
 		if err := r.Status().Update(ctx, poll); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		// We should get a new event when shard manager changes
 		return ctrl.Result{}, nil

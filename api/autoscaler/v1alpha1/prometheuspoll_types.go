@@ -46,10 +46,6 @@ type PrometheusMetric struct {
 type PrometheusPollSpec struct {
 	common.PollerSpec `json:",inline"`
 
-	// InitialDelay is the initial delay before polling after creating a poll or adding a new cluster.
-	// +kubebuilder:validation:Required
-	InitialDelay metav1.Duration `json:"initialDelay,omitempty"`
-
 	// Period is the period of polling.
 	// +kubebuilder:validation:Required
 	Period metav1.Duration `json:"period,omitempty"`

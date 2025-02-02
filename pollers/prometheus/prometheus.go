@@ -36,9 +36,13 @@ import (
 	"github.com/prometheus/common/model"
 )
 
-type Poller struct{}
+type Poller interface {
+	Poll(ctx context.Context, poll autoscaler.PrometheusPoll, shards []common.Shard) ([]common.MetricValue, error)
+}
 
-func (r *Poller) Poll(
+type PollerImpl struct{}
+
+func (r *PollerImpl) Poll(
 	ctx context.Context,
 	poll autoscaler.PrometheusPoll,
 	shards []common.Shard,

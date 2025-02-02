@@ -59,10 +59,6 @@ spec:
               address:
                 description: Address is the address of the Prometheus server.
                 type: string
-              initialDelay:
-                description: InitialDelay is the initial delay before polling after
-                  creating a poll or adding a new cluster.
-                type: string
               metrics:
                 description: Metrics is the list of metrics to poll from Prometheus.
                 items:
@@ -119,7 +115,6 @@ spec:
                 x-kubernetes-map-type: atomic
             required:
             - address
-            - initialDelay
             - metrics
             - period
             - shardManagerRef

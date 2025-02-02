@@ -220,6 +220,10 @@ func (c *ksClient) update(ctx context.Context, container *objectContainer[client
 	return c.Client.Update(ctx, container.Object)
 }
 
+func (c *ksClient) statusUpdate(ctx context.Context, container *objectContainer[client.Object]) error {
+	return c.Client.Status().Update(ctx, container.Object)
+}
+
 func (c *ksClient) delete(ctx context.Context, container *objectContainer[client.Object]) error {
 	return c.Client.Delete(ctx, container.Object)
 }
