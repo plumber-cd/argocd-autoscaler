@@ -22,11 +22,15 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/uuid"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -34,10 +38,39 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
+
+type objectContainer[K client.Object] struct {
+	NamespacedName types.NamespacedName
+	ObjectKey      client.ObjectKey
+	Object         K
+}
+
+func NewObjectContainer[K client.Object](obj K) *objectContainer[K] {
+	return &objectContainer[K]{
+		NamespacedName: types.NamespacedName{
+			Name:      obj.GetName(),
+			Namespace: obj.GetNamespace(),
+		},
+		ObjectKey: client.ObjectKey{
+			Name:      obj.GetName(),
+			Namespace: obj.GetNamespace(),
+		},
+		Object: obj,
+	}
+}
+
+func (c *objectContainer[K]) Generic() *objectContainer[client.Object] {
+	return &objectContainer[client.Object]{
+		NamespacedName: c.NamespacedName,
+		ObjectKey:      c.ObjectKey,
+		Object:         c.Object,
+	}
+}
 
 type fakeGetFn func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error
 type fakeListFn func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
@@ -59,14 +92,14 @@ type fakeStatusWriter struct {
 	parent *fakeClient
 }
 
-func (f *fakeClient) WithGetFunction(obj client.Object, key client.ObjectKey, fn fakeGetFn) *fakeClient {
+func (f *fakeClient) WithGetFunction(container *objectContainer[client.Object], fn fakeGetFn) *fakeClient {
 	if f.getFunctions == nil {
 		f.getFunctions = make(map[reflect.Type]map[client.ObjectKey]fakeGetFn)
 	}
-	if f.getFunctions[reflect.TypeOf(obj)] == nil {
-		f.getFunctions[reflect.TypeOf(obj)] = make(map[client.ObjectKey]fakeGetFn)
+	if f.getFunctions[reflect.TypeOf(container.Object)] == nil {
+		f.getFunctions[reflect.TypeOf(container.Object)] = make(map[client.ObjectKey]fakeGetFn)
 	}
-	f.getFunctions[reflect.TypeOf(obj)][key] = fn
+	f.getFunctions[reflect.TypeOf(container.Object)][container.ObjectKey] = fn
 	return f
 }
 
@@ -98,14 +131,14 @@ func (f *fakeClient) List(ctx context.Context, list client.ObjectList, opts ...c
 	return f.Client.List(ctx, list, opts...)
 }
 
-func (f *fakeClient) WithUpdateFunction(obj client.Object, key client.ObjectKey, fn fakeUpdateFn) *fakeClient {
+func (f *fakeClient) WithUpdateFunction(container *objectContainer[client.Object], fn fakeUpdateFn) *fakeClient {
 	if f.updateFunctions == nil {
 		f.updateFunctions = make(map[reflect.Type]map[client.ObjectKey]fakeUpdateFn)
 	}
-	if f.updateFunctions[reflect.TypeOf(obj)] == nil {
-		f.updateFunctions[reflect.TypeOf(obj)] = make(map[client.ObjectKey]fakeUpdateFn)
+	if f.updateFunctions[reflect.TypeOf(container.Object)] == nil {
+		f.updateFunctions[reflect.TypeOf(container.Object)] = make(map[client.ObjectKey]fakeUpdateFn)
 	}
-	f.updateFunctions[reflect.TypeOf(obj)][key] = fn
+	f.updateFunctions[reflect.TypeOf(container.Object)][container.ObjectKey] = fn
 	return f
 }
 
@@ -127,14 +160,14 @@ func (f *fakeClient) Status() client.StatusWriter {
 	}
 }
 
-func (f *fakeClient) WithStatusUpdateFunction(obj client.Object, key client.ObjectKey, fn fakeUpdateSubResourceFn) *fakeClient {
+func (f *fakeClient) WithStatusUpdateFunction(container *objectContainer[client.Object], fn fakeUpdateSubResourceFn) *fakeClient {
 	if f.statusUpdateFunctions == nil {
 		f.statusUpdateFunctions = make(map[reflect.Type]map[client.ObjectKey]fakeUpdateSubResourceFn)
 	}
-	if f.statusUpdateFunctions[reflect.TypeOf(obj)] == nil {
-		f.statusUpdateFunctions[reflect.TypeOf(obj)] = make(map[client.ObjectKey]fakeUpdateSubResourceFn)
+	if f.statusUpdateFunctions[reflect.TypeOf(container.Object)] == nil {
+		f.statusUpdateFunctions[reflect.TypeOf(container.Object)] = make(map[client.ObjectKey]fakeUpdateSubResourceFn)
 	}
-	f.statusUpdateFunctions[reflect.TypeOf(obj)][key] = fn
+	f.statusUpdateFunctions[reflect.TypeOf(container.Object)][container.ObjectKey] = fn
 	return f
 }
 
@@ -149,14 +182,14 @@ func (s *fakeStatusWriter) Update(ctx context.Context, obj client.Object, opts .
 	return s.StatusWriter.Update(ctx, obj, opts...)
 }
 
-func (f *fakeClient) WithDeleteFunction(obj client.Object, key client.ObjectKey, fn fakeDeleteFn) *fakeClient {
+func (f *fakeClient) WithDeleteFunction(container *objectContainer[client.Object], fn fakeDeleteFn) *fakeClient {
 	if f.deleteFn == nil {
 		f.deleteFn = make(map[reflect.Type]map[client.ObjectKey]fakeDeleteFn)
 	}
-	if f.deleteFn[reflect.TypeOf(obj)] == nil {
-		f.deleteFn[reflect.TypeOf(obj)] = make(map[client.ObjectKey]fakeDeleteFn)
+	if f.deleteFn[reflect.TypeOf(container.Object)] == nil {
+		f.deleteFn[reflect.TypeOf(container.Object)] = make(map[client.ObjectKey]fakeDeleteFn)
 	}
-	f.deleteFn[reflect.TypeOf(obj)][key] = fn
+	f.deleteFn[reflect.TypeOf(container.Object)][container.ObjectKey] = fn
 	return f
 }
 
@@ -171,15 +204,79 @@ func (f *fakeClient) Delete(ctx context.Context, obj client.Object, opts ...clie
 	return f.Client.Delete(ctx, obj, opts...)
 }
 
-func newNamespace() (client.ObjectKey, types.NamespacedName) {
-	namespaceName := client.ObjectKey{
-		Name: "test-" + string(uuid.NewUUID()),
+func newNamespaceWithRandomName() *objectContainer[*corev1.Namespace] {
+	name := "test-" + string(uuid.NewUUID())
+	return NewObjectContainer(&corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: name,
+		},
+	})
+}
+
+func CheckExitingOnNonExistingResource[R reconcile.TypedReconciler[reconcile.Request]](
+	r func() R,
+) {
+	controllerReconciler := r()
+	result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "non-existing-resource",
+			Namespace: "default",
+		},
+	})
+
+	Expect(err).NotTo(HaveOccurred())
+	Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
+	Expect(result.Requeue).To(BeFalse())
+}
+
+func CheckFailureToGetResource[K client.Object, R reconcile.TypedReconciler[reconcile.Request]](
+	container *objectContainer[K],
+	r func(*fakeClient) R,
+) {
+	fakeClient := &fakeClient{
+		Client: k8sClient,
 	}
-	namespacedName := types.NamespacedName{
-		Name:      "test",
-		Namespace: namespaceName.Name,
+	fakeClient.
+		WithGetFunction(container.Generic(),
+			func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				return errors.NewBadRequest("fake error getting resource")
+			},
+		)
+
+	controllerReconciler := r(fakeClient)
+	result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: container.NamespacedName,
+	})
+
+	Expect(err).To(HaveOccurred())
+	Expect(err.Error()).To(Equal("fake error getting resource"))
+	Expect(result.RequeueAfter).To(Equal(time.Second))
+	Expect(result.Requeue).To(BeFalse())
+}
+
+func CheckFailureToUpdateStatus[K client.Object, R reconcile.TypedReconciler[reconcile.Request]](
+	container *objectContainer[K],
+	r func(*fakeClient) R,
+) {
+	fakeClient := &fakeClient{
+		Client: k8sClient,
 	}
-	return namespaceName, namespacedName
+	fakeClient.
+		WithStatusUpdateFunction(container.Generic(),
+			func(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+				return errors.NewBadRequest("fake error updating status")
+			},
+		)
+
+	controllerReconciler := r(fakeClient)
+	result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: container.NamespacedName,
+	})
+
+	Expect(err).To(HaveOccurred())
+	Expect(err.Error()).To(Equal("fake error updating status"))
+	Expect(result.RequeueAfter).To(Equal(time.Second))
 }
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
