@@ -284,6 +284,7 @@ var _ = Describe("RobustScalingNormalizer Controller", func() {
 				},
 			)
 
+			By("Reconciling")
 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: container.NamespacedName,
 			})

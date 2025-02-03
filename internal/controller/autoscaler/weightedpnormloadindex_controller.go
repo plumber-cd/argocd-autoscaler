@@ -19,13 +19,10 @@ package autoscaler
 import (
 	"context"
 	"fmt"
-	"math"
-	"strconv"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -41,12 +38,15 @@ import (
 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
+	"github.com/plumber-cd/argocd-autoscaler/loadindexers/weightedpnorm"
 )
 
 // WeightedPNormLoadIndexReconciler reconciles a WeightedPNormLoadIndex object
 type WeightedPNormLoadIndexReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	LoadIndexer weightedpnorm.LoadIndexer
 }
 
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=weightedpnormloadindexes,verbs=get;list;watch;create;update;patch;delete
@@ -66,7 +66,7 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get resource")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
 
 	weightsByID := map[string]autoscaler.WeightedPNormLoadIndexWeight{}
@@ -82,7 +82,7 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 			})
 			if err := r.Status().Update(ctx, loadIndex); err != nil {
 				log.Error(err, "Failed to update resource status")
-				return ctrl.Result{RequeueAfter: time.Second}, nil
+				return ctrl.Result{RequeueAfter: time.Second}, err
 			}
 			// Resource is malformed - re-queuing won't help
 			return ctrl.Result{}, nil
@@ -108,10 +108,10 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 		})
 		if err := r.Status().Update(ctx, loadIndex); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		// We should get a new event when metric provider is created
-		return ctrl.Result{}, err
+		return ctrl.Result{}, nil
 	}
 
 	if !meta.IsStatusConditionPresentAndEqual(metricValuesProvider.GetMetricValuesProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
@@ -119,7 +119,7 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
 			Reason: "MetricValuesProviderNotReady",
-			Message: fmt.Sprintf("Check the status of a metric provider %s (api=%s, kind=%s)",
+			Message: fmt.Sprintf("Check the status of metric values provider %s (api=%s, kind=%s)",
 				loadIndex.Spec.MetricValuesProviderRef.Name,
 				*loadIndex.Spec.MetricValuesProviderRef.APIGroup,
 				loadIndex.Spec.MetricValuesProviderRef.Kind,
@@ -127,104 +127,36 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 		})
 		if err := r.Status().Update(ctx, loadIndex); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		// We should get a new event when metric provider changes
 		return ctrl.Result{}, nil
 	}
 
 	values := metricValuesProvider.GetMetricValuesProviderStatus().Values
-
-	if len(values) == 0 {
-		err := fmt.Errorf("No metrics found")
-		log.Error(err, "No metrics found, fail")
+	loadIndexes, err := r.LoadIndexer.Calculate(
+		loadIndex.Spec.P,
+		weightsByID,
+		values,
+	)
+	if err != nil {
+		log.Error(err, "Load Index calculation failed")
 		meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
 			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "NoMetricValuesFound",
+			Reason:  "LoadIndexCalculationError",
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, loadIndex); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
-		// We should get a new event when metric provider changes
+		// re-queuing won't help if this is a math problem
+		// It could also be malformed data from the upstream, but net result is the same
 		return ctrl.Result{}, nil
 	}
 
-	metricsByShardByID := map[types.UID]map[string][]common.MetricValue{}
-	metricsByShard := map[types.UID][]common.MetricValue{}
-	shardsByUID := map[types.UID]common.Shard{}
-	for _, m := range values {
-		if _, exists := metricsByShardByID[m.Shard.UID]; !exists {
-			metricsByShardByID[m.Shard.UID] = map[string][]common.MetricValue{}
-		}
-		if _, exists := metricsByShardByID[m.Shard.UID][m.ID]; !exists {
-			metricsByShardByID[m.Shard.UID][m.ID] = []common.MetricValue{}
-		}
-		metricsByShardByID[m.Shard.UID][m.ID] = append(metricsByShardByID[m.Shard.UID][m.ID], m)
-		if _, exists := metricsByShard[m.Shard.UID]; !exists {
-			metricsByShard[m.Shard.UID] = []common.MetricValue{}
-		}
-		metricsByShard[m.Shard.UID] = append(metricsByShard[m.Shard.UID], m)
-		if _, exists := shardsByUID[m.Shard.UID]; !exists {
-			shardsByUID[m.Shard.UID] = m.Shard
-		}
-	}
-	for shardUID, shardMetricsByID := range metricsByShardByID {
-		for metricID := range weightsByID {
-			if values, exists := shardMetricsByID[metricID]; !exists || len(values) != 1 {
-				err := fmt.Errorf("metric ID '%s' should exist exactly one time in shard %s", metricID, shardUID)
-				log.Error(err, "Shard malformed")
-				meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
-					Type:    StatusTypeReady,
-					Status:  metav1.ConditionFalse,
-					Reason:  "ShardMalformed",
-					Message: err.Error(),
-				})
-				if err := r.Status().Update(ctx, loadIndex); err != nil {
-					log.Error(err, "Failed to update resource status")
-					return ctrl.Result{RequeueAfter: time.Second}, nil
-				}
-				// Wel will receive a new event when shard updates
-				return ctrl.Result{}, nil
-			}
-		}
-	}
-
-	loadIndexes := []common.LoadIndex{}
-	for shardUID, values := range metricsByShard {
-		value, err := r.calculate(
-			loadIndex.Spec.P,
-			weightsByID,
-			values,
-		)
-		if err != nil {
-			log.Error(err, "Load Index calculation failed")
-			meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
-				Type:    StatusTypeReady,
-				Status:  metav1.ConditionFalse,
-				Reason:  "CalculationError",
-				Message: err.Error(),
-			})
-			if err := r.Status().Update(ctx, loadIndex); err != nil {
-				log.Error(err, "Failed to update resource status")
-				return ctrl.Result{RequeueAfter: time.Second}, nil
-			}
-			// Re-quering won't help if this is a math problem
-			return ctrl.Result{}, nil
-		}
-		valueAsString := strconv.FormatFloat(value, 'f', -1, 64)
-		valueAsResource, err := resource.ParseQuantity(valueAsString)
-		loadIndexes = append(loadIndexes, common.LoadIndex{
-			Shard:        shardsByUID[shardUID],
-			Value:        valueAsResource,
-			DisplayValue: valueAsString,
-		})
-	}
-
 	loadIndex.Status.Values = loadIndexes
-
 	meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
 		Type:   StatusTypeReady,
 		Status: metav1.ConditionTrue,
@@ -232,34 +164,11 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 	})
 	if err := r.Status().Update(ctx, loadIndex); err != nil {
 		log.Error(err, "Failed to update resource status")
-		return ctrl.Result{RequeueAfter: time.Second}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
 
 	// We don't need to do anything unless metric provider data changes
 	return ctrl.Result{}, nil
-}
-
-func (r *WeightedPNormLoadIndexReconciler) calculate(
-	p int32,
-	weights map[string]autoscaler.WeightedPNormLoadIndexWeight,
-	values []common.MetricValue,
-) (float64, error) {
-
-	sum := 0.0
-	for _, m := range values {
-		weight, ok := weights[m.ID]
-		if !ok {
-			continue
-		}
-		weightValue := weight.Weight.AsApproximateFloat64()
-		value := m.Value.AsApproximateFloat64()
-		if weight.Negative != nil && !*weight.Negative && value < 0 {
-			value = float64(0)
-		}
-		sum += weightValue * math.Pow(math.Abs(value), float64(p))
-	}
-
-	return math.Pow(sum, float64(1)/float64(p)), nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
