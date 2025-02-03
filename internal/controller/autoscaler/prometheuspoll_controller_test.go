@@ -62,6 +62,8 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		var sampleMalformedMetricsPoll *objectContainer[*autoscalerv1alpha1.PrometheusPoll]
 		var sampleMalformedShardManagerRefPoll *objectContainer[*autoscalerv1alpha1.PrometheusPoll]
 		var samplePollNoShards *objectContainer[*autoscalerv1alpha1.PrometheusPoll]
+		var samplePollRecent *objectContainer[*autoscalerv1alpha1.PrometheusPoll]
+		// var samplePollRecentChanged *objectContainer[*autoscalerv1alpha1.PrometheusPoll]
 
 		BeforeEach(func() {
 			By("Creating resources")
@@ -70,171 +72,245 @@ var _ = Describe("PrometheusPoll Controller", func() {
 			Expect(k8sClient.create(ctx, sampleNamespace.Generic())).To(Succeed())
 			Expect(k8sClient.get(ctx, sampleNamespace.Generic())).To(Succeed())
 
-			sampleShardManager = NewObjectContainer(&autoscalerv1alpha1.SecretTypeClusterShardManager{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "sample-shard-manager",
-					Namespace: sampleNamespace.ObjectKey.Name,
-				},
-				Spec: autoscalerv1alpha1.SecretTypeClusterShardManagerSpec{
-					LabelSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							"mock-label": "mock",
+			sampleShardManager = NewObjectContainer(
+				&autoscalerv1alpha1.SecretTypeClusterShardManager{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-shard-manager",
+						Namespace: sampleNamespace.ObjectKey.Name,
+					},
+					Spec: autoscalerv1alpha1.SecretTypeClusterShardManagerSpec{
+						LabelSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"mock-label": "mock",
+							},
 						},
 					},
 				},
-			})
-			Expect(k8sClient.create(ctx, sampleShardManager.Generic())).To(Succeed())
-			Expect(k8sClient.get(ctx, sampleShardManager.Generic())).To(Succeed())
-
-			sampleNotReadyShardManager = NewObjectContainer(&autoscalerv1alpha1.SecretTypeClusterShardManager{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "sample-not-ready-shard-manager",
-					Namespace: sampleNamespace.ObjectKey.Name,
+				func(container *objectContainer[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
 				},
-				Spec: sampleShardManager.Object.Spec,
-			})
-			Expect(k8sClient.create(ctx, sampleNotReadyShardManager.Generic())).To(Succeed())
-			Expect(k8sClient.get(ctx, sampleNotReadyShardManager.Generic())).To(Succeed())
-			meta.SetStatusCondition(&sampleNotReadyShardManager.Object.Status.Conditions, metav1.Condition{
-				Type:    StatusTypeReady,
-				Status:  metav1.ConditionFalse,
-				Reason:  "FakeNotReady",
-				Message: "Not ready for test",
-			})
-			Expect(k8sClient.statusUpdate(ctx, sampleNotReadyShardManager.Generic())).To(Succeed())
-			Expect(k8sClient.get(ctx, sampleNotReadyShardManager.Generic())).To(Succeed())
-
-			sampleShardManagerWithNoShards = NewObjectContainer(&autoscalerv1alpha1.SecretTypeClusterShardManager{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "sample-shard-manager-with-zero-shards",
-					Namespace: sampleNamespace.ObjectKey.Name,
-				},
-				Spec: sampleShardManager.Object.Spec,
-			})
-			Expect(k8sClient.create(ctx, sampleShardManagerWithNoShards.Generic())).To(Succeed())
-			Expect(k8sClient.get(ctx, sampleShardManagerWithNoShards.Generic())).To(Succeed())
-			sampleShardManagerWithNoShards.Object.Status.Shards = []common.Shard{}
-			meta.SetStatusCondition(&sampleShardManagerWithNoShards.Object.Status.Conditions, metav1.Condition{
-				Type:    StatusTypeReady,
-				Status:  metav1.ConditionTrue,
-				Reason:  StatusTypeReady,
-				Message: StatusTypeReady,
-			})
-			Expect(k8sClient.statusUpdate(ctx, sampleShardManagerWithNoShards.Generic())).To(Succeed())
-			Expect(k8sClient.get(ctx, sampleShardManagerWithNoShards.Generic())).To(Succeed())
-
-			sampleShardManagerWithShards = NewObjectContainer(&autoscalerv1alpha1.SecretTypeClusterShardManager{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "sample-shard-manager-with-shards",
-					Namespace: sampleNamespace.ObjectKey.Name,
-				},
-				Spec: sampleShardManager.Object.Spec,
-			})
-			Expect(k8sClient.create(ctx, sampleShardManagerWithShards.Generic())).To(Succeed())
-			Expect(k8sClient.get(ctx, sampleShardManagerWithShards.Generic())).To(Succeed())
-			sampleShardManagerWithShards.Object.Status.Shards = []common.Shard{
-				{
-					UID: types.UID("fake-uid"),
-					ID:  "fake-id",
-					Data: map[string]string{
-						"fake-key": "fake-value",
-					},
-				},
-			}
-			meta.SetStatusCondition(&sampleShardManagerWithShards.Object.Status.Conditions, metav1.Condition{
-				Type:    StatusTypeReady,
-				Status:  metav1.ConditionTrue,
-				Reason:  StatusTypeReady,
-				Message: StatusTypeReady,
-			})
-			Expect(k8sClient.statusUpdate(ctx, sampleShardManagerWithShards.Generic())).To(Succeed())
-			Expect(k8sClient.get(ctx, sampleShardManagerWithShards.Generic())).To(Succeed())
-
-			samplePoll = NewObjectContainer(&autoscalerv1alpha1.PrometheusPoll{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "sample-poll",
-					Namespace: sampleNamespace.ObjectKey.Name,
-				},
-				Spec: autoscalerv1alpha1.PrometheusPollSpec{
-					PollerSpec: common.PollerSpec{
-						ShardManagerRef: &corev1.TypedLocalObjectReference{
-							APIGroup: ptr.To("autoscaler.argoproj.io"),
-							Kind:     "SecretTypeClusterShardManager",
-							Name:     sampleShardManager.ObjectKey.Name,
-						},
-					},
-					Period:  metav1.Duration{Duration: time.Minute},
-					Address: "http://prometheus:9090",
-					Metrics: []autoscalerv1alpha1.PrometheusMetric{
-						{
-							ID:     "fake-test",
-							Query:  "fake-query",
-							NoData: ptr.To(resource.MustParse("0")),
-						},
-					},
-				},
-			})
-			Expect(k8sClient.create(ctx, samplePoll.Generic())).To(Succeed())
-			Expect(k8sClient.get(ctx, samplePoll.Generic())).To(Succeed())
-
-			sampleMalformedMetricsPoll = NewObjectContainer(&autoscalerv1alpha1.PrometheusPoll{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "sample-malformed-metrics-poll",
-					Namespace: sampleNamespace.ObjectKey.Name,
-				},
-				Spec: samplePoll.Object.Spec,
-			})
-			sampleMalformedMetricsPoll.Object.Spec.Metrics = append(
-				sampleMalformedMetricsPoll.Object.Spec.Metrics,
-				sampleMalformedMetricsPoll.Object.Spec.Metrics[0],
 			)
-			Expect(k8sClient.create(ctx, sampleMalformedMetricsPoll.Generic())).To(Succeed())
-			Expect(k8sClient.get(ctx, sampleMalformedMetricsPoll.Generic())).To(Succeed())
 
-			sampleMalformedShardManagerRefPoll = NewObjectContainer(&autoscalerv1alpha1.PrometheusPoll{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "sample-malformed-shards-manager-ref-poll",
-					Namespace: sampleNamespace.ObjectKey.Name,
+			sampleNotReadyShardManager = NewObjectContainer(
+				&autoscalerv1alpha1.SecretTypeClusterShardManager{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-not-ready-shard-manager",
+						Namespace: sampleNamespace.ObjectKey.Name,
+					},
+					Spec: sampleShardManager.Object.Spec,
 				},
-				Spec: samplePoll.Object.Spec,
-			})
-			sampleMalformedShardManagerRefPoll.Object.Spec.ShardManagerRef = &corev1.TypedLocalObjectReference{
-				APIGroup: ptr.To("autoscaler.argoproj.io"),
-				Kind:     "SecretTypeClusterShardManager",
-				Name:     "non-existing-shard-manager",
-			}
-			Expect(k8sClient.create(ctx, sampleMalformedShardManagerRefPoll.Generic())).To(Succeed())
-			Expect(k8sClient.get(ctx, sampleMalformedShardManagerRefPoll.Generic())).To(Succeed())
+				func(container *objectContainer[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+					meta.SetStatusCondition(&container.Object.Status.Conditions, metav1.Condition{
+						Type:    StatusTypeReady,
+						Status:  metav1.ConditionFalse,
+						Reason:  "FakeNotReady",
+						Message: "Not ready for test",
+					})
+					Expect(k8sClient.statusUpdate(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+				},
+			)
 
-			samplePollNotReadyShardManagerRef = NewObjectContainer(&autoscalerv1alpha1.PrometheusPoll{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "sample-poll-not-ready-shard-manager-ref",
-					Namespace: sampleNamespace.ObjectKey.Name,
+			sampleShardManagerWithNoShards = NewObjectContainer(
+				&autoscalerv1alpha1.SecretTypeClusterShardManager{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-shard-manager-with-zero-shards",
+						Namespace: sampleNamespace.ObjectKey.Name,
+					},
+					Spec: sampleShardManager.Object.Spec,
 				},
-				Spec: samplePoll.Object.Spec,
-			})
-			samplePollNotReadyShardManagerRef.Object.Spec.ShardManagerRef = &corev1.TypedLocalObjectReference{
-				APIGroup: ptr.To("autoscaler.argoproj.io"),
-				Kind:     "SecretTypeClusterShardManager",
-				Name:     sampleNotReadyShardManager.Object.Name,
-			}
-			Expect(k8sClient.create(ctx, samplePollNotReadyShardManagerRef.Generic())).To(Succeed())
-			Expect(k8sClient.get(ctx, samplePollNotReadyShardManagerRef.Generic())).To(Succeed())
+				func(container *objectContainer[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+					container.Object.Status.Shards = []common.Shard{}
+					meta.SetStatusCondition(&container.Object.Status.Conditions, metav1.Condition{
+						Type:    StatusTypeReady,
+						Status:  metav1.ConditionTrue,
+						Reason:  StatusTypeReady,
+						Message: StatusTypeReady,
+					})
+					Expect(k8sClient.statusUpdate(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+				},
+			)
 
-			samplePollNoShards = NewObjectContainer(&autoscalerv1alpha1.PrometheusPoll{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "sample-poll-with-no-shards",
-					Namespace: sampleNamespace.ObjectKey.Name,
+			sampleShardManagerWithShards = NewObjectContainer(
+				&autoscalerv1alpha1.SecretTypeClusterShardManager{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-shard-manager-with-shards",
+						Namespace: sampleNamespace.ObjectKey.Name,
+					},
+					Spec: sampleShardManager.Object.Spec,
 				},
-				Spec: samplePoll.Object.Spec,
-			})
-			samplePollNoShards.Object.Spec.ShardManagerRef = &corev1.TypedLocalObjectReference{
-				APIGroup: ptr.To("autoscaler.argoproj.io"),
-				Kind:     "SecretTypeClusterShardManager",
-				Name:     sampleShardManagerWithNoShards.Object.Name,
-			}
-			Expect(k8sClient.create(ctx, samplePollNoShards.Generic())).To(Succeed())
-			Expect(k8sClient.get(ctx, samplePollNoShards.Generic())).To(Succeed())
+				func(container *objectContainer[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+					container.Object.Status.Shards = []common.Shard{
+						{
+							UID: types.UID("fake-uid"),
+							ID:  "fake-id",
+							Data: map[string]string{
+								"fake-key": "fake-value",
+							},
+						},
+					}
+					meta.SetStatusCondition(&container.Object.Status.Conditions, metav1.Condition{
+						Type:    StatusTypeReady,
+						Status:  metav1.ConditionTrue,
+						Reason:  StatusTypeReady,
+						Message: StatusTypeReady,
+					})
+					Expect(k8sClient.statusUpdate(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+				},
+			)
+
+			samplePoll = NewObjectContainer(
+				&autoscalerv1alpha1.PrometheusPoll{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-poll",
+						Namespace: sampleNamespace.ObjectKey.Name,
+					},
+					Spec: autoscalerv1alpha1.PrometheusPollSpec{
+						PollerSpec: common.PollerSpec{
+							ShardManagerRef: &corev1.TypedLocalObjectReference{
+								APIGroup: ptr.To("autoscaler.argoproj.io"),
+								Kind:     "SecretTypeClusterShardManager",
+								Name:     sampleShardManager.ObjectKey.Name,
+							},
+						},
+						Period:  metav1.Duration{Duration: time.Minute},
+						Address: "http://prometheus:9090",
+						Metrics: []autoscalerv1alpha1.PrometheusMetric{
+							{
+								ID:     "fake-test",
+								Query:  "fake-query",
+								NoData: ptr.To(resource.MustParse("0")),
+							},
+						},
+					},
+				},
+				func(container *objectContainer[*autoscalerv1alpha1.PrometheusPoll]) {
+					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+				},
+			)
+
+			sampleMalformedMetricsPoll = NewObjectContainer(
+				&autoscalerv1alpha1.PrometheusPoll{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-malformed-metrics-poll",
+						Namespace: sampleNamespace.ObjectKey.Name,
+					},
+					Spec: samplePoll.Object.Spec,
+				},
+				func(container *objectContainer[*autoscalerv1alpha1.PrometheusPoll]) {
+					container.Object.Spec.Metrics = append(
+						container.Object.Spec.Metrics,
+						container.Object.Spec.Metrics[0],
+					)
+					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+				},
+			)
+
+			sampleMalformedShardManagerRefPoll = NewObjectContainer(
+				&autoscalerv1alpha1.PrometheusPoll{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-malformed-shards-manager-ref-poll",
+						Namespace: sampleNamespace.ObjectKey.Name,
+					},
+					Spec: samplePoll.Object.Spec,
+				},
+				func(container *objectContainer[*autoscalerv1alpha1.PrometheusPoll]) {
+					container.Object.Spec.ShardManagerRef = &corev1.TypedLocalObjectReference{
+						APIGroup: ptr.To("autoscaler.argoproj.io"),
+						Kind:     "SecretTypeClusterShardManager",
+						Name:     "non-existing-shard-manager",
+					}
+					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+				},
+			)
+
+			samplePollNotReadyShardManagerRef = NewObjectContainer(
+				&autoscalerv1alpha1.PrometheusPoll{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-poll-not-ready-shard-manager-ref",
+						Namespace: sampleNamespace.ObjectKey.Name,
+					},
+					Spec: samplePoll.Object.Spec,
+				},
+				func(container *objectContainer[*autoscalerv1alpha1.PrometheusPoll]) {
+					container.Object.Spec.ShardManagerRef = &corev1.TypedLocalObjectReference{
+						APIGroup: ptr.To("autoscaler.argoproj.io"),
+						Kind:     "SecretTypeClusterShardManager",
+						Name:     sampleNotReadyShardManager.Object.Name,
+					}
+					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+				},
+			)
+
+			samplePollNoShards = NewObjectContainer(
+				&autoscalerv1alpha1.PrometheusPoll{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-poll-with-no-shards",
+						Namespace: sampleNamespace.ObjectKey.Name,
+					},
+					Spec: samplePoll.Object.Spec,
+				},
+				func(container *objectContainer[*autoscalerv1alpha1.PrometheusPoll]) {
+					container.Object.Spec.ShardManagerRef = &corev1.TypedLocalObjectReference{
+						APIGroup: ptr.To("autoscaler.argoproj.io"),
+						Kind:     "SecretTypeClusterShardManager",
+						Name:     sampleShardManagerWithNoShards.Object.Name,
+					}
+					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+				},
+			)
+
+			samplePollRecent = NewObjectContainer(
+				&autoscalerv1alpha1.PrometheusPoll{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-poll-recent",
+						Namespace: sampleNamespace.ObjectKey.Name,
+					},
+					Spec: samplePoll.Object.Spec,
+				},
+				func(container *objectContainer[*autoscalerv1alpha1.PrometheusPoll]) {
+					container.Object.Spec.ShardManagerRef = &corev1.TypedLocalObjectReference{
+						APIGroup: ptr.To("autoscaler.argoproj.io"),
+						Kind:     "SecretTypeClusterShardManager",
+						Name:     sampleShardManagerWithShards.Object.Name,
+					}
+					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+					container.Object.Status.Values = []common.MetricValue{}
+					for _, shard := range sampleShardManagerWithShards.Object.Status.Shards {
+						for _, metric := range container.Object.Spec.Metrics {
+							container.Object.Status.Values = append(
+								container.Object.Status.Values,
+								common.MetricValue{
+									ID:           metric.ID,
+									Shard:        shard,
+									Query:        metric.Query,
+									Value:        resource.MustParse("0"),
+									DisplayValue: "0",
+								})
+						}
+					}
+					container.Object.Status.LastPollingTime = ptr.To(metav1.NewTime(
+						time.Now().Add(-30 * time.Second),
+					))
+					Expect(k8sClient.statusUpdate(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+				},
+			)
 		})
 
 		AfterEach(func() {
@@ -272,22 +348,24 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		It("should handle errors during reading metrics queries", func() {
 			By("Reconciling malformed resource")
 
+			container := sampleMalformedMetricsPoll
+
 			controllerReconciler := &PrometheusPollReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
 
 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: sampleMalformedMetricsPoll.NamespacedName,
+				NamespacedName: container.NamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 			Expect(result.Requeue).To(BeFalse())
 
 			By("Checking conditions")
-			Expect(k8sClient.get(ctx, sampleMalformedMetricsPoll.Generic())).To(Succeed())
+			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
 			readyCondition := meta.FindStatusCondition(
-				sampleMalformedMetricsPoll.Object.Status.Conditions,
+				container.Object.Status.Conditions,
 				StatusTypeReady,
 			)
 			Expect(readyCondition).NotTo(BeNil())
@@ -312,22 +390,24 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		It("should handle errors when shard manager lookup fails", func() {
 			By("Reconciling malformed resource")
 
+			container := sampleMalformedShardManagerRefPoll
+
 			controllerReconciler := &PrometheusPollReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
 
 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: sampleMalformedShardManagerRefPoll.NamespacedName,
+				NamespacedName: container.NamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 			Expect(result.Requeue).To(BeFalse())
 
 			By("Checking conditions")
-			Expect(k8sClient.get(ctx, sampleMalformedShardManagerRefPoll.Generic())).To(Succeed())
+			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
 			readyCondition := meta.FindStatusCondition(
-				sampleMalformedShardManagerRefPoll.Object.Status.Conditions,
+				container.Object.Status.Conditions,
 				StatusTypeReady,
 			)
 			Expect(readyCondition).NotTo(BeNil())
@@ -352,22 +432,24 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		It("should exit if shard manager not ready", func() {
 			By("Reconciling malformed resource")
 
+			container := samplePollNotReadyShardManagerRef
+
 			controllerReconciler := &PrometheusPollReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
 
 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: samplePollNotReadyShardManagerRef.NamespacedName,
+				NamespacedName: container.NamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 			Expect(result.Requeue).To(BeFalse())
 
 			By("Checking conditions")
-			Expect(k8sClient.get(ctx, samplePollNotReadyShardManagerRef.Generic())).To(Succeed())
+			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
 			readyCondition := meta.FindStatusCondition(
-				samplePollNotReadyShardManagerRef.Object.Status.Conditions,
+				container.Object.Status.Conditions,
 				StatusTypeReady,
 			)
 			Expect(readyCondition).NotTo(BeNil())
@@ -392,22 +474,24 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		It("should exit if shard manager has no shards", func() {
 			By("Reconciling malformed resource")
 
+			container := samplePollNoShards
+
 			controllerReconciler := &PrometheusPollReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
 
 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: samplePollNoShards.NamespacedName,
+				NamespacedName: container.NamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 			Expect(result.Requeue).To(BeFalse())
 
 			By("Checking conditions")
-			Expect(k8sClient.get(ctx, samplePollNoShards.Generic())).To(Succeed())
+			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
 			readyCondition := meta.FindStatusCondition(
-				samplePollNoShards.Object.Status.Conditions,
+				container.Object.Status.Conditions,
 				StatusTypeReady,
 			)
 			Expect(readyCondition).NotTo(BeNil())
@@ -427,6 +511,24 @@ var _ = Describe("PrometheusPoll Controller", func() {
 					}
 				},
 			)
+		})
+
+		It("should re-queue if was already recently polled", func() {
+			By("Reconciling malformed resource")
+
+			container := samplePollRecent
+
+			controllerReconciler := &PrometheusPollReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: container.NamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeNumerically("~", 30*time.Second, 2*time.Second))
+			Expect(result.Requeue).To(BeFalse())
 		})
 	})
 })

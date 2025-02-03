@@ -50,8 +50,8 @@ type objectContainer[K client.Object] struct {
 	Object         K
 }
 
-func NewObjectContainer[K client.Object](obj K) *objectContainer[K] {
-	return &objectContainer[K]{
+func NewObjectContainer[K client.Object](obj K, prep ...func(*objectContainer[K])) *objectContainer[K] {
+	container := &objectContainer[K]{
 		NamespacedName: types.NamespacedName{
 			Name:      obj.GetName(),
 			Namespace: obj.GetNamespace(),
@@ -62,6 +62,10 @@ func NewObjectContainer[K client.Object](obj K) *objectContainer[K] {
 		},
 		Object: obj,
 	}
+	for _, p := range prep {
+		p(container)
+	}
+	return container
 }
 
 func (c *objectContainer[K]) Generic() *objectContainer[client.Object] {
