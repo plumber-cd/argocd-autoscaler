@@ -19,10 +19,6 @@ spec:
       jsonPath: .status.lastPollingTime
       name: Last Polled
       type: date
-    - description: Current status based on Available condition
-      jsonPath: .status.conditions[?(@.type=='Available')].status
-      name: Available
-      type: string
     - description: Current status based on Ready condition
       jsonPath: .status.conditions[?(@.type=='Ready')].status
       name: Ready

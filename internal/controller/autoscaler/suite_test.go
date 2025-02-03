@@ -83,12 +83,12 @@ type updateSubResourceFn func(ctx context.Context, obj client.Object, opts ...cl
 type deleteFn func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error
 
 type fakeClient struct {
-	ksClient
-	getFunctions          map[reflect.Type]map[client.ObjectKey]getFn
+	client.Client
+	getFunctions          map[reflect.Type]map[string]getFn
 	listFunctions         map[reflect.Type]listFn
-	updateFunctions       map[reflect.Type]map[client.ObjectKey]updateFn
-	statusUpdateFunctions map[reflect.Type]map[client.ObjectKey]updateSubResourceFn
-	deleteFn              map[reflect.Type]map[client.ObjectKey]deleteFn
+	updateFunctions       map[reflect.Type]map[string]updateFn
+	statusUpdateFunctions map[reflect.Type]map[string]updateSubResourceFn
+	deleteFn              map[reflect.Type]map[string]deleteFn
 }
 
 type fakeStatusWriter struct {
@@ -98,19 +98,19 @@ type fakeStatusWriter struct {
 
 func (f *fakeClient) WithGetFunction(container *objectContainer[client.Object], fn getFn) *fakeClient {
 	if f.getFunctions == nil {
-		f.getFunctions = make(map[reflect.Type]map[client.ObjectKey]getFn)
+		f.getFunctions = make(map[reflect.Type]map[string]getFn)
 	}
 	if f.getFunctions[reflect.TypeOf(container.Object)] == nil {
-		f.getFunctions[reflect.TypeOf(container.Object)] = make(map[client.ObjectKey]getFn)
+		f.getFunctions[reflect.TypeOf(container.Object)] = make(map[string]getFn)
 	}
-	f.getFunctions[reflect.TypeOf(container.Object)][container.ObjectKey] = fn
+	f.getFunctions[reflect.TypeOf(container.Object)][container.ObjectKey.String()] = fn
 	return f
 }
 
 func (f *fakeClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	if f.getFunctions != nil {
 		if functions, ok := f.getFunctions[reflect.TypeOf(obj)]; ok {
-			if fn, ok := functions[key]; ok {
+			if fn, ok := functions[key.String()]; ok {
 				return fn(ctx, key, obj, opts...)
 			}
 		}
@@ -137,19 +137,19 @@ func (f *fakeClient) List(ctx context.Context, list client.ObjectList, opts ...c
 
 func (f *fakeClient) WithUpdateFunction(container *objectContainer[client.Object], fn updateFn) *fakeClient {
 	if f.updateFunctions == nil {
-		f.updateFunctions = make(map[reflect.Type]map[client.ObjectKey]updateFn)
+		f.updateFunctions = make(map[reflect.Type]map[string]updateFn)
 	}
 	if f.updateFunctions[reflect.TypeOf(container.Object)] == nil {
-		f.updateFunctions[reflect.TypeOf(container.Object)] = make(map[client.ObjectKey]updateFn)
+		f.updateFunctions[reflect.TypeOf(container.Object)] = make(map[string]updateFn)
 	}
-	f.updateFunctions[reflect.TypeOf(container.Object)][container.ObjectKey] = fn
+	f.updateFunctions[reflect.TypeOf(container.Object)][container.ObjectKey.String()] = fn
 	return f
 }
 
 func (f *fakeClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	if f.updateFunctions != nil {
 		if functions, ok := f.updateFunctions[reflect.TypeOf(obj)]; ok {
-			if fn, ok := functions[client.ObjectKeyFromObject(obj)]; ok {
+			if fn, ok := functions[client.ObjectKeyFromObject(obj).String()]; ok {
 				return fn(ctx, obj, opts...)
 			}
 		}
@@ -166,19 +166,19 @@ func (f *fakeClient) Status() client.StatusWriter {
 
 func (f *fakeClient) WithStatusUpdateFunction(container *objectContainer[client.Object], fn updateSubResourceFn) *fakeClient {
 	if f.statusUpdateFunctions == nil {
-		f.statusUpdateFunctions = make(map[reflect.Type]map[client.ObjectKey]updateSubResourceFn)
+		f.statusUpdateFunctions = make(map[reflect.Type]map[string]updateSubResourceFn)
 	}
 	if f.statusUpdateFunctions[reflect.TypeOf(container.Object)] == nil {
-		f.statusUpdateFunctions[reflect.TypeOf(container.Object)] = make(map[client.ObjectKey]updateSubResourceFn)
+		f.statusUpdateFunctions[reflect.TypeOf(container.Object)] = make(map[string]updateSubResourceFn)
 	}
-	f.statusUpdateFunctions[reflect.TypeOf(container.Object)][container.ObjectKey] = fn
+	f.statusUpdateFunctions[reflect.TypeOf(container.Object)][container.ObjectKey.String()] = fn
 	return f
 }
 
 func (s *fakeStatusWriter) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
 	if s.parent.statusUpdateFunctions != nil {
 		if functions, ok := s.parent.statusUpdateFunctions[reflect.TypeOf(obj)]; ok {
-			if fn, ok := functions[client.ObjectKeyFromObject(obj)]; ok {
+			if fn, ok := functions[client.ObjectKeyFromObject(obj).String()]; ok {
 				return fn(ctx, obj, opts...)
 			}
 		}
@@ -188,19 +188,19 @@ func (s *fakeStatusWriter) Update(ctx context.Context, obj client.Object, opts .
 
 func (f *fakeClient) WithDeleteFunction(container *objectContainer[client.Object], fn deleteFn) *fakeClient {
 	if f.deleteFn == nil {
-		f.deleteFn = make(map[reflect.Type]map[client.ObjectKey]deleteFn)
+		f.deleteFn = make(map[reflect.Type]map[string]deleteFn)
 	}
 	if f.deleteFn[reflect.TypeOf(container.Object)] == nil {
-		f.deleteFn[reflect.TypeOf(container.Object)] = make(map[client.ObjectKey]deleteFn)
+		f.deleteFn[reflect.TypeOf(container.Object)] = make(map[string]deleteFn)
 	}
-	f.deleteFn[reflect.TypeOf(container.Object)][container.ObjectKey] = fn
+	f.deleteFn[reflect.TypeOf(container.Object)][container.ObjectKey.String()] = fn
 	return f
 }
 
 func (f *fakeClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 	if f.deleteFn != nil {
 		if functions, ok := f.deleteFn[reflect.TypeOf(obj)]; ok {
-			if fn, ok := functions[client.ObjectKeyFromObject(obj)]; ok {
+			if fn, ok := functions[client.ObjectKeyFromObject(obj).String()]; ok {
 				return fn(ctx, obj, opts...)
 			}
 		}
@@ -259,11 +259,12 @@ func CheckExitingOnNonExistingResource[R reconcile.TypedReconciler[reconcile.Req
 }
 
 func CheckFailureToGetResource[K client.Object, R reconcile.TypedReconciler[reconcile.Request]](
+	c client.Client,
 	container *objectContainer[K],
 	r func(*fakeClient) R,
 ) {
 	fakeClient := &fakeClient{
-		ksClient: k8sClient,
+		Client: c,
 	}
 	fakeClient.
 		WithGetFunction(container.Generic(),
@@ -284,11 +285,12 @@ func CheckFailureToGetResource[K client.Object, R reconcile.TypedReconciler[reco
 }
 
 func CheckFailureToUpdateStatus[K client.Object, R reconcile.TypedReconciler[reconcile.Request]](
+	c client.Client,
 	container *objectContainer[K],
 	r func(*fakeClient) R,
 ) {
 	fakeClient := &fakeClient{
-		ksClient: k8sClient,
+		Client: c,
 	}
 	fakeClient.
 		WithStatusUpdateFunction(container.Generic(),

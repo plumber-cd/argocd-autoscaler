@@ -19,13 +19,10 @@ package autoscaler
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strconv"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -41,12 +38,15 @@ import (
 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
+	robustscaling "github.com/plumber-cd/argocd-autoscaler/normalizers/robustcaling"
 )
 
 // RobustScalingNormalizerReconciler reconciles a RobustScalingNormalizer object
 type RobustScalingNormalizerReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	Normalizer robustscaling.Normalizer
 }
 
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=robustscalingnormalizers,verbs=get;list;watch;create;update;patch;delete
@@ -69,7 +69,7 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get resource")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
 
 	metricValuesProvider, err := findByRef[common.MetricValuesProvider](
@@ -90,10 +90,10 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 		})
 		if err := r.Status().Update(ctx, normalizer); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		// We should get a new event when metrics provider is created
-		return ctrl.Result{}, err
+		return ctrl.Result{}, nil
 	}
 
 	if !meta.IsStatusConditionPresentAndEqual(metricValuesProvider.GetMetricValuesProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
@@ -109,31 +109,14 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 		})
 		if err := r.Status().Update(ctx, normalizer); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		// We should get a new event when poller changes
 		return ctrl.Result{}, nil
 	}
 
 	values := metricValuesProvider.GetMetricValuesProviderStatus().Values
-	if len(values) == 0 {
-		err := fmt.Errorf("No metrics found")
-		log.Error(err, "No metrics found, fail")
-		meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
-			Type:    StatusTypeReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "NoMetricsFound",
-			Message: err.Error(),
-		})
-		if err := r.Status().Update(ctx, normalizer); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
-		}
-		// We should get a new event when poller changes
-		return ctrl.Result{}, nil
-	}
-
-	normalizedValues, err := r.normalize(ctx, values)
+	normalizedValues, err := r.Normalizer.Normalize(ctx, values)
 	if err != nil {
 		log.Error(err, "Error during normalization")
 		meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
@@ -144,20 +127,13 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 		})
 		if err := r.Status().Update(ctx, normalizer); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		// If this is a math problem - re-queuing won't help
 		return ctrl.Result{}, nil
 	}
 
 	normalizer.Status.Values = normalizedValues
-	if !meta.IsStatusConditionPresentAndEqual(normalizer.Status.Conditions, StatusTypeAvailable, metav1.ConditionTrue) {
-		meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
-			Type:   StatusTypeAvailable,
-			Status: metav1.ConditionTrue,
-			Reason: StatusTypeAvailable,
-		})
-	}
 	meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
 		Type:   StatusTypeReady,
 		Status: metav1.ConditionTrue,
@@ -165,118 +141,11 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 	})
 	if err := r.Status().Update(ctx, normalizer); err != nil {
 		log.Error(err, "Failed to update resource status")
-		return ctrl.Result{RequeueAfter: time.Second}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
 
 	// We don't need to do anything unless poller data changes
 	return ctrl.Result{}, nil
-}
-
-func (r *RobustScalingNormalizerReconciler) normalize(ctx context.Context,
-	allMetrics []common.MetricValue) ([]common.MetricValue, error) {
-
-	log := log.FromContext(ctx)
-
-	// First - we need to separate metrics by ID
-	metricsByID := map[string][]common.MetricValue{}
-	for _, metric := range allMetrics {
-		if _, ok := metricsByID[metric.ID]; !ok {
-			metricsByID[metric.ID] = []common.MetricValue{}
-		}
-		metricsByID[metric.ID] = append(metricsByID[metric.ID], metric)
-	}
-
-	// Now, normalize them within their group
-	normalizedMetrics := []common.MetricValue{}
-	for _, metrics := range metricsByID {
-		all := []float64{}
-		for _, metric := range metrics {
-			all = append(all, metric.Value.AsApproximateFloat64())
-		}
-
-		sorted := make([]float64, len(all))
-		copy(sorted, all)
-		sort.Float64s(sorted)
-
-		// Compute median
-		median := computeMedian(sorted)
-
-		var iqr float64
-		if len(sorted) > 1 {
-			// Compute Q1 and Q3
-			q1, q3 := computeQuartiles(sorted)
-
-			// Compute IQR
-			iqr = q3 - q1
-		} else {
-			// Assume IQR 0 which will signal to the scaling function to also use 0 as scaled value
-			// See comments below on why that is
-			iqr = 0
-		}
-
-		// Scale each value
-		for _, metric := range metrics {
-			var normalized float64
-			// If IQR was 0, either all values were identical or not enough data to compute IQR.
-			// Either value we use, as long as it is the same value for all shards, it would signify no deviation.
-			// Typically, you would use 0 which is exact median, which then later can scale based on the wage.
-			if iqr == 0 {
-				normalized = 0
-			} else {
-				normalized = (metric.Value.AsApproximateFloat64() - median) / iqr
-			}
-			normalizedAsString := strconv.FormatFloat(normalized, 'f', -1, 64)
-			normalizedAsResource, err := resource.ParseQuantity(normalizedAsString)
-			if err != nil {
-				log.Error(err, "Failed to parse normalized value as resource", "normalized", normalized)
-				return nil, err
-			}
-			normalizedMetrics = append(normalizedMetrics, common.MetricValue{
-				ID:           metric.ID,
-				Shard:        metric.Shard,
-				Query:        metric.Query,
-				Value:        normalizedAsResource,
-				DisplayValue: normalizedAsString,
-			})
-		}
-	}
-
-	return normalizedMetrics, nil
-}
-
-// computeMedian computes the median of a sorted slice of float64.
-// Assumes the slice is already sorted.
-func computeMedian(sorted []float64) float64 {
-	n := len(sorted)
-	if n == 0 {
-		panic("empty slice")
-	}
-	middle := n / 2
-	if n%2 == 0 {
-		return (sorted[middle-1] + sorted[middle]) / 2
-	}
-	return sorted[middle]
-}
-
-// computeQuartiles computes Q1 and Q3 of a sorted slice of float64.
-// Assumes the slice is already sorted.
-func computeQuartiles(sorted []float64) (q1, q3 float64) {
-	n := len(sorted)
-
-	// Q1: Median of the lower half
-	lowerHalf := sorted[:n/2]
-	q1 = computeMedian(lowerHalf)
-
-	// Q3: Median of the upper half
-	var upperHalf []float64
-	if n%2 == 0 {
-		upperHalf = sorted[n/2:]
-	} else {
-		upperHalf = sorted[n/2+1:]
-	}
-	q3 = computeMedian(upperHalf)
-
-	return q1, q3
 }
 
 // SetupWithManager sets up the controller with the Manager.

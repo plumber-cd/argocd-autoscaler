@@ -39,6 +39,7 @@ import (
 
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	autoscalercontroller "github.com/plumber-cd/argocd-autoscaler/internal/controller/autoscaler"
+	robustscaling "github.com/plumber-cd/argocd-autoscaler/normalizers/robustcaling"
 	"github.com/plumber-cd/argocd-autoscaler/pollers/prometheus"
 	// +kubebuilder:scaffold:imports
 )
@@ -219,8 +220,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&autoscalercontroller.RobustScalingNormalizerReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:     mgr.GetClient(),
+		Scheme:     mgr.GetScheme(),
+		Normalizer: &robustscaling.NormalizerImpl{},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RobustScalingNormalizer")
 		os.Exit(1)

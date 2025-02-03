@@ -242,13 +242,6 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// Update the status with the new values
 	poll.Status.Values = metrics
 	poll.Status.LastPollingTime = &metav1.Time{Time: time.Now()}
-	if !meta.IsStatusConditionPresentAndEqual(poll.Status.Conditions, StatusTypeAvailable, metav1.ConditionTrue) {
-		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:   StatusTypeAvailable,
-			Status: metav1.ConditionTrue,
-			Reason: StatusTypeAvailable,
-		})
-	}
 	meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
 		Type:   StatusTypeReady,
 		Status: metav1.ConditionTrue,

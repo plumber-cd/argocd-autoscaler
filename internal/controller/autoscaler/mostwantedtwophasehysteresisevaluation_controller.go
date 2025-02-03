@@ -189,13 +189,6 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		evaluation.Status.LastEvaluationTimestamp = ptr.To(metav1.Now())
 	}
 
-	if !meta.IsStatusConditionPresentAndEqual(evaluation.Status.Conditions, StatusTypeAvailable, metav1.ConditionTrue) {
-		meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
-			Type:   StatusTypeAvailable,
-			Status: metav1.ConditionTrue,
-			Reason: StatusTypeAvailable,
-		})
-	}
 	meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
 		Type:   StatusTypeReady,
 		Status: metav1.ConditionTrue,

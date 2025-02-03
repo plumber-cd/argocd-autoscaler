@@ -225,13 +225,6 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 
 	loadIndex.Status.Values = loadIndexes
 
-	if !meta.IsStatusConditionPresentAndEqual(loadIndex.Status.Conditions, StatusTypeAvailable, metav1.ConditionTrue) {
-		meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
-			Type:   StatusTypeAvailable,
-			Status: metav1.ConditionTrue,
-			Reason: StatusTypeAvailable,
-		})
-	}
 	meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
 		Type:   StatusTypeReady,
 		Status: metav1.ConditionTrue,

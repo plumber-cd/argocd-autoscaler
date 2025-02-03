@@ -149,13 +149,6 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 	}
 
 	partition.Status.Replicas = replicas
-	if !meta.IsStatusConditionPresentAndEqual(partition.Status.Conditions, StatusTypeAvailable, metav1.ConditionTrue) {
-		meta.SetStatusCondition(&partition.Status.Conditions, metav1.Condition{
-			Type:   StatusTypeAvailable,
-			Status: metav1.ConditionTrue,
-			Reason: StatusTypeAvailable,
-		})
-	}
 	meta.SetStatusCondition(&partition.Status.Conditions, metav1.Condition{
 		Type:   StatusTypeReady,
 		Status: metav1.ConditionTrue,

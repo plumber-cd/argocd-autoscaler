@@ -425,6 +425,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		It("should handle error getting resource", func() {
 			By("Failing to get resource")
 			CheckFailureToGetResource(
+				k8sClient,
 				samplePoll,
 				func(fClient *fakeClient) *PrometheusPollReconciler {
 					return &PrometheusPollReconciler{
@@ -467,6 +468,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		It("should handle errors updating status during errors during reading metrics queries", func() {
 			By("Reconciling malformed resource")
 			CheckFailureToUpdateStatus(
+				k8sClient,
 				sampleMalformedMetricsPoll,
 				func(fClient *fakeClient) *PrometheusPollReconciler {
 					return &PrometheusPollReconciler{
@@ -509,6 +511,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		It("should handle errors updating status during errors when shard manager lookup fails", func() {
 			By("Reconciling malformed resource")
 			CheckFailureToUpdateStatus(
+				k8sClient,
 				sampleMalformedShardManagerRefPoll,
 				func(fClient *fakeClient) *PrometheusPollReconciler {
 					return &PrometheusPollReconciler{
@@ -551,6 +554,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		It("should handle errors updating status when shard manager not ready", func() {
 			By("Reconciling resource")
 			CheckFailureToUpdateStatus(
+				k8sClient,
 				samplePollNotReadyShardManagerRef,
 				func(fClient *fakeClient) *PrometheusPollReconciler {
 					return &PrometheusPollReconciler{
@@ -593,6 +597,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		It("should handle errors updating status when shard manager has no shards", func() {
 			By("Reconciling resource")
 			CheckFailureToUpdateStatus(
+				k8sClient,
 				samplePollNoShards,
 				func(fClient *fakeClient) *PrometheusPollReconciler {
 					return &PrometheusPollReconciler{
@@ -691,6 +696,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 
 			By("Reconciling resource with expectation to fail to update status")
 			CheckFailureToUpdateStatus(
+				k8sClient,
 				container,
 				func(fClient *fakeClient) *PrometheusPollReconciler {
 					return &PrometheusPollReconciler{
@@ -718,13 +724,6 @@ var _ = Describe("PrometheusPoll Controller", func() {
 			Expect(readyCondition).NotTo(BeNil())
 			Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
 			Expect(readyCondition.Reason).To(Equal(StatusTypeReady))
-			availableCondition := meta.FindStatusCondition(
-				container.Object.Status.Conditions,
-				StatusTypeAvailable,
-			)
-			Expect(availableCondition).NotTo(BeNil())
-			Expect(availableCondition.Status).To(Equal(metav1.ConditionTrue))
-			Expect(availableCondition.Reason).To(Equal(StatusTypeAvailable))
 
 			By("Checking polling results")
 			metricsById := map[string]autoscalerv1alpha1.PrometheusMetric{}
@@ -776,6 +775,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 
 			By("Reconciling resource with expectation to fail to update status")
 			CheckFailureToUpdateStatus(
+				k8sClient,
 				container,
 				func(fClient *fakeClient) *PrometheusPollReconciler {
 					return &PrometheusPollReconciler{
@@ -823,6 +823,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 
 			By("Reconciling resource with expectation to fail to update status")
 			CheckFailureToUpdateStatus(
+				k8sClient,
 				container,
 				func(fClient *fakeClient) *PrometheusPollReconciler {
 					return &PrometheusPollReconciler{

@@ -182,6 +182,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 		It("should handle error getting resource", func() {
 			By("Failing to get resource")
 			CheckFailureToGetResource(
+				k8sClient,
 				sampleShardManager,
 				func(fClient *fakeClient) *SecretTypeClusterShardManagerReconciler {
 					return &SecretTypeClusterShardManagerReconciler{
@@ -198,7 +199,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			container := sampleShardManager
 
 			fClient := &fakeClient{
-				ksClient: k8sClient,
+				Client: k8sClient,
 			}
 			fClient.
 				WithListFunction(&corev1.SecretList{},
@@ -228,6 +229,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 
 			By("Reconciling resource again with expected failure to update the status")
 			CheckFailureToUpdateStatus(
+				fClient,
 				container,
 				func(fClient *fakeClient) *SecretTypeClusterShardManagerReconciler {
 					return &SecretTypeClusterShardManagerReconciler{
@@ -263,6 +265,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 
 			By("Reconciling resource again with expected failure to update the status")
 			CheckFailureToUpdateStatus(
+				k8sClient,
 				container,
 				func(fClient *fakeClient) *SecretTypeClusterShardManagerReconciler {
 					return &SecretTypeClusterShardManagerReconciler{
@@ -307,7 +310,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			container := shardManagerWithDesiredReplicas
 
 			fClient := &fakeClient{
-				ksClient: k8sClient,
+				Client: k8sClient,
 			}
 			fClient.
 				WithUpdateFunction(sampleSecret.Generic(),
@@ -337,6 +340,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 
 			By("Reconciling resource again with expected failure to update the status")
 			CheckFailureToUpdateStatus(
+				fClient,
 				container,
 				func(fClient *fakeClient) *SecretTypeClusterShardManagerReconciler {
 					return &SecretTypeClusterShardManagerReconciler{
@@ -373,6 +377,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 
 			By("Reconciling resource again with expected failure to update the status")
 			CheckFailureToUpdateStatus(
+				k8sClient,
 				container,
 				func(fClient *fakeClient) *SecretTypeClusterShardManagerReconciler {
 					return &SecretTypeClusterShardManagerReconciler{
