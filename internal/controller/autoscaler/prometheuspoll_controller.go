@@ -175,13 +175,30 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			}
 			slices.Sort(currentlyObservedShards)
 
-			if slices.Equal(previouslyObservedShards, currentlyObservedShards) {
+			previouslyObserverMetrics := []string{}
+			for _, metricValue := range poll.Status.Values {
+				if !slices.Contains(previouslyObserverMetrics, metricValue.ID) {
+					previouslyObserverMetrics = append(previouslyObserverMetrics, metricValue.ID)
+				}
+			}
+			slices.Sort(previouslyObserverMetrics)
+
+			currentlyObservedMetrics := []string{}
+			for _, metric := range poll.Spec.Metrics {
+				if !slices.Contains(currentlyObservedMetrics, metric.ID) {
+					currentlyObservedMetrics = append(currentlyObservedMetrics, metric.ID)
+				}
+			}
+			slices.Sort(currentlyObservedMetrics)
+
+			if slices.Equal(previouslyObservedShards, currentlyObservedShards) &&
+				slices.Equal(previouslyObserverMetrics, currentlyObservedMetrics) {
 				remainingWaitTime := poll.Spec.Period.Duration - sinceLastPoll
 				log.V(1).Info("Not enough time has passed since last poll, queuing up for remaining time",
 					"remaining", remainingWaitTime)
 				return ctrl.Result{RequeueAfter: remainingWaitTime}, nil
 			}
-			log.V(1).Info("Shards have changed since last poll, re-queuing for immediate poll")
+			log.V(1).Info("Shards or metrics have changed since last poll, re-queuing immediately")
 		}
 	}
 
@@ -196,25 +213,28 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		})
 		if err := r.Status().Update(ctx, poll); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
 
-	if len(metrics) == 0 {
-		err := fmt.Errorf("No metrics found")
-		log.Error(err, "No metrics found, fail")
+	if len(metrics) != len(poll.Spec.Metrics)*len(shards) {
+		err := fmt.Errorf("Expected poll results didn't match number of metrics * number of shards")
+		log.Error(err, "Metrics result mismatch",
+			"expected", len(poll.Spec.Metrics)*len(shards),
+			"actual", len(metrics),
+		)
 		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
 			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "NoMetricsFound",
+			Reason:  "ResultsCountMismatch",
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, poll); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
-		return ctrl.Result{RequeueAfter: poll.Spec.Period.Duration}, nil
+		return ctrl.Result{RequeueAfter: poll.Spec.Period.Duration}, err
 	}
 
 	log.V(1).Info("Polled metrics", "count", len(metrics))
@@ -236,7 +256,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	})
 	if err := r.Status().Update(ctx, poll); err != nil {
 		log.Error(err, "Failed to update resource status")
-		return ctrl.Result{RequeueAfter: time.Second}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
 
 	return ctrl.Result{RequeueAfter: poll.Spec.Period.Duration}, nil

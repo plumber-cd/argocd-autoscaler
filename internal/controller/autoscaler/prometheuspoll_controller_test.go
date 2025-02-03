@@ -36,14 +36,19 @@ import (
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 )
 
-type fakePrometheusPoller struct{}
+type fakePrometheusPoller struct {
+	fn func(ctx context.Context, poll autoscalerv1alpha1.PrometheusPoll, shards []common.Shard) ([]common.MetricValue, error)
+}
 
 func (r *fakePrometheusPoller) Poll(
 	ctx context.Context,
 	poll autoscalerv1alpha1.PrometheusPoll,
 	shards []common.Shard,
 ) ([]common.MetricValue, error) {
-	return nil, errors.New("fake error")
+	if r.fn != nil {
+		return r.fn(ctx, poll, shards)
+	}
+	return nil, errors.New("poller not implemented")
 }
 
 var _ = Describe("PrometheusPoll Controller", func() {
@@ -62,8 +67,10 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		var sampleMalformedMetricsPoll *objectContainer[*autoscalerv1alpha1.PrometheusPoll]
 		var sampleMalformedShardManagerRefPoll *objectContainer[*autoscalerv1alpha1.PrometheusPoll]
 		var samplePollNoShards *objectContainer[*autoscalerv1alpha1.PrometheusPoll]
+		var samplePollWithShards *objectContainer[*autoscalerv1alpha1.PrometheusPoll]
 		var samplePollRecent *objectContainer[*autoscalerv1alpha1.PrometheusPoll]
-		// var samplePollRecentChanged *objectContainer[*autoscalerv1alpha1.PrometheusPoll]
+		var samplePollRecentChangedMetrics *objectContainer[*autoscalerv1alpha1.PrometheusPoll]
+		var samplePollRecentChangedShards *objectContainer[*autoscalerv1alpha1.PrometheusPoll]
 
 		BeforeEach(func() {
 			By("Creating resources")
@@ -274,10 +281,10 @@ var _ = Describe("PrometheusPoll Controller", func() {
 				},
 			)
 
-			samplePollRecent = NewObjectContainer(
+			samplePollWithShards = NewObjectContainer(
 				&autoscalerv1alpha1.PrometheusPoll{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "sample-poll-recent",
+						Name:      "sample-poll-with-shards",
 						Namespace: sampleNamespace.ObjectKey.Name,
 					},
 					Spec: samplePoll.Object.Spec,
@@ -290,6 +297,20 @@ var _ = Describe("PrometheusPoll Controller", func() {
 					}
 					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+				},
+			)
+
+			samplePollRecent = NewObjectContainer(
+				&autoscalerv1alpha1.PrometheusPoll{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-poll-recent",
+						Namespace: sampleNamespace.ObjectKey.Name,
+					},
+					Spec: samplePollWithShards.Object.Spec,
+				},
+				func(container *objectContainer[*autoscalerv1alpha1.PrometheusPoll]) {
+					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
 					container.Object.Status.Values = []common.MetricValue{}
 					for _, shard := range sampleShardManagerWithShards.Object.Status.Shards {
 						for _, metric := range container.Object.Spec.Metrics {
@@ -298,6 +319,75 @@ var _ = Describe("PrometheusPoll Controller", func() {
 								common.MetricValue{
 									ID:           metric.ID,
 									Shard:        shard,
+									Query:        metric.Query,
+									Value:        resource.MustParse("0"),
+									DisplayValue: "0",
+								})
+						}
+					}
+					container.Object.Status.LastPollingTime = ptr.To(metav1.NewTime(
+						time.Now().Add(-30 * time.Second),
+					))
+					Expect(k8sClient.statusUpdate(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+				},
+			)
+
+			samplePollRecentChangedMetrics = NewObjectContainer(
+				&autoscalerv1alpha1.PrometheusPoll{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-poll-recent-changed-metrics",
+						Namespace: sampleNamespace.ObjectKey.Name,
+					},
+					Spec: samplePollRecent.Object.Spec,
+				},
+				func(container *objectContainer[*autoscalerv1alpha1.PrometheusPoll]) {
+					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+					container.Object.Status = samplePollRecent.Object.Status
+					for _, shard := range sampleShardManagerWithShards.Object.Status.Shards {
+						for _, metric := range container.Object.Spec.Metrics {
+							container.Object.Status.Values = append(
+								container.Object.Status.Values,
+								common.MetricValue{
+									ID:           metric.ID + "_copy",
+									Shard:        shard,
+									Query:        metric.Query,
+									Value:        resource.MustParse("0"),
+									DisplayValue: "0",
+								})
+						}
+					}
+					container.Object.Status.LastPollingTime = ptr.To(metav1.NewTime(
+						time.Now().Add(-30 * time.Second),
+					))
+					Expect(k8sClient.statusUpdate(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+				},
+			)
+
+			samplePollRecentChangedShards = NewObjectContainer(
+				&autoscalerv1alpha1.PrometheusPoll{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-poll-recent-changed-shards",
+						Namespace: sampleNamespace.ObjectKey.Name,
+					},
+					Spec: samplePollRecent.Object.Spec,
+				},
+				func(container *objectContainer[*autoscalerv1alpha1.PrometheusPoll]) {
+					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
+					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+					container.Object.Status = samplePollRecent.Object.Status
+					for _, shard := range sampleShardManagerWithShards.Object.Status.Shards {
+						copyShard := shard.DeepCopy()
+						copyShard.UID = copyShard.UID + "-copy"
+						copyShard.ID = copyShard.ID + "-copy"
+						for _, metric := range container.Object.Spec.Metrics {
+							container.Object.Status.Values = append(
+								container.Object.Status.Values,
+								common.MetricValue{
+									ID:           metric.ID,
+									Shard:        *copyShard,
 									Query:        metric.Query,
 									Value:        resource.MustParse("0"),
 									DisplayValue: "0",
@@ -430,7 +520,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		})
 
 		It("should exit if shard manager not ready", func() {
-			By("Reconciling malformed resource")
+			By("Reconciling resource")
 
 			container := samplePollNotReadyShardManagerRef
 
@@ -459,7 +549,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		})
 
 		It("should handle errors updating status when shard manager not ready", func() {
-			By("Reconciling malformed resource")
+			By("Reconciling resource")
 			CheckFailureToUpdateStatus(
 				samplePollNotReadyShardManagerRef,
 				func(fClient *fakeClient) *PrometheusPollReconciler {
@@ -472,7 +562,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		})
 
 		It("should exit if shard manager has no shards", func() {
-			By("Reconciling malformed resource")
+			By("Reconciling resource")
 
 			container := samplePollNoShards
 
@@ -501,7 +591,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		})
 
 		It("should handle errors updating status when shard manager has no shards", func() {
-			By("Reconciling malformed resource")
+			By("Reconciling resource")
 			CheckFailureToUpdateStatus(
 				samplePollNoShards,
 				func(fClient *fakeClient) *PrometheusPollReconciler {
@@ -514,7 +604,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		})
 
 		It("should re-queue if was already recently polled", func() {
-			By("Reconciling malformed resource")
+			By("Reconciling resource")
 
 			container := samplePollRecent
 
@@ -529,6 +619,238 @@ var _ = Describe("PrometheusPoll Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(BeNumerically("~", 30*time.Second, 2*time.Second))
 			Expect(result.Requeue).To(BeFalse())
+		})
+
+		It("should poll now if was already recently polled but changed metrics", func() {
+			By("Reconciling resource")
+
+			container := samplePollRecentChangedMetrics
+
+			controllerReconciler := &PrometheusPollReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Poller: &fakePrometheusPoller{},
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: container.NamespacedName,
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("poller not implemented"))
+		})
+
+		It("should poll now if was already recently polled but changed shards", func() {
+			By("Reconciling resource")
+
+			container := samplePollRecentChangedShards
+
+			controllerReconciler := &PrometheusPollReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Poller: &fakePrometheusPoller{},
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: container.NamespacedName,
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("poller not implemented"))
+		})
+
+		It("should successfully poll", func() {
+			By("Preparing poller")
+
+			container := samplePollWithShards
+
+			polled := false
+			controllerReconciler := &PrometheusPollReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Poller: &fakePrometheusPoller{
+					fn: func(ctx context.Context, poll autoscalerv1alpha1.PrometheusPoll, shards []common.Shard) ([]common.MetricValue, error) {
+						metricValues := []common.MetricValue{}
+						for _, shard := range shards {
+							for _, metric := range poll.Spec.Metrics {
+								metricValues = append(
+									metricValues,
+									common.MetricValue{
+										ID:           metric.ID,
+										Shard:        shard,
+										Query:        metric.Query,
+										Value:        resource.MustParse("0"),
+										DisplayValue: "0",
+									},
+								)
+							}
+						}
+						polled = true
+						return metricValues, nil
+					},
+				},
+			}
+
+			By("Reconciling resource with expectation to fail to update status")
+			CheckFailureToUpdateStatus(
+				container,
+				func(fClient *fakeClient) *PrometheusPollReconciler {
+					return &PrometheusPollReconciler{
+						Client: fClient,
+						Scheme: fClient.Scheme(),
+						Poller: controllerReconciler.Poller,
+					}
+				},
+			)
+
+			By("Reconciling resource")
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: container.NamespacedName,
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(polled).To(BeTrue())
+			Expect(result.RequeueAfter).To(Equal(container.Object.Spec.Period.Duration))
+
+			By("Checking conditions")
+			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+			readyCondition := meta.FindStatusCondition(
+				container.Object.Status.Conditions,
+				StatusTypeReady,
+			)
+			Expect(readyCondition).NotTo(BeNil())
+			Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(readyCondition.Reason).To(Equal(StatusTypeReady))
+			availableCondition := meta.FindStatusCondition(
+				container.Object.Status.Conditions,
+				StatusTypeAvailable,
+			)
+			Expect(availableCondition).NotTo(BeNil())
+			Expect(availableCondition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(availableCondition.Reason).To(Equal(StatusTypeAvailable))
+
+			By("Checking polling results")
+			metricsById := map[string]autoscalerv1alpha1.PrometheusMetric{}
+			for _, metric := range container.Object.Spec.Metrics {
+				metricsById[metric.ID] = metric
+			}
+			shardsByUID := map[types.UID]common.Shard{}
+			for _, shard := range sampleShardManagerWithShards.Object.Status.Shards {
+				shardsByUID[shard.UID] = shard
+			}
+			metricValues := container.Object.Status.Values
+			Expect(metricValues).
+				To(HaveLen(
+					len(container.Object.Spec.Metrics) *
+						len(sampleShardManagerWithShards.Object.Status.Shards),
+				))
+			valuesByMetricIDAndShardUID := map[string]common.MetricValue{}
+			for _, val := range metricValues {
+				valuesByMetricIDAndShardUID[val.ID+":"+string(val.Shard.UID)] = val
+			}
+			for metricID, metric := range metricsById {
+				for shardUID, shard := range shardsByUID {
+					key := metricID + ":" + string(shardUID)
+					val, ok := valuesByMetricIDAndShardUID[key]
+					Expect(ok).To(BeTrue())
+					Expect(val.ID).To(Equal(metric.ID))
+					Expect(val.Shard).To(Equal(shard))
+					Expect(val.Query).To(Equal(metric.Query))
+					Expect(val.Value).To(Equal(resource.MustParse("0")))
+					Expect(val.DisplayValue).To(Equal("0"))
+				}
+			}
+		})
+
+		It("should handle errors during polling", func() {
+			By("Preparing poller")
+
+			container := samplePollWithShards
+
+			controllerReconciler := &PrometheusPollReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Poller: &fakePrometheusPoller{
+					fn: func(ctx context.Context, poll autoscalerv1alpha1.PrometheusPoll, shards []common.Shard) ([]common.MetricValue, error) {
+						return nil, errors.New("fake error")
+					},
+				},
+			}
+
+			By("Reconciling resource with expectation to fail to update status")
+			CheckFailureToUpdateStatus(
+				container,
+				func(fClient *fakeClient) *PrometheusPollReconciler {
+					return &PrometheusPollReconciler{
+						Client: fClient,
+						Scheme: fClient.Scheme(),
+						Poller: controllerReconciler.Poller,
+					}
+				},
+			)
+
+			By("Reconciling resource")
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: container.NamespacedName,
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("fake error"))
+			Expect(result.RequeueAfter).To(Equal(time.Second))
+
+			By("Checking conditions")
+			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+			readyCondition := meta.FindStatusCondition(
+				container.Object.Status.Conditions,
+				StatusTypeReady,
+			)
+			Expect(readyCondition).NotTo(BeNil())
+			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(readyCondition.Reason).To(Equal("PollingError"))
+			Expect(readyCondition.Message).To(ContainSubstring("fake error"))
+		})
+
+		It("should check results count against expectation", func() {
+			By("Preparing poller")
+
+			container := samplePollWithShards
+
+			controllerReconciler := &PrometheusPollReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Poller: &fakePrometheusPoller{
+					fn: func(ctx context.Context, poll autoscalerv1alpha1.PrometheusPoll, shards []common.Shard) ([]common.MetricValue, error) {
+						return []common.MetricValue{}, nil
+					},
+				},
+			}
+
+			By("Reconciling resource with expectation to fail to update status")
+			CheckFailureToUpdateStatus(
+				container,
+				func(fClient *fakeClient) *PrometheusPollReconciler {
+					return &PrometheusPollReconciler{
+						Client: fClient,
+						Scheme: fClient.Scheme(),
+						Poller: controllerReconciler.Poller,
+					}
+				},
+			)
+
+			By("Reconciling resource")
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: container.NamespacedName,
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal("Expected poll results didn't match number of metrics * number of shards"))
+			Expect(result.RequeueAfter).To(Equal(container.Object.Spec.Period.Duration))
+
+			By("Checking conditions")
+			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
+			readyCondition := meta.FindStatusCondition(
+				container.Object.Status.Conditions,
+				StatusTypeReady,
+			)
+			Expect(readyCondition).NotTo(BeNil())
+			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(readyCondition.Reason).To(Equal("ResultsCountMismatch"))
+			Expect(readyCondition.Message).To(ContainSubstring("Expected poll results didn't match number of metrics * number of shards"))
 		})
 	})
 })
