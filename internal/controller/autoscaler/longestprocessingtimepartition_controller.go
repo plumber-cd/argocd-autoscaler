@@ -19,13 +19,10 @@ package autoscaler
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strconv"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -41,12 +38,15 @@ import (
 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
+	"github.com/plumber-cd/argocd-autoscaler/partitioners/longestprocessingtime"
 )
 
 // LongestProcessingTimePartitionReconciler reconciles a LongestProcessingTimePartition object
 type LongestProcessingTimePartitionReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	Partitioner longestprocessingtime.Partitioner
 }
 
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=longestprocessingtimepartitions,verbs=get;list;watch;create;update;patch;delete
@@ -66,7 +66,7 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get resource")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
 
 	loadIndexProvider, err := findByRef[common.LoadIndexProvider](
@@ -87,10 +87,10 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 		})
 		if err := r.Status().Update(ctx, partition); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		// We should get a new event when load index provider is created
-		return ctrl.Result{}, err
+		return ctrl.Result{}, nil
 	}
 
 	if !meta.IsStatusConditionPresentAndEqual(loadIndexProvider.GetLoadIndexProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
@@ -106,32 +106,14 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 		})
 		if err := r.Status().Update(ctx, partition); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		// We should get a new event when load index provider changes
 		return ctrl.Result{}, nil
 	}
 
 	loadIndexes := loadIndexProvider.GetLoadIndexProviderStatus().Values
-
-	if len(loadIndexes) == 0 {
-		err := fmt.Errorf("No load indexes found")
-		log.Error(err, "No load indexes found, fail")
-		meta.SetStatusCondition(&partition.Status.Conditions, metav1.Condition{
-			Type:    StatusTypeReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "NoLoadIndexesFound",
-			Message: err.Error(),
-		})
-		if err := r.Status().Update(ctx, partition); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
-		}
-		// We should get a new event when load index provider changes
-		return ctrl.Result{}, nil
-	}
-
-	replicas, err := r.LPTPartition(ctx, loadIndexes)
+	replicas, err := r.Partitioner.Partition(ctx, loadIndexes)
 	if err != nil {
 		log.Error(err, "Failure during partitioning")
 		meta.SetStatusCondition(&partition.Status.Conditions, metav1.Condition{
@@ -142,7 +124,7 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 		})
 		if err := r.Status().Update(ctx, partition); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		// If it's a math problem, we can't fix it by re-queuing
 		return ctrl.Result{}, nil
@@ -156,70 +138,11 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 	})
 	if err := r.Status().Update(ctx, partition); err != nil {
 		log.Error(err, "Failed to update resource status")
-		return ctrl.Result{RequeueAfter: time.Second}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
 
 	// We don't need to do anything unless load index provider data changes
 	return ctrl.Result{}, nil
-}
-
-func (r *LongestProcessingTimePartitionReconciler) LPTPartition(ctx context.Context,
-	shards []common.LoadIndex) (common.ReplicaList, error) {
-
-	log := log.FromContext(ctx)
-
-	replicas := common.ReplicaList{}
-
-	if len(shards) == 0 {
-		return replicas, nil
-	}
-
-	sort.Sort(common.LoadIndexesDesc(shards))
-	bucketSize := shards[0].Value.AsApproximateFloat64()
-
-	replicaCount := int32(0)
-	for _, shard := range shards {
-		// Find the replica with the least current load.
-		minLoad := float64(0)
-		selectedReplicaIndex := -1
-
-		for i, replica := range replicas {
-			if selectedReplicaIndex == -1 || replica.TotalLoad.AsApproximateFloat64() < minLoad {
-				if replica.TotalLoad.AsApproximateFloat64()+shard.Value.AsApproximateFloat64() < bucketSize {
-					selectedReplicaIndex = i
-					minLoad = replica.TotalLoad.AsApproximateFloat64()
-				}
-			}
-		}
-
-		if selectedReplicaIndex < 0 {
-			// Create a new replica for this shard.
-			replicaCount++
-			newReplica := common.Replica{
-				ID:                    strconv.FormatInt(int64(replicaCount-1), 32),
-				LoadIndexes:           []common.LoadIndex{shard},
-				TotalLoad:             shard.Value,
-				TotalLoadDisplayValue: strconv.FormatFloat(shard.Value.AsApproximateFloat64(), 'f', -1, 64),
-			}
-			replicas = append(replicas, newReplica)
-		} else {
-			// Assign shard to the selected replica.
-			replicas[selectedReplicaIndex].LoadIndexes = append(replicas[selectedReplicaIndex].LoadIndexes, shard)
-			totalLoad := replicas[selectedReplicaIndex].TotalLoad.AsApproximateFloat64()
-			totalLoad += shard.Value.AsApproximateFloat64()
-			totalLoadAsString := strconv.FormatFloat(totalLoad, 'f', -1, 64)
-			replicas[selectedReplicaIndex].TotalLoadDisplayValue = totalLoadAsString
-			totalLoadAsResource, err := resource.ParseQuantity(totalLoadAsString)
-			if err != nil {
-				log.Error(err, "Failed to parse total load as resource",
-					"shard", shard.Shard.ID, "totalLoad", totalLoadAsResource)
-				return nil, err
-			}
-			replicas[selectedReplicaIndex].TotalLoad = totalLoadAsResource
-		}
-	}
-
-	return replicas, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

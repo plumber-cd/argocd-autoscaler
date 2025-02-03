@@ -39,7 +39,9 @@ import (
 
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	autoscalercontroller "github.com/plumber-cd/argocd-autoscaler/internal/controller/autoscaler"
+	"github.com/plumber-cd/argocd-autoscaler/loadindexers/weightedpnorm"
 	robustscaling "github.com/plumber-cd/argocd-autoscaler/normalizers/robustcaling"
+	"github.com/plumber-cd/argocd-autoscaler/partitioners/longestprocessingtime"
 	"github.com/plumber-cd/argocd-autoscaler/pollers/prometheus"
 	// +kubebuilder:scaffold:imports
 )
@@ -228,15 +230,17 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&autoscalercontroller.WeightedPNormLoadIndexReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		LoadIndexer: &weightedpnorm.LoadIndexerImpl{},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WeightedPNormLoadIndex")
 		os.Exit(1)
 	}
 	if err = (&autoscalercontroller.LongestProcessingTimePartitionReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		Partitioner: &longestprocessingtime.PartitionerImpl{},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LongestProcessingTimePartition")
 		os.Exit(1)
