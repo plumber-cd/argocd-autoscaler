@@ -30,10 +30,11 @@ type MostWantedTwoPhaseHysteresisEvaluationSpec struct {
 	PollingPeriod metav1.Duration `json:"pollingPeriod,omitempty"`
 
 	// StabilizationPeriod is the amount of time to wait before evaluating historical records.
+	// Older historical records are always pruned.
 	// +kubebuilder:validation:Required
 	StabilizationPeriod metav1.Duration `json:"stabilizationPeriod,omitempty"`
 
-	// MinimumSampleSize is the minimum number of samples to consider before evaluating.
+	// MinimumSampleSize is the minimum number of samples to consider before first evaluating.
 	// +kubebuilder:validation:Required
 	MinimumSampleSize int32 `json:"minimumSampleSize,omitempty"`
 }

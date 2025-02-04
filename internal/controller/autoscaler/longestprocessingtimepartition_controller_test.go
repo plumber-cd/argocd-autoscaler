@@ -222,8 +222,8 @@ var _ = Describe("LongestProcessingTimePartition Controller", func() {
 
 		It("should successfully exit when the resource didn't exist", func() {
 			By("Reconciling non existing resource")
-			CheckExitingOnNonExistingResource(func() *WeightedPNormLoadIndexReconciler {
-				return &WeightedPNormLoadIndexReconciler{
+			CheckExitingOnNonExistingResource(func() *LongestProcessingTimePartitionReconciler {
+				return &LongestProcessingTimePartitionReconciler{
 					Client: k8sClient,
 					Scheme: k8sClient.Scheme(),
 				}

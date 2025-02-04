@@ -64,7 +64,7 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get resource")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
 
 	partitionProvider, err := findByRef[common.PartitionProvider](
@@ -85,10 +85,10 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		})
 		if err := r.Status().Update(ctx, evaluation); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		// We should get a new event when partition provider is created
-		return ctrl.Result{}, err
+		return ctrl.Result{}, nil
 	}
 
 	if !meta.IsStatusConditionPresentAndEqual(partitionProvider.GetPartitionProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
@@ -104,29 +104,13 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		})
 		if err := r.Status().Update(ctx, evaluation); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		// We should get a new event when partition provider changes
 		return ctrl.Result{}, nil
 	}
 
 	replicas := partitionProvider.GetPartitionProviderStatus().Replicas
-	if len(replicas) == 0 {
-		err := fmt.Errorf("No replicas found")
-		log.Error(err, "No replicas found, fail")
-		meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
-			Type:    StatusTypeReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "NoReplicasFound",
-			Message: err.Error(),
-		})
-		if err := r.Status().Update(ctx, evaluation); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
-		}
-		// We should get a new event when partition provider changes
-		return ctrl.Result{}, nil
-	}
 
 	// Maintain the history
 	evaluation.Status.History = append(evaluation.Status.History,
@@ -152,8 +136,9 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		})
 		if err := r.Status().Update(ctx, evaluation); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
+		// We need to re-queue it for the next poll, but this is NOT an error
 		return ctrl.Result{RequeueAfter: evaluation.Spec.PollingPeriod.Duration}, nil
 	}
 
@@ -196,7 +181,7 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 	})
 	if err := r.Status().Update(ctx, evaluation); err != nil {
 		log.Error(err, "Failed to update resource status")
-		return ctrl.Result{RequeueAfter: time.Second}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
 
 	// Re-queue for the next poll

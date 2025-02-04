@@ -56,7 +56,7 @@ spec:
             properties:
               minimumSampleSize:
                 description: MinimumSampleSize is the minimum number of samples to
-                  consider before evaluating.
+                  consider before first evaluating.
                 format: int32
                 type: integer
               partitionProviderRef:
@@ -84,8 +84,9 @@ spec:
                 description: PollingPeriod is the period for polling the partitioning.
                 type: string
               stabilizationPeriod:
-                description: StabilizationPeriod is the amount of time to wait before
-                  evaluating historical records.
+                description: |-
+                  StabilizationPeriod is the amount of time to wait before evaluating historical records.
+                  Older historical records are always pruned.
                 type: string
             required:
             - minimumSampleSize
