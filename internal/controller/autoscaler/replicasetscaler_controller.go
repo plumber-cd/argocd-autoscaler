@@ -22,6 +22,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,7 +53,6 @@ const (
 
 type ReplicaSetController struct {
 	Kind        string
-	Deployment  *appsv1.Deployment
 	StatefulSet *appsv1.StatefulSet
 }
 
@@ -62,7 +62,6 @@ type ReplicaSetScalerReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=replicasetscalers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=replicasetscalers/status,verbs=get;update;patch
@@ -81,7 +80,7 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get resource")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
 
 	var mode ReplicaSetReconcilerMode
@@ -95,15 +94,15 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
 				Type:    StatusTypeReady,
 				Status:  metav1.ConditionFalse,
-				Reason:  "ErrorResourceMalformed",
+				Reason:  "ErrorResourceMalformedDuplicateModes",
 				Message: err.Error(),
 			})
 			if err := r.Status().Update(ctx, scaler); err != nil {
 				log.Error(err, "Failed to update resource status")
-				return ctrl.Result{RequeueAfter: time.Second}, nil
+				return ctrl.Result{RequeueAfter: time.Second}, err
 			}
 			// We should get a new event when spec changes
-			return ctrl.Result{}, err
+			return ctrl.Result{}, nil
 		}
 		mode = ReplicaSetReconcilerModeDefault
 	}
@@ -129,10 +128,10 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		})
 		if err := r.Status().Update(ctx, scaler); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		// We should get a new event when partition provider is created
-		return ctrl.Result{}, err
+		return ctrl.Result{}, nil
 	}
 
 	if !meta.IsStatusConditionPresentAndEqual(partitionProvider.GetPartitionProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
@@ -140,7 +139,7 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
 			Reason: "PartitionProviderNotReady",
-			Message: fmt.Sprintf("Check the status of partition provider %s (api=%s, kind=%s)",
+			Message: fmt.Sprintf("Check the status of a partition provider %s (api=%s, kind=%s)",
 				scaler.Spec.PartitionProviderRef.Name,
 				*scaler.Spec.PartitionProviderRef.APIGroup,
 				scaler.Spec.PartitionProviderRef.Kind,
@@ -148,7 +147,7 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		})
 		if err := r.Status().Update(ctx, scaler); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		// We should get a new event when partition provider changes
 		return ctrl.Result{}, nil
@@ -172,47 +171,57 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		})
 		if err := r.Status().Update(ctx, scaler); err != nil {
 			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 		// We should get a new event when shard manager is created
-		return ctrl.Result{}, err
+		return ctrl.Result{}, nil
+	}
+
+	if !meta.IsStatusConditionPresentAndEqual(shardManager.GetShardManagerStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
+		meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
+			Type:   StatusTypeReady,
+			Status: metav1.ConditionFalse,
+			Reason: "ShardManagerNotReady",
+			Message: fmt.Sprintf("Check the status of a shard manager %s (api=%s, kind=%s)",
+				scaler.Spec.ShardManagerRef.Name,
+				*scaler.Spec.ShardManagerRef.APIGroup,
+				scaler.Spec.ShardManagerRef.Kind,
+			),
+		})
+		if err := r.Status().Update(ctx, scaler); err != nil {
+			log.Error(err, "Failed to update resource status")
+			return ctrl.Result{RequeueAfter: time.Second}, err
+		}
+		// We should get a new event when shard manager changes
+		return ctrl.Result{}, nil
 	}
 
 	replicaSetController := ReplicaSetController{}
 	switch scaler.Spec.ReplicaSetControllerRef.Kind {
-	case "Deployment":
-		fallthrough
 	case "StatefulSet":
 		replicaSetController.Kind = scaler.Spec.ReplicaSetControllerRef.Kind
 	default:
-		log.Error(err, "Unsupported ReplicaSetControllerRef.Kind", "kind", scaler.Spec.ReplicaSetControllerRef.Kind)
-	}
-	switch replicaSetController.Kind {
-	case "Deployment":
-		deploymentController, err := findByRef[*appsv1.Deployment](
-			ctx,
-			r.Scheme,
-			r.RESTMapper(),
-			r.Client,
-			scaler.Namespace,
-			*scaler.Spec.ReplicaSetControllerRef,
-		)
-		if err != nil {
-			log.Error(err, "Failed to find Deployment by ref")
-			meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
-				Type:    StatusTypeReady,
-				Status:  metav1.ConditionFalse,
-				Reason:  "ErrorFindingDeployment",
-				Message: err.Error(),
-			})
-			if err := r.Status().Update(ctx, scaler); err != nil {
-				log.Error(err, "Failed to update resource status")
-				return ctrl.Result{RequeueAfter: time.Second}, nil
-			}
-			// We should get a new event when deployment is created
-			return ctrl.Result{}, err
+		err := fmt.Errorf("Unsupported ReplicaSetControllerRef.Kind")
+		log.Error(err, "Failed to read replica set controller", "kind", scaler.Spec.ReplicaSetControllerRef.Kind)
+		meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
+			Type:   StatusTypeReady,
+			Status: metav1.ConditionFalse,
+			Reason: "UnsupportedReplicaSetControllerKind",
+			Message: fmt.Sprintf("Check the ref for a replica set controller %s (api=%s, kind=%s)",
+				scaler.Spec.ReplicaSetControllerRef.Name,
+				*scaler.Spec.ReplicaSetControllerRef.APIGroup,
+				scaler.Spec.ReplicaSetControllerRef.Kind,
+			),
+		})
+		if err := r.Status().Update(ctx, scaler); err != nil {
+			log.Error(err, "Failed to update resource status")
+			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
-		replicaSetController.Deployment = deploymentController
+		// We should get a new event when scaler changes
+		return ctrl.Result{}, nil
+	}
+
+	switch replicaSetController.Kind {
 	case "StatefulSet":
 		statefulSetController, err := findByRef[*appsv1.StatefulSet](
 			ctx,
@@ -232,10 +241,10 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			})
 			if err := r.Status().Update(ctx, scaler); err != nil {
 				log.Error(err, "Failed to update resource status")
-				return ctrl.Result{RequeueAfter: time.Second}, nil
+				return ctrl.Result{RequeueAfter: time.Second}, err
 			}
 			// We should get a new event when statefulset is created
-			return ctrl.Result{}, err
+			return ctrl.Result{}, nil
 		}
 		replicaSetController.StatefulSet = statefulSetController
 	default:
@@ -300,7 +309,7 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			})
 			if err := r.Status().Update(ctx, scaler); err != nil {
 				log.Error(err, "Failed to update resource status")
-				return ctrl.Result{RequeueAfter: time.Second}, nil
+				return ctrl.Result{RequeueAfter: time.Second}, err
 			}
 			// We should try again
 			return ctrl.Result{RequeueAfter: time.Second}, err
@@ -394,8 +403,6 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 func (r *ReplicaSetScalerReconciler) GetRSControllerDesiredReplicas(replicaSetController ReplicaSetController) int32 {
 	switch replicaSetController.Kind {
-	case "Deployment":
-		return *replicaSetController.Deployment.Spec.Replicas
 	case "StatefulSet":
 		return *replicaSetController.StatefulSet.Spec.Replicas
 	default:
@@ -405,8 +412,6 @@ func (r *ReplicaSetScalerReconciler) GetRSControllerDesiredReplicas(replicaSetCo
 
 func (r *ReplicaSetScalerReconciler) GetRSControllerActualReplicas(replicaSetController ReplicaSetController) int32 {
 	switch replicaSetController.Kind {
-	case "Deployment":
-		return replicaSetController.Deployment.Status.Replicas
 	case "StatefulSet":
 		return replicaSetController.StatefulSet.Status.Replicas
 	default:
@@ -417,17 +422,9 @@ func (r *ReplicaSetScalerReconciler) GetRSControllerActualReplicas(replicaSetCon
 func (r *ReplicaSetScalerReconciler) ScaleTo(ctx context.Context, replicaSetController ReplicaSetController, replicas int32, restart bool) error {
 	var obj client.Object
 	switch replicaSetController.Kind {
-	case "Deployment":
-		replicaSetController.Deployment.Spec.Replicas = ptr.To(replicas)
-		if restart {
-			if replicaSetController.Deployment.Spec.Template.Annotations == nil {
-				replicaSetController.Deployment.Spec.Template.Annotations = make(map[string]string)
-			}
-			replicaSetController.Deployment.Spec.Template.Annotations["autoscaler.argoproj.io/restartedAt"] = fmt.Sprintf("%d", time.Now().Unix())
-		}
-		obj = replicaSetController.Deployment
 	case "StatefulSet":
 		replicaSetController.StatefulSet.Spec.Replicas = ptr.To(replicas)
+		containerFound := false
 		for containerIndex, container := range replicaSetController.StatefulSet.Spec.Template.Spec.Containers {
 			// TODO: can the name of the container be different?
 			// We might need to expose this as a user input in the API
@@ -435,13 +432,30 @@ func (r *ReplicaSetScalerReconciler) ScaleTo(ctx context.Context, replicaSetCont
 				continue
 			}
 
+			containerFound = true
+
+			envFound := false
 			for envIndex, env := range container.Env {
 				if env.Name != "ARGOCD_CONTROLLER_REPLICAS" {
 					continue
 				}
 
+				envFound = true
 				replicaSetController.StatefulSet.Spec.Template.Spec.Containers[containerIndex].Env[envIndex].Value = fmt.Sprintf("%d", replicas)
 			}
+			if !envFound {
+				replicaSetController.StatefulSet.Spec.Template.Spec.Containers[containerIndex].Env = append(
+					replicaSetController.StatefulSet.Spec.Template.Spec.Containers[containerIndex].Env,
+					corev1.EnvVar{
+						Name:  "ARGOCD_CONTROLLER_REPLICAS",
+						Value: fmt.Sprintf("%d", replicas),
+					},
+				)
+			}
+		}
+		if !containerFound {
+			// TODO: should the container name be customizeable?
+			return fmt.Errorf("Container argocd-application-controller not found in StatefulSet")
 		}
 		if restart {
 			if replicaSetController.StatefulSet.Spec.Template.Annotations == nil {

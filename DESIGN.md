@@ -327,8 +327,7 @@ To do that, it would be updating `.spec.replicas` on the `.spec.shardManagerRef`
 
 Implementations may vary, but for initial "default" implementation I am going into this with following assumptions.
 
-We're assuming Application Controller is ran as STS (although technically controller can use Deployment too,
-but result is undetermined if ArgoCD is in that mode) and in `legacy` sharding mode.
+We're assuming Application Controller is ran as STS and in `legacy` sharding mode.
 Thus, we are making sure none of their baked-in dynamic re-balancing aren't getting in our way.
 
 What happens then upon creating a new cluster but without a shard assignment -

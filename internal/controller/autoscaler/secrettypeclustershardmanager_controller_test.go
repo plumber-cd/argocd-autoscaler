@@ -18,80 +18,60 @@ package autoscaler
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
+	"github.com/plumber-cd/argocd-autoscaler/test/harness"
+	. "github.com/plumber-cd/argocd-autoscaler/test/harness"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 var _ = Describe("SecretTypeClusterShardManager Controller", func() {
-	Context("When reconciling a resource", func() {
-		ctx := context.Background()
 
-		var sampleNamespace *objectContainer[*corev1.Namespace]
-		var sampleSecret *objectContainer[*corev1.Secret]
-		var sampleShardManager *objectContainer[*autoscalerv1alpha1.SecretTypeClusterShardManager]
-		var shardManagerWithDesiredReplicas *objectContainer[*autoscalerv1alpha1.SecretTypeClusterShardManager]
-		var shardManagerWithMalformedDesiredReplicas *objectContainer[*autoscalerv1alpha1.SecretTypeClusterShardManager]
+	var testNamespace *ObjectContainer[*corev1.Namespace]
 
-		BeforeEach(func() {
-			By("Creating resources")
+	var collector = NewScenarioCollector[*autoscalerv1alpha1.SecretTypeClusterShardManager](
+		func(fClient client.Client) *SecretTypeClusterShardManagerReconciler {
+			return &SecretTypeClusterShardManagerReconciler{
+				Client: fClient,
+				Scheme: fClient.Scheme(),
+			}
+		},
+	)
 
-			sampleNamespace = newNamespaceWithRandomName()
-			Expect(k8sClient.create(ctx, sampleNamespace.Generic())).To(Succeed())
-			Expect(k8sClient.get(ctx, sampleNamespace.Generic())).To(Succeed())
-
-			sampleSecret = NewObjectContainer(&corev1.Secret{
+	NewScenarioTemplate(
+		"not existing resource",
+		func() *autoscalerv1alpha1.SecretTypeClusterShardManager {
+			return &autoscalerv1alpha1.SecretTypeClusterShardManager{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "sample-secret",
-					Namespace: sampleNamespace.ObjectKey.Name,
-					Labels: map[string]string{
-						"mock-label": "mock",
-					},
+					Name: "not-existent",
 				},
-				StringData: map[string]string{
-					"name":   "mock-cluster",
-					"server": "http://mock-cluster:8000",
-				},
-			}, func(container *objectContainer[*corev1.Secret]) {
-				Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-				Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-			})
+			}
+		},
+	).
+		HydrateByCreateContainer().
+		WithCleanClient().
+		AdHocCheckResourceNotFound(collector.Registrator).
+		AdHocCheckFailureToGetResource(collector.Registrator)
 
-			// We don't really need to reference it, the point of it existence is so that
-			//  it DOESN'T come up anywhere because it wouldn't match the label selector
-			_ = NewObjectContainer(&corev1.Secret{
+	NewScenarioTemplate(
+		"basic",
+		func() *autoscalerv1alpha1.SecretTypeClusterShardManager {
+			return &autoscalerv1alpha1.SecretTypeClusterShardManager{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "unlabeled-secret",
-					Namespace: sampleNamespace.ObjectKey.Name,
-					Labels: map[string]string{
-						"mock-label": "mock-2",
-					},
-				},
-				StringData: map[string]string{
-					"name":   "mock-cluster-2",
-					"server": "http://mock-cluster-2:8000",
-				},
-			}, func(container *objectContainer[*corev1.Secret]) {
-				Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-				Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-			})
-
-			sampleShardManager = NewObjectContainer(&autoscalerv1alpha1.SecretTypeClusterShardManager{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "sample-shard-manager",
-					Namespace: sampleNamespace.ObjectKey.Name,
+					Name: "sample-shard-manager",
 				},
 				Spec: autoscalerv1alpha1.SecretTypeClusterShardManagerSpec{
 					LabelSelector: &metav1.LabelSelector{
@@ -100,292 +80,288 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 						},
 					},
 				},
-			})
-			Expect(k8sClient.create(ctx, sampleShardManager.Generic())).To(Succeed())
-			Expect(k8sClient.get(ctx, sampleShardManager.Generic())).To(Succeed())
-
-			shardManagerWithDesiredReplicas = NewObjectContainer(
-				&autoscalerv1alpha1.SecretTypeClusterShardManager{
+			}
+		},
+	).
+		HydrateByClientCreate().
+		Hydrate(
+			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+				_ = CreateObjectContainer(run.Context, *run.Client, &corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "shard-manager-with-desired-replicas",
-						Namespace: sampleNamespace.ObjectKey.Name,
-					},
-					Spec: sampleShardManager.Object.Spec,
-				},
-				func(container *objectContainer[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-					container.Object.Spec.ShardManagerSpec = common.ShardManagerSpec{
-						Replicas: common.ReplicaList{
-							{
-								ID: "0",
-								LoadIndexes: []common.LoadIndex{
-									{
-										Shard: common.Shard{
-											UID: sampleSecret.Object.GetUID(),
-											ID:  sampleSecret.ObjectKey.Name,
-											Data: map[string]string{
-												"fake": "data",
-											},
-										},
-										Value:        resource.MustParse("0"),
-										DisplayValue: "0",
-									},
-								},
-								TotalLoad:             resource.MustParse("0"),
-								TotalLoadDisplayValue: "0",
-							},
+						Name:      "sample-secret",
+						Namespace: run.Namespace.Object().Name,
+						Labels: map[string]string{
+							"mock-label": "mock",
 						},
-					}
-					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-				},
-			)
+					},
+					StringData: map[string]string{
+						"name":   "mock-cluster",
+						"server": "http://mock-cluster:8000",
+					},
+				})
 
-			shardManagerWithMalformedDesiredReplicas = NewObjectContainer(
-				&autoscalerv1alpha1.SecretTypeClusterShardManager{
+				_ = harness.CreateObjectContainer(run.Context, *run.Client, &corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "malformed-shard-manager",
-						Namespace: sampleNamespace.ObjectKey.Name,
+						Name:      "unlabeled-secret",
+						Namespace: run.Namespace.Object().Name,
+						Labels: map[string]string{
+							"mock-label": "mock-2",
+						},
 					},
-					Spec: shardManagerWithDesiredReplicas.Object.Spec,
-				},
-				func(container *objectContainer[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-					container.Object.Spec.ShardManagerSpec.
-						Replicas[0].LoadIndexes = append(
-						container.Object.Spec.ShardManagerSpec.Replicas[0].LoadIndexes,
-						container.Object.Spec.ShardManagerSpec.Replicas[0].LoadIndexes[0],
-					)
-					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-				},
-			)
-		})
-
-		AfterEach(func() {
-			err := k8sClient.get(ctx, sampleNamespace.Generic())
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the test namespace")
-			Expect(k8sClient.delete(ctx, sampleNamespace.Generic())).To(Succeed())
-			sampleNamespace = nil
-		})
-
-		It("should successfully exit when the resource didn't exist", func() {
-			By("Reconciling non existing resource")
-			CheckExitingOnNonExistingResource(func() *SecretTypeClusterShardManagerReconciler {
-				return &SecretTypeClusterShardManagerReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
+					StringData: map[string]string{
+						"name":   "mock-cluster-2",
+						"server": "http://mock-cluster-2:8000",
+					},
+				})
+			},
+		).
+		WithCleanClient().
+		WithFakeClientExtension(
+			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+				fClient := &FakeClient{
+					Client: run.FakeClient,
 				}
-			})
-		})
+				fClient.
+					WithListFunction(&corev1.SecretList{},
+						func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+							return errors.New("fake error listing secrets")
+						},
+					)
+				run.FakeClient = fClient
+			},
+		).
+		AdHocCheckFailureToUpdateStatus(collector.Registrator).
+		WithCheck(
+			"should handle errors when failing to list secrets",
+			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+				Expect(run.ReconcileError).To(HaveOccurred())
+				Expect(run.ReconcileError.Error()).To(Equal("fake error listing secrets"))
+				Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Second))
 
-		It("should handle error getting resource", func() {
-			By("Failing to get resource")
-			CheckFailureToGetResource(
-				k8sClient,
-				sampleShardManager,
-				func(fClient *fakeClient) *SecretTypeClusterShardManagerReconciler {
-					return &SecretTypeClusterShardManagerReconciler{
-						Client: fClient,
-						Scheme: fClient.Scheme(),
-					}
-				},
-			)
-		})
-
-		It("should handle errors on listing secret", func() {
-			By("Reconciling resource")
-
-			container := sampleShardManager
-
-			fClient := &fakeClient{
-				Client: k8sClient,
-			}
-			fClient.
-				WithListFunction(&corev1.SecretList{},
-					func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-						return errors.NewBadRequest("fake error listing secrets")
-					},
+				By("Checking ready condition")
+				Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
+				readyCondition := meta.FindStatusCondition(
+					run.Container.Object().Status.Conditions,
+					StatusTypeReady,
 				)
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+				Expect(readyCondition.Reason).To(Equal("FailedToListSecrets"))
+				Expect(readyCondition.Message).To(Equal("fake error listing secrets"))
+			},
+		).
+		Register(collector.Registrator).
+		ResetClientPatches().
+		AdHocCheckFailureToUpdateStatus(collector.Registrator).
+		WithCheck(
+			"should export shards to the status",
+			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+				Expect(run.ReconcileError).ToNot(HaveOccurred())
+				Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult.Requeue).To(BeFalse())
 
-			controllerReconciler := &SecretTypeClusterShardManagerReconciler{
-				Client: fClient,
-				Scheme: fClient.Scheme(),
-			}
-
-			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: container.ObjectKey,
-			})
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("fake error listing secrets"))
-			Expect(result.RequeueAfter).To(Equal(time.Second))
-
-			By("Checking ready condition")
-			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-			readyCondition := meta.FindStatusCondition(container.Object.Status.Conditions, StatusTypeReady)
-			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
-			Expect(readyCondition.Reason).To(Equal("FailedToListSecrets"))
-			Expect(readyCondition.Message).To(Equal("fake error listing secrets"))
-
-			By("Reconciling resource again with expected failure to update the status")
-			CheckFailureToUpdateStatus(
-				fClient,
-				container,
-				func(fClient *fakeClient) *SecretTypeClusterShardManagerReconciler {
-					return &SecretTypeClusterShardManagerReconciler{
-						Client: fClient,
-						Scheme: fClient.Scheme(),
-					}
-				},
-			)
-		})
-
-		It("should successfully discover shards", func() {
-			By("Reconciling resource")
-
-			container := sampleShardManager
-
-			controllerReconciler := &SecretTypeClusterShardManagerReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: container.NamespacedName,
-			})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-			Expect(result.Requeue).To(BeFalse())
-
-			By("Checking ready condition")
-			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-			readyCondition := meta.FindStatusCondition(container.Object.Status.Conditions, StatusTypeReady)
-			Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
-			Expect(readyCondition.Reason).To(Equal(StatusTypeReady))
-
-			By("Reconciling resource again with expected failure to update the status")
-			CheckFailureToUpdateStatus(
-				k8sClient,
-				container,
-				func(fClient *fakeClient) *SecretTypeClusterShardManagerReconciler {
-					return &SecretTypeClusterShardManagerReconciler{
-						Client: fClient,
-						Scheme: fClient.Scheme(),
-					}
-				},
-			)
-		})
-
-		It("should successfully update shards on secrets", func() {
-			By("Reconciling with replicas set")
-
-			container := shardManagerWithDesiredReplicas
-
-			controllerReconciler := &SecretTypeClusterShardManagerReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: container.NamespacedName,
-			})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-			Expect(result.Requeue).To(BeFalse())
-
-			By("Checking ready condition")
-			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-			readyCondition := meta.FindStatusCondition(container.Object.Status.Conditions, StatusTypeReady)
-			Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
-			Expect(readyCondition.Reason).To(Equal(StatusTypeReady))
-
-			By("Checking secret was assigned a shard")
-			Expect(k8sClient.get(ctx, sampleSecret.Generic())).To(Succeed())
-			Expect(sampleSecret.Object.Data["shard"]).To(Equal([]byte("0")))
-		})
-
-		It("should handle error updating the secret", func() {
-			By("Reconciling with replicas set")
-
-			container := shardManagerWithDesiredReplicas
-
-			fClient := &fakeClient{
-				Client: k8sClient,
-			}
-			fClient.
-				WithUpdateFunction(sampleSecret.Generic(),
-					func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-						return errors.NewBadRequest("fake error updating secret")
-					},
+				Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
+				readyCondition := meta.FindStatusCondition(
+					run.Container.Object().Status.Conditions,
+					StatusTypeReady,
 				)
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
+				Expect(readyCondition.Reason).To(Equal(StatusTypeReady))
 
-			controllerReconciler := &SecretTypeClusterShardManagerReconciler{
-				Client: fClient,
-				Scheme: fClient.Scheme(),
-			}
+				secretsListOptions := &client.ListOptions{
+					Namespace: testNamespace.ObjectKey().Name,
+					LabelSelector: labels.SelectorFromSet(
+						run.Container.Object().Spec.LabelSelector.MatchLabels,
+					),
+				}
+				shardSecrets := &corev1.SecretList{}
+				Expect(run.Client.List(ctx, shardSecrets, secretsListOptions)).To(Succeed())
+				shardSecretsByUID := map[types.UID]corev1.Secret{}
+				for _, secret := range shardSecrets.Items {
+					shardSecretsByUID[secret.GetUID()] = secret
+				}
 
-			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: container.NamespacedName,
-			})
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("fake error updating secret"))
-			Expect(result.RequeueAfter).To(Equal(time.Second))
-
-			By("Checking ready condition")
-			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-			readyCondition := meta.FindStatusCondition(container.Object.Status.Conditions, StatusTypeReady)
-			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
-			Expect(readyCondition.Reason).To(Equal("FailedToUpdateSecret"))
-			Expect(readyCondition.Message).To(Equal("fake error updating secret"))
-
-			By("Reconciling resource again with expected failure to update the status")
-			CheckFailureToUpdateStatus(
-				fClient,
-				container,
-				func(fClient *fakeClient) *SecretTypeClusterShardManagerReconciler {
-					return &SecretTypeClusterShardManagerReconciler{
-						Client: fClient,
-						Scheme: fClient.Scheme(),
+				Expect(run.Container.Object().Status.Shards).To(HaveLen(len(shardSecretsByUID)))
+				for _, shard := range run.Container.Object().Status.Shards {
+					secret, ok := shardSecretsByUID[shard.UID]
+					Expect(ok).To(BeTrue())
+					Expect(shard.UID).To(Equal(secret.GetUID()))
+					Expect(shard.ID).To(Equal(secret.Name))
+					stringData := map[string]string{}
+					for key, value := range secret.Data {
+						stringData[key] = string(value)
 					}
-				},
-			)
-		})
+					stringData["namespace"] = secret.Namespace
+					Expect(shard.Data).To(Equal(stringData))
+				}
+			},
+		).
+		Register(collector.Registrator).
+		Hydrate(
+			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+				secretsListOptions := &client.ListOptions{
+					Namespace: testNamespace.ObjectKey().Name,
+					LabelSelector: labels.SelectorFromSet(
+						run.Container.Object().Spec.LabelSelector.MatchLabels,
+					),
+				}
+				shardSecrets := &corev1.SecretList{}
+				Expect(run.Client.List(ctx, shardSecrets, secretsListOptions)).To(Succeed())
+				Expect(shardSecrets.Items).ToNot(BeEmpty())
 
-		It("should handle errors when desired replicas was malformed", func() {
-			By("Reconciling with replicas set")
+				run.Container.Object().Spec.ShardManagerSpec = common.ShardManagerSpec{
+					Replicas: common.ReplicaList{},
+				}
 
-			container := shardManagerWithMalformedDesiredReplicas
+				for i, secret := range shardSecrets.Items {
+					run.Container.Object().Spec.ShardManagerSpec.Replicas = append(
+						run.Container.Object().Spec.ShardManagerSpec.Replicas,
+						common.Replica{
+							ID: fmt.Sprintf("%d", i),
+							LoadIndexes: []common.LoadIndex{
+								{
+									Shard: common.Shard{
+										UID: secret.GetUID(),
+										ID:  secret.Name,
+										Data: map[string]string{
+											"namespace": secret.Namespace,
+											"name":      string(secret.Data["name"]),
+											"server":    string(secret.Data["server"]),
+										},
+									},
+									Value:        resource.MustParse("1"),
+									DisplayValue: "1",
+								},
+							},
+							TotalLoad:             resource.MustParse("1"),
+							TotalLoadDisplayValue: "1",
+						},
+					)
+				}
 
-			controllerReconciler := &SecretTypeClusterShardManagerReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
+				Expect(run.Client.UpdateContainer(ctx, run.Container.ClientObject())).To(Succeed())
+				Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
+			},
+		).
+		WithCleanClient().
+		AdHocCheck(
+			func(branch *ScenarioWithFakeClient[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+				branch.Hydrate(
+					func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+						run.Container.Object().Spec.ShardManagerSpec.Replicas = append(
+							run.Container.Object().Spec.ShardManagerSpec.Replicas,
+							run.Container.Object().Spec.ShardManagerSpec.Replicas[0],
+						)
+						Expect(run.Client.UpdateContainer(ctx, run.Container.ClientObject())).To(Succeed())
+						Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
+					},
+				).
+					WithCleanClient().
+					AdHocCheckFailureToUpdateStatus(collector.Registrator).
+					WithCheck(
+						"should handle errors when replicas are duplicated",
+						func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+							Expect(run.ReconcileError).ToNot(HaveOccurred())
+							Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Duration(0)))
+							Expect(run.ReconcileResult.Requeue).To(BeFalse())
 
-			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: container.NamespacedName,
+							By("Checking ready condition")
+							Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
+							readyCondition := meta.FindStatusCondition(
+								run.Container.Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("FailedToListReplicas"))
+							Expect(readyCondition.Message).To(Equal("duplicate replica found"))
+						},
+					).
+					Register(collector.Registrator)
+			},
+		).
+		WithCheck(
+			"should successfully update shards on secrets",
+			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+				Expect(run.ReconcileError).ToNot(HaveOccurred())
+				Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult.Requeue).To(BeFalse())
+
+				By("Checking ready condition")
+				Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
+				readyCondition := meta.FindStatusCondition(
+					run.Container.Object().Status.Conditions,
+					StatusTypeReady,
+				)
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
+				Expect(readyCondition.Reason).To(Equal(StatusTypeReady))
+
+				By("Checking secret was assigned a shard")
+				secretsListOptions := &client.ListOptions{
+					Namespace: testNamespace.ObjectKey().Name,
+					LabelSelector: labels.SelectorFromSet(
+						run.Container.Object().Spec.LabelSelector.MatchLabels,
+					),
+				}
+				shardSecrets := &corev1.SecretList{}
+				Expect(run.Client.List(ctx, shardSecrets, secretsListOptions)).To(Succeed())
+				shardSecretsByUID := map[types.UID]corev1.Secret{}
+				for _, secret := range shardSecrets.Items {
+					shardSecretsByUID[secret.GetUID()] = secret
+				}
+				for _, replica := range run.Container.Object().Spec.ShardManagerSpec.Replicas {
+					secret, ok := shardSecretsByUID[replica.LoadIndexes[0].Shard.UID]
+					Expect(ok).To(BeTrue())
+					Expect(secret.Data["shard"]).To(Equal([]byte(replica.ID)))
+				}
+			},
+		).
+		Register(collector.Registrator).
+		WithFakeClientExtension(
+			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+				fClient := &FakeClient{
+					Client: run.FakeClient,
+				}
+				fClient.
+					WithUpdateFunction(run.Container.ClientObject(),
+						func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+							return errors.New("fake error updating secret")
+						},
+					)
+				run.FakeClient = fClient
+			},
+		).
+		WithCheck(
+			"should handle error updating the secret",
+			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+				Expect(run.ReconcileError).To(HaveOccurred())
+				Expect(run.ReconcileError.Error()).To(Equal("fake error updating secret"))
+				Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Second))
+
+				By("Checking ready condition")
+				Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
+				readyCondition := meta.FindStatusCondition(
+					run.Container.Object().Status.Conditions,
+					StatusTypeReady,
+				)
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+				Expect(readyCondition.Reason).To(Equal("FailedToUpdateSecret"))
+				Expect(readyCondition.Message).To(Equal("fake error updating secret"))
+			},
+		)
+
+	BeforeEach(func() {
+		testNamespace = CreateNamespaceWithRandomName(ctx, k8sClient)
+	})
+
+	AfterEach(func() {
+		harness.DeleteNamespace(ctx, k8sClient, testNamespace)
+		testNamespace = nil
+	})
+
+	Context("When reconciling a resource", func() {
+		for _, scenario := range collector.All() {
+			It(fmt.Sprintf("%s using template %q", scenario.CheckName, scenario.TemplateName), func() {
+				scenario.It(ctx, k8sClient, testNamespace)
 			})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-			Expect(result.Requeue).To(BeFalse())
-
-			By("Checking ready condition")
-			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-			readyCondition := meta.FindStatusCondition(container.Object.Status.Conditions, StatusTypeReady)
-			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
-			Expect(readyCondition.Reason).To(Equal("FailedToListReplicas"))
-			Expect(readyCondition.Message).To(Equal("duplicate replica found"))
-
-			By("Reconciling resource again with expected failure to update the status")
-			CheckFailureToUpdateStatus(
-				k8sClient,
-				container,
-				func(fClient *fakeClient) *SecretTypeClusterShardManagerReconciler {
-					return &SecretTypeClusterShardManagerReconciler{
-						Client: fClient,
-						Scheme: fClient.Scheme(),
-					}
-				},
-			)
-		})
+		}
 	})
 })

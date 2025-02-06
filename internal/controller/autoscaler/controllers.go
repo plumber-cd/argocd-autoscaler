@@ -133,11 +133,6 @@ func init() {
 	RegisterReplicaSetController(schema.GroupVersionKind{
 		Group:   "apps",
 		Version: "v1",
-		Kind:    "Deployment",
-	})
-	RegisterReplicaSetController(schema.GroupVersionKind{
-		Group:   "apps",
-		Version: "v1",
 		Kind:    "StatefulSet",
 	})
 }
