@@ -61,10 +61,10 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			}
 		},
 	).
-		HydrateByCreateContainer().
-		WithCleanClient().
-		AdHocCheckResourceNotFound(collector.Registrator).
-		AdHocCheckFailureToGetResource(collector.Registrator)
+		HydrateWithContainer().
+		WithFakeClient(nil).
+		BranchResourceNotFoundCheck(collector.Collect).
+		BranchFailureToGetResourceCheck(collector.Collect)
 
 	NewScenarioTemplate(
 		"basic",
@@ -83,7 +83,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			}
 		},
 	).
-		HydrateByClientCreate().
+		HydrateWithClientCreatingContainer().
 		Hydrate(
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				_ = CreateObjectContainer(run.Context, *run.Client, &corev1.Secret{
@@ -115,22 +115,18 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 				})
 			},
 		).
-		WithCleanClient().
-		WithFakeClientExtension(
+		WithFakeClient(nil).
+		WithFakeClient(
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-				fClient := &FakeClient{
-					Client: run.FakeClient,
-				}
-				fClient.
+				run.FakeClient.
 					WithListFunction(&corev1.SecretList{},
 						func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 							return errors.New("fake error listing secrets")
 						},
 					)
-				run.FakeClient = fClient
 			},
 		).
-		AdHocCheckFailureToUpdateStatus(collector.Registrator).
+		BranchFailureToUpdateStatusCheck(collector.Collect).
 		WithCheck(
 			"should handle errors when failing to list secrets",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
@@ -149,9 +145,9 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 				Expect(readyCondition.Message).To(Equal("fake error listing secrets"))
 			},
 		).
-		Register(collector.Registrator).
+		Commit(collector.Collect).
 		ResetClientPatches().
-		AdHocCheckFailureToUpdateStatus(collector.Registrator).
+		BranchFailureToUpdateStatusCheck(collector.Collect).
 		WithCheck(
 			"should export shards to the status",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
@@ -195,7 +191,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 				}
 			},
 		).
-		Register(collector.Registrator).
+		Commit(collector.Collect).
 		Hydrate(
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				secretsListOptions := &client.ListOptions{
@@ -242,8 +238,8 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 				Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
 			},
 		).
-		WithCleanClient().
-		AdHocCheck(
+		WithFakeClient(nil).
+		Branch(
 			func(branch *ScenarioWithFakeClient[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				branch.Hydrate(
 					func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
@@ -255,8 +251,8 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 						Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
 					},
 				).
-					WithCleanClient().
-					AdHocCheckFailureToUpdateStatus(collector.Registrator).
+					WithFakeClient(nil).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
 					WithCheck(
 						"should handle errors when replicas are duplicated",
 						func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
@@ -275,7 +271,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 							Expect(readyCondition.Message).To(Equal("duplicate replica found"))
 						},
 					).
-					Register(collector.Registrator)
+					Commit(collector.Collect)
 			},
 		).
 		WithCheck(
@@ -314,19 +310,15 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 				}
 			},
 		).
-		Register(collector.Registrator).
-		WithFakeClientExtension(
+		Commit(collector.Collect).
+		WithFakeClient(
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-				fClient := &FakeClient{
-					Client: run.FakeClient,
-				}
-				fClient.
+				run.FakeClient.
 					WithUpdateFunction(run.Container.ClientObject(),
 						func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 							return errors.New("fake error updating secret")
 						},
 					)
-				run.FakeClient = fClient
 			},
 		).
 		WithCheck(
