@@ -50,6 +50,9 @@ type ScenarioRun[K client.Object] struct {
 	// FakeClient is a fake client that can be used to mock certain calls.
 	fakeClient *FakeClient
 
+	// Reconciler is a reconciler that is used to reconcile the main resource.
+	reconciler reconcile.TypedReconciler[reconcile.Request]
+
 	// Container is a container that holds the main resource created during hydration.
 	container *ObjectContainer[K]
 
@@ -76,6 +79,10 @@ func (r *ScenarioRun[K]) FakeClient() *FakeClient {
 	return r.fakeClient
 }
 
+func (r *ScenarioRun[K]) Reconciler() reconcile.TypedReconciler[reconcile.Request] {
+	return r.reconciler
+}
+
 func (r *ScenarioRun[K]) SetFakeClient(fakeClient *FakeClient) {
 	r.fakeClient = fakeClient
 }
@@ -98,4 +105,12 @@ func (r *ScenarioRun[K]) ReconcileResult() reconcile.Result {
 
 func (r *ScenarioRun[K]) ReconcileError() error {
 	return r.reconcileError
+}
+
+// Reconcile is a function that reconciles the main resource.
+// It stores the result and error in the run.
+func (r *ScenarioRun[K]) Reconcile() {
+	r.reconcileResult, r.reconcileError = r.reconciler.Reconcile(r.ctx, reconcile.Request{
+		NamespacedName: r.container.NamespacedName(),
+	})
 }

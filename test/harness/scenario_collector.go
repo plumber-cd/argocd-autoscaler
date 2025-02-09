@@ -143,14 +143,10 @@ func (c *ScenarioCollector[K, R]) All() []ScenarioContext[K] {
 					fn(run)
 				}
 				By("Creating reconciler")
-				reconciler := c.reconcilerFn(run.fakeClient)
-				Expect(reconciler).NotTo(BeNil())
+				run.reconciler = c.reconcilerFn(run.fakeClient)
+				Expect(run.reconciler).NotTo(BeNil())
 				By("Reconciling")
-				result, err := reconciler.Reconcile(run.ctx, reconcile.Request{
-					NamespacedName: run.container.NamespacedName(),
-				})
-				run.reconcileResult = result
-				run.reconcileError = err
+				run.Reconcile()
 				By("Checking " + check.checkName)
 				check.checkFn(run)
 				// By("Simulating error")
