@@ -283,6 +283,49 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 					Commit(collector.Collect)
 			},
 		).
+		Hydrate(
+			"failing to update secrets",
+			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+				secretsListOptions := &client.ListOptions{
+					Namespace: run.Namespace().ObjectKey().Name,
+					LabelSelector: labels.SelectorFromSet(
+						run.Container().Object().Spec.LabelSelector.MatchLabels,
+					),
+				}
+				shardSecrets := &corev1.SecretList{}
+				Expect(run.Client().List(ctx, shardSecrets, secretsListOptions)).To(Succeed())
+				for _, secret := range shardSecrets.Items {
+					container := NewObjectContainer(
+						run,
+						secret.DeepCopy(),
+					).Get()
+					run.FakeClient().WithUpdateFunction(container, func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return errors.New("fake error updating secret")
+					})
+				}
+			},
+		).
+		BranchFailureToUpdateStatusCheck(collector.Collect).
+		WithCheck(
+			"handle errors",
+			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+				Expect(run.ReconcileError()).To(HaveOccurred())
+				Expect(run.ReconcileError().Error()).To(Equal("fake error updating secret"))
+				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+				By("Checking ready condition")
+				readyCondition := meta.FindStatusCondition(
+					run.Container().Get().Object().Status.Conditions,
+					StatusTypeReady,
+				)
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+				Expect(readyCondition.Reason).To(Equal("FailedToUpdateSecret"))
+				Expect(readyCondition.Message).To(Equal("fake error updating secret"))
+			},
+		).
+		Commit(collector.Collect).
+		RemoveLastHydration().
 		WithCheck(
 			"successfully update shards on secrets",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {

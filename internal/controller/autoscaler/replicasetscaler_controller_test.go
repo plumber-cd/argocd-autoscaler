@@ -467,6 +467,47 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 			"default mode",
 			func(branch *Scenario[*autoscalerv1alpha1.ReplicaSetScaler]) {
 				branch.
+					Hydrate(
+						"failing to update shard manager",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							shardManager := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.SecretTypeClusterShardManager{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ShardManagerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							run.FakeClient().WithUpdateFunction(
+								shardManager,
+								func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+									return errors.New("fake failure to update shard manager")
+								},
+							)
+						},
+					).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"failing to update shard manager",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).To(HaveOccurred())
+							Expect(run.ReconcileError().Error()).To(ContainSubstring("fake failure to update shard manager"))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("ErrorUpdatingShardManager"))
+						},
+					).
+					Commit(collector.Collect).
+					RemoveLastHydration().
 					BranchFailureToUpdateStatusCheck(collector.Collect).
 					WithCheck(
 						"update shard manager with the expected replicas",
@@ -868,6 +909,47 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 							sampleSTS.StatusUpdate()
 						},
 					).
+					Hydrate(
+						"failing to update shard manager",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							shardManager := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.SecretTypeClusterShardManager{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ShardManagerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							run.FakeClient().WithUpdateFunction(
+								shardManager,
+								func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+									return errors.New("fake failure to update shard manager")
+								},
+							)
+						},
+					).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"failing to update shard manager",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).To(HaveOccurred())
+							Expect(run.ReconcileError().Error()).To(ContainSubstring("fake failure to update shard manager"))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("ErrorUpdatingShardManager"))
+						},
+					).
+					Commit(collector.Collect).
+					RemoveLastHydration().
 					BranchFailureToUpdateStatusCheck(collector.Collect).
 					WithCheck(
 						"update shard manager with the expected replicas",

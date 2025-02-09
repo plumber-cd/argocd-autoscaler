@@ -336,7 +336,15 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 				Expect(run.Container().Object().Status.Replicas).To(Equal(samplePartition.Object().Status.Replicas))
 			},
 		).
-		Commit(collector.Collect)
+		Commit(collector.Collect).
+		Hydrate(
+			"with one min sample requirement",
+			func(run *ScenarioRun[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
+				run.Container().Object().Spec.MinimumSampleSize = 1
+				run.Container().Update()
+			},
+		).
+		BranchFailureToUpdateStatusCheck(collector.Collect)
 
 	BeforeEach(func() {
 		scenarioRun = collector.NewRun(ctx, k8sClient)
