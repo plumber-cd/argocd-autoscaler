@@ -314,7 +314,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		).
 		BranchFailureToUpdateStatusCheck(collector.Collect).
 		WithCheck(
-			"normalize successfully",
+			"handle errors",
 			func(run *ScenarioRun[*autoscalerv1alpha1.RobustScalingNormalizer]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
