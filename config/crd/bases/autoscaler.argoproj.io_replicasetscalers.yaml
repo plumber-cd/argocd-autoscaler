@@ -137,7 +137,6 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
             required:
-            - mode
             - partitionProviderRef
             - replicaSetControllerRef
             - shardManagerRef

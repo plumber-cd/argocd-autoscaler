@@ -47,7 +47,6 @@ type ReplicaSetScalerSpec struct {
 	common.ScalerSpec `json:",inline"`
 
 	// Mode is the mode of the ReplicaSetScaler
-	// +kubebuilder:validation:Required
 	Mode *ReplicaSetScalerSpecModes `json:"mode,omitempty"`
 }
 

@@ -16,770 +16,1106 @@ limitations under the License.
 
 package autoscaler
 
-// import (
-// 	"context"
-// 	"errors"
-// 	"time"
-//
-// 	. "github.com/onsi/ginkgo/v2"
-// 	. "github.com/onsi/gomega"
-// 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
-// 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
-// 	"sigs.k8s.io/controller-runtime/pkg/client"
-// 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-//
-// 	appsv1 "k8s.io/api/apps/v1"
-// 	corev1 "k8s.io/api/core/v1"
-// 	"k8s.io/apimachinery/pkg/api/meta"
-// 	"k8s.io/apimachinery/pkg/api/resource"
-// 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-// 	"k8s.io/utils/ptr"
-// )
-//
-// var _ = Describe("ReplicaSetScaler Controller", func() {
-// 	Context("When reconciling a resource", func() {
-// 		ctx := context.Background()
-//
-// 		var sampleNamespace *objectContainer[*corev1.Namespace]
-//
-// 		var samplePartition *objectContainer[*autoscalerv1alpha1.LongestProcessingTimePartition]
-// 		var samplePartitionNotReady *objectContainer[*autoscalerv1alpha1.LongestProcessingTimePartition]
-// 		var samplePartitionReady *objectContainer[*autoscalerv1alpha1.LongestProcessingTimePartition]
-//
-// 		var sampleShardManager *objectContainer[*autoscalerv1alpha1.SecretTypeClusterShardManager]
-// 		var sampleShardManagerNotReady *objectContainer[*autoscalerv1alpha1.SecretTypeClusterShardManager]
-// 		var sampleShardManagerReady *objectContainer[*autoscalerv1alpha1.SecretTypeClusterShardManager]
-//
-// 		var sampleReplicaSetController *objectContainer[*appsv1.StatefulSet]
-//
-// 		var sampleScaler *objectContainer[*autoscalerv1alpha1.ReplicaSetScaler]
-// 		var sampleScalerMalformedWithMultipleModes *objectContainer[*autoscalerv1alpha1.ReplicaSetScaler]
-// 		var sampleScalerUsingNotReadyPartitionProvider *objectContainer[*autoscalerv1alpha1.ReplicaSetScaler]
-// 		var sampleScalerUsingNotReadyShardManager *objectContainer[*autoscalerv1alpha1.ReplicaSetScaler]
-// 		var sampleScalerMalformedWithUnsupportedReplicaSetController *objectContainer[*autoscalerv1alpha1.ReplicaSetScaler]
-// 		var sampleScalerReady *objectContainer[*autoscalerv1alpha1.ReplicaSetScaler]
-//
-// 		BeforeEach(func() {
-// 			By("Creating resources")
-//
-// 			sampleNamespace = newNamespaceWithRandomName()
-// 			Expect(k8sClient.create(ctx, sampleNamespace.Generic())).To(Succeed())
-// 			Expect(k8sClient.get(ctx, sampleNamespace.Generic())).To(Succeed())
-//
-// 			samplePartition = NewObjectContainer(
-// 				&autoscalerv1alpha1.LongestProcessingTimePartition{
-// 					ObjectMeta: metav1.ObjectMeta{
-// 						Name:      "sample-partition",
-// 						Namespace: sampleNamespace.ObjectKey.Name,
-// 					},
-// 					Spec: autoscalerv1alpha1.LongestProcessingTimePartitionSpec{
-// 						PartitionerSpec: common.PartitionerSpec{
-// 							LoadIndexProviderRef: &corev1.TypedLocalObjectReference{
-// 								Kind: "N/A",
-// 								Name: "N/A",
-// 							},
-// 						},
-// 					},
-// 				},
-// 				func(container *objectContainer[*autoscalerv1alpha1.LongestProcessingTimePartition]) {
-// 					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 				},
-// 			)
-//
-// 			samplePartitionNotReady = NewObjectContainer(
-// 				&autoscalerv1alpha1.LongestProcessingTimePartition{
-// 					ObjectMeta: metav1.ObjectMeta{
-// 						Name:      "sample-partition-not-ready",
-// 						Namespace: sampleNamespace.ObjectKey.Name,
-// 					},
-// 					Spec: *samplePartition.Object.Spec.DeepCopy(),
-// 				},
-// 				func(container *objectContainer[*autoscalerv1alpha1.LongestProcessingTimePartition]) {
-// 					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 					meta.SetStatusCondition(
-// 						&container.Object.Status.Conditions,
-// 						metav1.Condition{
-// 							Type:    StatusTypeReady,
-// 							Status:  metav1.ConditionFalse,
-// 							Reason:  "NotReadyForTest",
-// 							Message: "Purposefully not ready for test",
-// 						},
-// 					)
-// 					Expect(k8sClient.statusUpdate(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 				},
-// 			)
-//
-// 			samplePartitionReady = NewObjectContainer(
-// 				&autoscalerv1alpha1.LongestProcessingTimePartition{
-// 					ObjectMeta: metav1.ObjectMeta{
-// 						Name:      "sample-partition-ready",
-// 						Namespace: sampleNamespace.ObjectKey.Name,
-// 					},
-// 					Spec: *samplePartition.Object.Spec.DeepCopy(),
-// 				},
-// 				func(container *objectContainer[*autoscalerv1alpha1.LongestProcessingTimePartition]) {
-// 					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 					meta.SetStatusCondition(
-// 						&container.Object.Status.Conditions,
-// 						metav1.Condition{
-// 							Type:   StatusTypeReady,
-// 							Status: metav1.ConditionTrue,
-// 							Reason: StatusTypeReady,
-// 						},
-// 					)
-// 					Expect(k8sClient.statusUpdate(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 				},
-// 			)
-//
-// 			sampleShardManager = NewObjectContainer(
-// 				&autoscalerv1alpha1.SecretTypeClusterShardManager{
-// 					ObjectMeta: metav1.ObjectMeta{
-// 						Name:      "sample-shard-manager",
-// 						Namespace: sampleNamespace.ObjectKey.Name,
-// 					},
-// 				},
-// 				func(container *objectContainer[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-// 					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 				},
-// 			)
-//
-// 			sampleShardManagerNotReady = NewObjectContainer(
-// 				&autoscalerv1alpha1.SecretTypeClusterShardManager{
-// 					ObjectMeta: metav1.ObjectMeta{
-// 						Name:      "sample-shard-manager-not-ready",
-// 						Namespace: sampleNamespace.ObjectKey.Name,
-// 					},
-// 					Spec: *sampleShardManager.Object.Spec.DeepCopy(),
-// 				},
-// 				func(container *objectContainer[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-// 					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 					meta.SetStatusCondition(
-// 						&container.Object.Status.Conditions,
-// 						metav1.Condition{
-// 							Type:    StatusTypeReady,
-// 							Status:  metav1.ConditionFalse,
-// 							Reason:  "NotReadyForTest",
-// 							Message: "Purposefully not ready for test",
-// 						},
-// 					)
-// 					Expect(k8sClient.statusUpdate(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 				},
-// 			)
-//
-// 			sampleShardManagerReady = NewObjectContainer(
-// 				&autoscalerv1alpha1.SecretTypeClusterShardManager{
-// 					ObjectMeta: metav1.ObjectMeta{
-// 						Name:      "sample-shard-manager-ready",
-// 						Namespace: sampleNamespace.ObjectKey.Name,
-// 					},
-// 					Spec: *sampleShardManager.Object.Spec.DeepCopy(),
-// 				},
-// 				func(container *objectContainer[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-// 					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 					meta.SetStatusCondition(
-// 						&container.Object.Status.Conditions,
-// 						metav1.Condition{
-// 							Type:   StatusTypeReady,
-// 							Status: metav1.ConditionTrue,
-// 							Reason: StatusTypeReady,
-// 						},
-// 					)
-// 					Expect(k8sClient.statusUpdate(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 				},
-// 			)
-//
-// 			sampleReplicaSetController = NewObjectContainer(
-// 				&appsv1.StatefulSet{
-// 					ObjectMeta: metav1.ObjectMeta{
-// 						Name:      "sample-sts",
-// 						Namespace: sampleNamespace.ObjectKey.Name,
-// 					},
-// 					Spec: appsv1.StatefulSetSpec{
-// 						Replicas: ptr.To(int32(1)),
-// 						Selector: &metav1.LabelSelector{
-// 							MatchLabels: map[string]string{
-// 								"app": "sample-sts",
-// 							},
-// 						},
-// 						Template: corev1.PodTemplateSpec{
-// 							ObjectMeta: metav1.ObjectMeta{
-// 								Labels: map[string]string{
-// 									"app": "sample-sts",
-// 								},
-// 							},
-// 							Spec: corev1.PodSpec{
-// 								Containers: []corev1.Container{
-// 									{
-// 										Name: "argocd-application-controller",
-// 										Env: []corev1.EnvVar{
-// 											{
-// 												Name:  "ARGOCD_CONTROLLER_REPLICAS",
-// 												Value: "1",
-// 											},
-// 										},
-// 									},
-// 								},
-// 							},
-// 						},
-// 					},
-// 				},
-// 				func(container *objectContainer[*appsv1.StatefulSet]) {
-// 					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 				},
-// 			)
-//
-// 			sampleScaler = NewObjectContainer(
-// 				&autoscalerv1alpha1.ReplicaSetScaler{
-// 					ObjectMeta: metav1.ObjectMeta{
-// 						Name:      "sample-scaler",
-// 						Namespace: sampleNamespace.ObjectKey.Name,
-// 					},
-// 					Spec: autoscalerv1alpha1.ReplicaSetScalerSpec{
-// 						ScalerSpec: common.ScalerSpec{
-// 							PartitionProviderRef: &corev1.TypedLocalObjectReference{
-// 								APIGroup: ptr.To("autoscaler.argoproj.io"),
-// 								Kind:     "LongestProcessingTimePartition",
-// 								Name:     samplePartition.Object.Name,
-// 							},
-// 							ShardManagerRef: &corev1.TypedLocalObjectReference{
-// 								APIGroup: ptr.To("autoscaler.argoproj.io"),
-// 								Kind:     "SecretTypeClusterShardManager",
-// 								Name:     sampleShardManager.Object.Name,
-// 							},
-// 							ReplicaSetControllerRef: &corev1.TypedLocalObjectReference{
-// 								APIGroup: ptr.To("apps"),
-// 								Kind:     "StatefulSet",
-// 								Name:     sampleReplicaSetController.Object.Name,
-// 							},
-// 						},
-// 						Mode: &autoscalerv1alpha1.ReplicaSetScalerSpecModes{
-// 							Default: &autoscalerv1alpha1.ReplicaSetScalerSpecModeDefault{},
-// 						},
-// 					},
-// 				},
-// 				func(container *objectContainer[*autoscalerv1alpha1.ReplicaSetScaler]) {
-// 					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 				},
-// 			)
-//
-// 			sampleScalerMalformedWithMultipleModes = NewObjectContainer(
-// 				&autoscalerv1alpha1.ReplicaSetScaler{
-// 					ObjectMeta: metav1.ObjectMeta{
-// 						Name:      "sample-scaler-malformed-with-multiple-modes",
-// 						Namespace: sampleNamespace.ObjectKey.Name,
-// 					},
-// 					Spec: *sampleScaler.Object.Spec.DeepCopy(),
-// 				},
-// 				func(container *objectContainer[*autoscalerv1alpha1.ReplicaSetScaler]) {
-// 					container.Object.Spec.Mode.X0Y = &autoscalerv1alpha1.ReplicaSetScalerSpecModeX0Y{}
-// 					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 				},
-// 			)
-//
-// 			sampleScalerUsingNotReadyPartitionProvider = NewObjectContainer(
-// 				&autoscalerv1alpha1.ReplicaSetScaler{
-// 					ObjectMeta: metav1.ObjectMeta{
-// 						Name:      "sample-scaler-using-not-ready-partition-provider",
-// 						Namespace: sampleNamespace.ObjectKey.Name,
-// 					},
-// 					Spec: *sampleScaler.Object.Spec.DeepCopy(),
-// 				},
-// 				func(container *objectContainer[*autoscalerv1alpha1.ReplicaSetScaler]) {
-// 					container.Object.Spec.PartitionProviderRef.Name = samplePartitionNotReady.Object.Name
-// 					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 				},
-// 			)
-//
-// 			sampleScalerUsingNotReadyShardManager = NewObjectContainer(
-// 				&autoscalerv1alpha1.ReplicaSetScaler{
-// 					ObjectMeta: metav1.ObjectMeta{
-// 						Name:      "sample-scaler-using-not-ready-shard-manager",
-// 						Namespace: sampleNamespace.ObjectKey.Name,
-// 					},
-// 					Spec: *sampleScaler.Object.Spec.DeepCopy(),
-// 				},
-// 				func(container *objectContainer[*autoscalerv1alpha1.ReplicaSetScaler]) {
-// 					container.Object.Spec.PartitionProviderRef.Name = samplePartitionReady.Object.Name
-// 					container.Object.Spec.ShardManagerRef.Name = sampleShardManagerNotReady.Object.Name
-// 					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 				},
-// 			)
-//
-// 			sampleScalerMalformedWithUnsupportedReplicaSetController = NewObjectContainer(
-// 				&autoscalerv1alpha1.ReplicaSetScaler{
-// 					ObjectMeta: metav1.ObjectMeta{
-// 						Name:      "sample-scaler-malformed-using-unsupported-replica-set-controller",
-// 						Namespace: sampleNamespace.ObjectKey.Name,
-// 					},
-// 					Spec: *sampleScaler.Object.Spec.DeepCopy(),
-// 				},
-// 				func(container *objectContainer[*autoscalerv1alpha1.ReplicaSetScaler]) {
-// 					container.Object.Spec.PartitionProviderRef.Name = samplePartitionReady.Object.Name
-// 					container.Object.Spec.ShardManagerRef.Name = sampleShardManagerReady.Object.Name
-// 					container.Object.Spec.ReplicaSetControllerRef.Kind = "Deployment"
-// 					container.Object.Spec.ReplicaSetControllerRef.Name = "does-not-matter"
-// 					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 				},
-// 			)
-//
-// 			sampleScalerReady = NewObjectContainer(
-// 				&autoscalerv1alpha1.ReplicaSetScaler{
-// 					ObjectMeta: metav1.ObjectMeta{
-// 						Name:      "sample-scaler-ready",
-// 						Namespace: sampleNamespace.ObjectKey.Name,
-// 					},
-// 					Spec: *sampleScaler.Object.Spec.DeepCopy(),
-// 				},
-// 				func(container *objectContainer[*autoscalerv1alpha1.ReplicaSetScaler]) {
-// 					container.Object.Spec.PartitionProviderRef.Name = samplePartitionReady.Object.Name
-// 					container.Object.Spec.ShardManagerRef.Name = sampleShardManagerReady.Object.Name
-// 					Expect(k8sClient.create(ctx, container.Generic())).To(Succeed())
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 				},
-// 			)
-// 		})
-//
-// 		AfterEach(func() {
-// 			err := k8sClient.get(ctx, sampleNamespace.Generic())
-// 			Expect(err).NotTo(HaveOccurred())
-//
-// 			By("Cleanup the test namespace")
-// 			Expect(k8sClient.delete(ctx, sampleNamespace.Generic())).To(Succeed())
-// 			sampleNamespace = nil
-// 		})
-//
-// 		It("should successfully exit when the resource didn't exist", func() {
-// 			By("Reconciling non existing resource")
-// 			CheckExitingOnNonExistingResource(func() *ReplicaSetScalerReconciler {
-// 				return &ReplicaSetScalerReconciler{
-// 					Client: k8sClient,
-// 					Scheme: k8sClient.Scheme(),
-// 				}
-// 			})
-// 		})
-//
-// 		It("should handle error getting resource", func() {
-// 			NewScenario(
-// 				ctx,
-// 				sampleScaler,
-// 				func(fClient client.Client) *ReplicaSetScalerReconciler {
-// 					return &ReplicaSetScalerReconciler{
-// 						Client: fClient,
-// 						Scheme: fClient.Scheme(),
-// 					}
-// 				},
-// 			).WithCheck(
-// 				"Failing to get resource",
-// 				ClientThatFailsToGetResource(nil),
-// 				CheckFailureToGetResource,
-// 			).Check()
-// 		})
-//
-// 		It("should fail on malformed duplicate modes", func() {
-// 			By("Preparing reconciler")
-//
-// 			container := sampleScalerMalformedWithMultipleModes
-//
-// 			controllerReconciler := &ReplicaSetScalerReconciler{
-// 				Client: k8sClient,
-// 				Scheme: k8sClient.Scheme(),
-// 			}
-//
-// 			By("Reconciling with the expectation to fails to update the status")
-// 			CheckFailureToUpdateStatus(
-// 				k8sClient,
-// 				sampleScalerMalformedWithMultipleModes,
-// 				func(fClient *fakeClient) *ReplicaSetScalerReconciler {
-// 					return &ReplicaSetScalerReconciler{
-// 						Client: fClient,
-// 						Scheme: fClient.Scheme(),
-// 					}
-// 				},
-// 			)
-//
-// 			By("Reconciling")
-// 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: container.NamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-// 			Expect(result.Requeue).To(BeFalse())
-//
-// 			By("Checking conditions")
-// 			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 			readyCondition := meta.FindStatusCondition(
-// 				container.Object.Status.Conditions,
-// 				StatusTypeReady,
-// 			)
-// 			Expect(readyCondition).NotTo(BeNil())
-// 			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
-// 			Expect(readyCondition.Reason).To(Equal("ErrorResourceMalformedDuplicateModes"))
-// 			Expect(readyCondition.Message).To(ContainSubstring("Scaler spec is invalid - only one mode can be set"))
-// 		})
-//
-// 		It("should handle errors when partition provider lookup fails", func() {
-// 			By("Preparing reconciler")
-//
-// 			container := sampleScaler
-//
-// 			fClient := &fakeClient{
-// 				Client: k8sClient,
-// 			}
-// 			fClient.
-// 				WithGetFunction(samplePartition.Generic(),
-// 					func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-// 						return errors.New("fake error getting partition provider")
-// 					},
-// 				)
-//
-// 			controllerReconciler := &ReplicaSetScalerReconciler{
-// 				Client: fClient,
-// 				Scheme: fClient.Scheme(),
-// 			}
-//
-// 			By("Reconciling with the expectation to fails to update the status")
-// 			CheckFailureToUpdateStatus(
-// 				fClient,
-// 				sampleScaler,
-// 				func(fClient *fakeClient) *ReplicaSetScalerReconciler {
-// 					return &ReplicaSetScalerReconciler{
-// 						Client: fClient,
-// 						Scheme: fClient.Scheme(),
-// 					}
-// 				},
-// 			)
-//
-// 			By("Reconciling")
-// 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: container.NamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-// 			Expect(result.Requeue).To(BeFalse())
-//
-// 			By("Checking conditions")
-// 			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 			readyCondition := meta.FindStatusCondition(
-// 				container.Object.Status.Conditions,
-// 				StatusTypeReady,
-// 			)
-// 			Expect(readyCondition).NotTo(BeNil())
-// 			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
-// 			Expect(readyCondition.Reason).To(Equal("ErrorFindingPartitionProvider"))
-// 			Expect(readyCondition.Message).To(ContainSubstring("fake error getting partition provider"))
-// 		})
-//
-// 		It("should exit if partition provider is not ready", func() {
-// 			By("Preparing reconciler")
-//
-// 			container := sampleScalerUsingNotReadyPartitionProvider
-//
-// 			controllerReconciler := &ReplicaSetScalerReconciler{
-// 				Client: k8sClient,
-// 				Scheme: k8sClient.Scheme(),
-// 			}
-//
-// 			By("Reconciling resource with expectation to fail updating status")
-// 			CheckFailureToUpdateStatus(
-// 				k8sClient,
-// 				container,
-// 				func(fClient *fakeClient) *ReplicaSetScalerReconciler {
-// 					return &ReplicaSetScalerReconciler{
-// 						Client: fClient,
-// 						Scheme: fClient.Scheme(),
-// 					}
-// 				},
-// 			)
-//
-// 			By("Reconciling resource")
-// 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: container.NamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-// 			Expect(result.Requeue).To(BeFalse())
-//
-// 			By("Checking conditions")
-// 			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 			readyCondition := meta.FindStatusCondition(
-// 				container.Object.Status.Conditions,
-// 				StatusTypeReady,
-// 			)
-// 			Expect(readyCondition).NotTo(BeNil())
-// 			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
-// 			Expect(readyCondition.Reason).To(Equal("PartitionProviderNotReady"))
-// 			Expect(readyCondition.Message).To(ContainSubstring("Check the status of a partition provider"))
-// 		})
-//
-// 		It("should handle errors when shard manager lookup fails", func() {
-// 			By("Preparing reconciler")
-//
-// 			container := sampleScalerUsingNotReadyShardManager
-//
-// 			fClient := &fakeClient{
-// 				Client: k8sClient,
-// 			}
-// 			fClient.
-// 				WithGetFunction(sampleShardManagerNotReady.Generic(),
-// 					func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-// 						return errors.New("fake error getting shard manager")
-// 					},
-// 				)
-//
-// 			controllerReconciler := &ReplicaSetScalerReconciler{
-// 				Client: fClient,
-// 				Scheme: fClient.Scheme(),
-// 			}
-//
-// 			By("Reconciling with the expectation to fails to update the status")
-// 			CheckFailureToUpdateStatus(
-// 				fClient,
-// 				sampleScaler,
-// 				func(fClient *fakeClient) *ReplicaSetScalerReconciler {
-// 					return &ReplicaSetScalerReconciler{
-// 						Client: fClient,
-// 						Scheme: fClient.Scheme(),
-// 					}
-// 				},
-// 			)
-//
-// 			By("Reconciling")
-// 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: container.NamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-// 			Expect(result.Requeue).To(BeFalse())
-//
-// 			By("Checking conditions")
-// 			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 			readyCondition := meta.FindStatusCondition(
-// 				container.Object.Status.Conditions,
-// 				StatusTypeReady,
-// 			)
-// 			Expect(readyCondition).NotTo(BeNil())
-// 			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
-// 			Expect(readyCondition.Reason).To(Equal("ErrorFindingShardManager"))
-// 			Expect(readyCondition.Message).To(ContainSubstring("fake error getting shard manager"))
-// 		})
-//
-// 		It("should exit if shard manager is not ready", func() {
-// 			By("Preparing reconciler")
-//
-// 			container := sampleScalerUsingNotReadyShardManager
-//
-// 			controllerReconciler := &ReplicaSetScalerReconciler{
-// 				Client: k8sClient,
-// 				Scheme: k8sClient.Scheme(),
-// 			}
-//
-// 			By("Reconciling resource with expectation to fail updating status")
-// 			CheckFailureToUpdateStatus(
-// 				k8sClient,
-// 				container,
-// 				func(fClient *fakeClient) *ReplicaSetScalerReconciler {
-// 					return &ReplicaSetScalerReconciler{
-// 						Client: fClient,
-// 						Scheme: fClient.Scheme(),
-// 					}
-// 				},
-// 			)
-//
-// 			By("Reconciling resource")
-// 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: container.NamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-// 			Expect(result.Requeue).To(BeFalse())
-//
-// 			By("Checking conditions")
-// 			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 			readyCondition := meta.FindStatusCondition(
-// 				container.Object.Status.Conditions,
-// 				StatusTypeReady,
-// 			)
-// 			Expect(readyCondition).NotTo(BeNil())
-// 			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
-// 			Expect(readyCondition.Reason).To(Equal("ShardManagerNotReady"))
-// 			Expect(readyCondition.Message).To(ContainSubstring("Check the status of a shard manager"))
-// 		})
-//
-// 		It("should handle errors on unsupported replica set controller", func() {
-// 			By("Preparing reconciler")
-//
-// 			container := sampleScalerMalformedWithUnsupportedReplicaSetController
-//
-// 			controllerReconciler := &ReplicaSetScalerReconciler{
-// 				Client: k8sClient,
-// 				Scheme: k8sClient.Scheme(),
-// 			}
-//
-// 			By("Reconciling with the expectation to fails to update the status")
-// 			CheckFailureToUpdateStatus(
-// 				k8sClient,
-// 				sampleScalerMalformedWithUnsupportedReplicaSetController,
-// 				func(fClient *fakeClient) *ReplicaSetScalerReconciler {
-// 					return &ReplicaSetScalerReconciler{
-// 						Client: fClient,
-// 						Scheme: fClient.Scheme(),
-// 					}
-// 				},
-// 			)
-//
-// 			By("Reconciling")
-// 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: container.NamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-// 			Expect(result.Requeue).To(BeFalse())
-//
-// 			By("Checking conditions")
-// 			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 			readyCondition := meta.FindStatusCondition(
-// 				container.Object.Status.Conditions,
-// 				StatusTypeReady,
-// 			)
-// 			Expect(readyCondition).NotTo(BeNil())
-// 			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
-// 			Expect(readyCondition.Reason).To(Equal("UnsupportedReplicaSetControllerKind"))
-// 			Expect(readyCondition.Message).To(ContainSubstring("Check the ref for a replica set controller"))
-// 		})
-//
-// 		It("should handle errors when sts lookup fails", func() {
-// 			By("Preparing reconciler")
-//
-// 			container := sampleScalerReady
-//
-// 			fClient := &fakeClient{
-// 				Client: k8sClient,
-// 			}
-// 			fClient.
-// 				WithGetFunction(sampleReplicaSetController.Generic(),
-// 					func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-// 						return errors.New("fake error getting sts")
-// 					},
-// 				)
-//
-// 			controllerReconciler := &ReplicaSetScalerReconciler{
-// 				Client: fClient,
-// 				Scheme: fClient.Scheme(),
-// 			}
-//
-// 			By("Reconciling with the expectation to fails to update the status")
-// 			CheckFailureToUpdateStatus(
-// 				fClient,
-// 				sampleScaler,
-// 				func(fClient *fakeClient) *ReplicaSetScalerReconciler {
-// 					return &ReplicaSetScalerReconciler{
-// 						Client: fClient,
-// 						Scheme: fClient.Scheme(),
-// 					}
-// 				},
-// 			)
-//
-// 			By("Reconciling")
-// 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: container.NamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-// 			Expect(result.Requeue).To(BeFalse())
-//
-// 			By("Checking conditions")
-// 			Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 			readyCondition := meta.FindStatusCondition(
-// 				container.Object.Status.Conditions,
-// 				StatusTypeReady,
-// 			)
-// 			Expect(readyCondition).NotTo(BeNil())
-// 			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
-// 			Expect(readyCondition.Reason).To(Equal("ErrorFindingStatefulSet"))
-// 			Expect(readyCondition.Message).To(ContainSubstring("fake error getting sts"))
-// 		})
-//
-// 		It("should reconcile in default mode", func() {
-// 			By("Preparing")
-//
-// 			container := sampleScalerReady
-//
-// 			expecterReplicas := common.ReplicaList{
-// 				{
-// 					ID: "0",
-// 					LoadIndexes: []common.LoadIndex{
-// 						{
-// 							Shard: common.Shard{
-// 								UID:  "shard-uid-0",
-// 								ID:   "shard-0",
-// 								Data: map[string]string{"key": "value"},
-// 							},
-// 							Value:        resource.MustParse("1"),
-// 							DisplayValue: "1",
-// 						},
-// 					},
-// 					TotalLoad:             resource.MustParse("1"),
-// 					TotalLoadDisplayValue: "1",
-// 				},
-// 			}
-// 			samplePartitionReady.Object.Status.Replicas = expecterReplicas
-// 			Expect(k8sClient.statusUpdate(ctx, samplePartitionReady.Generic())).To(Succeed())
-// 			Expect(k8sClient.get(ctx, samplePartitionReady.Generic())).To(Succeed())
-//
-// 			By("Reconciling with the expectation to fails to update the status")
-// 			NewClientOperationCheck(
-// 				ctx,
-// 				container,
-// 				func(fClient client.Client) *ReplicaSetScalerReconciler {
-// 					return &ReplicaSetScalerReconciler{
-// 						Client: fClient,
-// 						Scheme: fClient.Scheme(),
-// 					}
-// 				},
-// 			).WithStatusUpdateFailureCheck(
-// 				ClientThatFailsToUpdateStatus(nil),
-// 				CheckFailureToUpdateStatus,
-// 			).WithCheck(
-// 				func(*objectContainer[client.Object]) client.Client {
-// 					return k8sClient
-// 				},
-// 				func(
-// 					container *objectContainer[*autoscalerv1alpha1.ReplicaSetScaler],
-// 					result reconcile.Result,
-// 					err error,
-// 				) {
-// 					Expect(err).NotTo(HaveOccurred())
-// 					Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-// 					Expect(result.Requeue).To(BeFalse())
-//
-// 					By("Checking conditions")
-// 					Expect(k8sClient.get(ctx, container.Generic())).To(Succeed())
-// 					readyCondition := meta.FindStatusCondition(
-// 						container.Object.Status.Conditions,
-// 						StatusTypeReady,
-// 					)
-// 					Expect(readyCondition).NotTo(BeNil())
-// 					Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
-// 					Expect(readyCondition.Reason).To(Equal("ErrorFindingStatefulSet"))
-// 					Expect(readyCondition.Message).To(ContainSubstring("fake error getting sts"))
-// 				},
-// 			).Check()
-// 		})
-// 	})
-// })
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	. "github.com/plumber-cd/argocd-autoscaler/test/harness"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
+
+	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
+	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
+)
+
+var _ = Describe("ReplicaSetScaler Controller", func() {
+	var scenarioRun GenericScenarioRun
+
+	var collector = NewScenarioCollector[*autoscalerv1alpha1.ReplicaSetScaler](
+		func(fClient client.Client) *ReplicaSetScalerReconciler {
+			return &ReplicaSetScalerReconciler{
+				Client: fClient,
+				Scheme: fClient.Scheme(),
+			}
+		},
+	)
+
+	NewScenarioTemplate(
+		"not existing resource",
+		func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+			sampleNormalizer := NewObjectContainer(
+				run,
+				&autoscalerv1alpha1.ReplicaSetScaler{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "not-existent",
+						Namespace: run.Namespace().ObjectKey().Name,
+					},
+				},
+			)
+			run.SetContainer(sampleNormalizer)
+		},
+	).
+		BranchResourceNotFoundCheck(collector.Collect).
+		BranchFailureToGetResourceCheck(collector.Collect)
+
+	NewScenarioTemplate(
+		"basic",
+		func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+			sampleNormalizer := NewObjectContainer(
+				run,
+				&autoscalerv1alpha1.ReplicaSetScaler{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-replica-set-scaler",
+						Namespace: run.Namespace().ObjectKey().Name,
+					},
+					Spec: autoscalerv1alpha1.ReplicaSetScalerSpec{
+						ScalerSpec: common.ScalerSpec{
+							PartitionProviderRef: &corev1.TypedLocalObjectReference{
+								Kind: "N/A",
+								Name: "N/A",
+							},
+							ShardManagerRef: &corev1.TypedLocalObjectReference{
+								Kind: "N/A",
+								Name: "N/A",
+							},
+							ReplicaSetControllerRef: &corev1.TypedLocalObjectReference{
+								Kind: "N/A",
+								Name: "N/A",
+							},
+						},
+					},
+				},
+			).Create()
+			run.SetContainer(sampleNormalizer)
+		},
+	).
+		Branch(
+			"malformed duplicate modes",
+			func(branch *Scenario[*autoscalerv1alpha1.ReplicaSetScaler]) {
+				branch.Hydrate(
+					"duplicate modes",
+					func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+						run.Container().Object().Spec.Mode = &autoscalerv1alpha1.ReplicaSetScalerSpecModes{
+							Default: &autoscalerv1alpha1.ReplicaSetScalerSpecModeDefault{},
+							X0Y:     &autoscalerv1alpha1.ReplicaSetScalerSpecModeX0Y{},
+						}
+						run.Container().Update()
+					},
+				).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"handle errors",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).NotTo(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("ErrorResourceMalformedDuplicateModes"))
+							Expect(readyCondition.Message).To(ContainSubstring("Scaler spec is invalid - only one mode can be set"))
+						},
+					).
+					Commit(collector.Collect)
+			},
+		).
+		BranchFailureToUpdateStatusCheck(collector.Collect).
+		WithCheck(
+			"handle error during partition lookup",
+			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+				Expect(run.ReconcileError()).NotTo(HaveOccurred())
+				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+				By("Checking conditions")
+				readyCondition := meta.FindStatusCondition(
+					run.Container().Get().Object().Status.Conditions,
+					StatusTypeReady,
+				)
+				Expect(readyCondition).NotTo(BeNil())
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+				Expect(readyCondition.Reason).To(Equal("ErrorFindingPartitionProvider"))
+				Expect(readyCondition.Message).To(ContainSubstring(`no matches for kind "N/A" in version ""`))
+			},
+		).
+		Commit(collector.Collect).
+		Hydrate(
+			"sample partition provider",
+			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+				samplePartition := NewObjectContainer(
+					run,
+					&autoscalerv1alpha1.LongestProcessingTimePartition{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "sample-longest-processing-time-partition",
+							Namespace: run.Namespace().ObjectKey().Name,
+						},
+						Spec: autoscalerv1alpha1.LongestProcessingTimePartitionSpec{
+							PartitionerSpec: common.PartitionerSpec{
+								LoadIndexProviderRef: &corev1.TypedLocalObjectReference{
+									Kind: "N/A",
+									Name: "N/A",
+								},
+							},
+						},
+					},
+				).Create()
+
+				run.Container().Get().Object().Spec.PartitionProviderRef = &corev1.TypedLocalObjectReference{
+					APIGroup: ptr.To(samplePartition.GroupVersionKind().Group),
+					Kind:     samplePartition.GroupVersionKind().Kind,
+					Name:     samplePartition.ObjectKey().Name,
+				}
+				run.Container().Update()
+			},
+		).
+		BranchFailureToUpdateStatusCheck(collector.Collect).
+		WithCheck(
+			"do nothing if partition provider is not ready",
+			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+				Expect(run.ReconcileError()).NotTo(HaveOccurred())
+				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+				By("Checking conditions")
+				readyCondition := meta.FindStatusCondition(
+					run.Container().Get().Object().Status.Conditions,
+					StatusTypeReady,
+				)
+				Expect(readyCondition).NotTo(BeNil())
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+				Expect(readyCondition.Reason).To(Equal("PartitionProviderNotReady"))
+				Expect(readyCondition.Message).To(ContainSubstring("Check the status of a partition provider"))
+			},
+		).
+		Commit(collector.Collect).
+		Hydrate(
+			"partition provider is ready",
+			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+				samplePartition := NewObjectContainer(
+					run,
+					&autoscalerv1alpha1.LongestProcessingTimePartition{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
+							Namespace: run.Namespace().ObjectKey().Name,
+						},
+					},
+				).Get()
+
+				samplePartition.Object().Status.Replicas = common.ReplicaList{
+					{
+						ID: "0",
+						LoadIndexes: []common.LoadIndex{
+							{
+								Shard: common.Shard{
+									UID:  types.UID("shard-0"),
+									ID:   "shard-0",
+									Data: map[string]string{"key": "value"},
+								},
+								Value:        resource.MustParse("1"),
+								DisplayValue: "1",
+							},
+						},
+						TotalLoad:             resource.MustParse("1"),
+						TotalLoadDisplayValue: "1",
+					},
+					{
+						ID: "1",
+						LoadIndexes: []common.LoadIndex{
+							{
+								Shard: common.Shard{
+									UID:  types.UID("shard-1"),
+									ID:   "shard-1",
+									Data: map[string]string{"key": "value"},
+								},
+								Value:        resource.MustParse("1"),
+								DisplayValue: "1",
+							},
+						},
+						TotalLoad:             resource.MustParse("1"),
+						TotalLoadDisplayValue: "1",
+					},
+					{
+						ID: "2",
+						LoadIndexes: []common.LoadIndex{
+							{
+								Shard: common.Shard{
+									UID:  types.UID("shard-2"),
+									ID:   "shard-2",
+									Data: map[string]string{"key": "value"},
+								},
+								Value:        resource.MustParse("1"),
+								DisplayValue: "1",
+							},
+						},
+						TotalLoad:             resource.MustParse("1"),
+						TotalLoadDisplayValue: "1",
+					},
+				}
+				meta.SetStatusCondition(
+					&samplePartition.Object().Status.Conditions,
+					metav1.Condition{
+						Type:   StatusTypeReady,
+						Status: metav1.ConditionTrue,
+						Reason: StatusTypeReady,
+					},
+				)
+				samplePartition.StatusUpdate()
+			},
+		).
+		BranchFailureToUpdateStatusCheck(collector.Collect).
+		WithCheck(
+			"handle error during shard manager lookup",
+			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+				Expect(run.ReconcileError()).NotTo(HaveOccurred())
+				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+				By("Checking conditions")
+				readyCondition := meta.FindStatusCondition(
+					run.Container().Get().Object().Status.Conditions,
+					StatusTypeReady,
+				)
+				Expect(readyCondition).NotTo(BeNil())
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+				Expect(readyCondition.Reason).To(Equal("ErrorFindingShardManager"))
+				Expect(readyCondition.Message).To(ContainSubstring(`no matches for kind "N/A" in version ""`))
+			},
+		).
+		Commit(collector.Collect).
+		Hydrate(
+			"sample shard manager",
+			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+				sampleShardManager := NewObjectContainer(
+					run,
+					&autoscalerv1alpha1.SecretTypeClusterShardManager{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "sample-secret-type-cluster-shard-manager",
+							Namespace: run.Namespace().ObjectKey().Name,
+						},
+					},
+				).Create()
+
+				run.Container().Get().Object().Spec.ShardManagerRef = &corev1.TypedLocalObjectReference{
+					APIGroup: ptr.To(sampleShardManager.GroupVersionKind().Group),
+					Kind:     sampleShardManager.GroupVersionKind().Kind,
+					Name:     sampleShardManager.ObjectKey().Name,
+				}
+				run.Container().Update()
+			},
+		).
+		BranchFailureToUpdateStatusCheck(collector.Collect).
+		WithCheck(
+			"do nothing if shard manager is not ready",
+			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+				Expect(run.ReconcileError()).NotTo(HaveOccurred())
+				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+				By("Checking conditions")
+				readyCondition := meta.FindStatusCondition(
+					run.Container().Get().Object().Status.Conditions,
+					StatusTypeReady,
+				)
+				Expect(readyCondition).NotTo(BeNil())
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+				Expect(readyCondition.Reason).To(Equal("ShardManagerNotReady"))
+				Expect(readyCondition.Message).To(ContainSubstring("Check the status of a shard manager"))
+			},
+		).
+		Commit(collector.Collect).
+		Hydrate(
+			"shard manager is ready",
+			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+				sampleShardManager := NewObjectContainer(
+					run,
+					&autoscalerv1alpha1.SecretTypeClusterShardManager{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      run.Container().Get().Object().Spec.ShardManagerRef.Name,
+							Namespace: run.Namespace().ObjectKey().Name,
+						},
+					},
+				).Get()
+
+				meta.SetStatusCondition(
+					&sampleShardManager.Object().Status.Conditions,
+					metav1.Condition{
+						Type:   StatusTypeReady,
+						Status: metav1.ConditionTrue,
+						Reason: StatusTypeReady,
+					},
+				)
+				sampleShardManager.StatusUpdate()
+			},
+		).
+		BranchFailureToUpdateStatusCheck(collector.Collect).
+		WithCheck(
+			"handle error due to unknown replica set controller",
+			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+				Expect(run.ReconcileError()).NotTo(HaveOccurred())
+				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+				By("Checking conditions")
+				readyCondition := meta.FindStatusCondition(
+					run.Container().Get().Object().Status.Conditions,
+					StatusTypeReady,
+				)
+				Expect(readyCondition).NotTo(BeNil())
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+				Expect(readyCondition.Reason).To(Equal("UnsupportedReplicaSetControllerKind"))
+				Expect(readyCondition.Message).To(ContainSubstring(`Check the ref for a replica set controller`))
+			},
+		).
+		Commit(collector.Collect).
+		Hydrate(
+			"replica set controller kind sts",
+			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+				run.Container().Get().Object().Spec.ReplicaSetControllerRef.APIGroup = ptr.To("apps")
+				run.Container().Get().Object().Spec.ReplicaSetControllerRef.Kind = "StatefulSet"
+				run.Container().Update()
+			},
+		).
+		BranchFailureToUpdateStatusCheck(collector.Collect).
+		WithCheck(
+			"handle error on failure to lookup replica set controller",
+			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+				Expect(run.ReconcileError()).NotTo(HaveOccurred())
+				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+				By("Checking conditions")
+				readyCondition := meta.FindStatusCondition(
+					run.Container().Get().Object().Status.Conditions,
+					StatusTypeReady,
+				)
+				Expect(readyCondition).NotTo(BeNil())
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+				Expect(readyCondition.Reason).To(Equal("ErrorFindingStatefulSet"))
+				Expect(readyCondition.Message).To(ContainSubstring(`no matches for kind "StatefulSet" in version ""`))
+			},
+		).
+		Commit(collector.Collect).
+		Hydrate(
+			"sample sts",
+			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+				sampleSTS := NewObjectContainer(
+					run,
+					&appsv1.StatefulSet{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "sample-sts",
+							Namespace: run.Namespace().ObjectKey().Name,
+						},
+						Spec: appsv1.StatefulSetSpec{
+							Replicas: ptr.To(int32(25)),
+							Selector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"app": "sample-sts",
+								},
+							},
+							Template: corev1.PodTemplateSpec{
+								ObjectMeta: metav1.ObjectMeta{
+									Labels: map[string]string{
+										"app": "sample-sts",
+									},
+								},
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{
+										{
+											Name: "argocd-application-controller",
+											Env: []corev1.EnvVar{
+												{
+													Name:  "ARGOCD_CONTROLLER_REPLICAS",
+													Value: "25",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				).Create()
+
+				run.Container().Get().Object().Spec.ReplicaSetControllerRef = &corev1.TypedLocalObjectReference{
+					APIGroup: ptr.To(sampleSTS.GroupVersionKind().Group),
+					Kind:     sampleSTS.GroupVersionKind().Kind,
+					Name:     sampleSTS.ObjectKey().Name,
+				}
+				run.Container().Update()
+
+				sampleSTS.Object().Status.Replicas = *sampleSTS.Object().Spec.Replicas
+				sampleSTS.StatusUpdate()
+			},
+		).
+		Branch(
+			"default mode",
+			func(branch *Scenario[*autoscalerv1alpha1.ReplicaSetScaler]) {
+				branch.
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"update shard manager with the expected replicas",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).NotTo(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("WaitingForShardManagerToApplyDesiredState"))
+						},
+					).
+					Commit(collector.Collect).
+					Hydrate(
+						"shard manager reconciled",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							samplePartition := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.LongestProcessingTimePartition{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							sampleShardManager := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.SecretTypeClusterShardManager{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ShardManagerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							sampleShardManager.Object().Status.Replicas = samplePartition.Object().Status.Replicas
+							sampleShardManager.StatusUpdate()
+						},
+					).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"begin RS controller scaling",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).NotTo(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("BeginningRSControllerScaling"))
+
+							By("Checking that we saved shard manager actual state")
+							sampleShardManager := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.SecretTypeClusterShardManager{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ShardManagerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							Expect(run.Container().Object().Status.Replicas).To(Equal(sampleShardManager.Object().Status.Replicas))
+						},
+					).
+					Commit(collector.Collect).
+					Hydrate(
+						"in RS controller scaling phase",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							sampleShardManager := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.SecretTypeClusterShardManager{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ShardManagerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							run.Container().Get().Object().Status.Replicas = sampleShardManager.Object().Status.Replicas
+							run.Container().StatusUpdate()
+						},
+					).
+					Hydrate(
+						"failure to update sts",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							sampleSTS := NewObjectContainer(
+								run,
+								&appsv1.StatefulSet{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ReplicaSetControllerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							run.FakeClient().WithUpdateFunction(
+								sampleSTS,
+								func(
+									ctx context.Context,
+									obj client.Object,
+									opts ...client.UpdateOption,
+								) error {
+									return errors.New("fake failure to update sts")
+								},
+							)
+						},
+					).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"handle errors",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).To(HaveOccurred())
+							Expect(run.ReconcileError().Error()).To(ContainSubstring("fake failure to update sts"))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("ErrorScaling"))
+						},
+					).
+					Commit(collector.Collect).
+					RemoveLastHydration().
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"apply STS scaling",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).ToNot(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("WaitingForRSControllerToScale"))
+
+							By("Checking STS")
+							samplePartition := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.LongestProcessingTimePartition{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							desiredReplicas := len(samplePartition.Object().Status.Replicas)
+							sampleSTS := NewObjectContainer(
+								run,
+								&appsv1.StatefulSet{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ReplicaSetControllerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							Expect(*sampleSTS.Object().Spec.Replicas).To(BeNumerically("==", desiredReplicas))
+							Expect(sampleSTS.Object().Spec.Template.Spec.Containers).To(HaveLen(1))
+							Expect(sampleSTS.Object().Spec.Template.Spec.Containers[0].Env).To(HaveLen(1))
+							Expect(sampleSTS.Object().Spec.Template.Spec.Containers[0].Env[0].Name).
+								To(Equal("ARGOCD_CONTROLLER_REPLICAS"))
+							Expect(sampleSTS.Object().Spec.Template.Spec.Containers[0].Env[0].Value).
+								To(Equal(fmt.Sprintf("%d", desiredReplicas)))
+						},
+					).
+					Commit(collector.Collect).
+					Hydrate(
+						"rollout restart is enabled",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							run.Container().Get().Object().Spec.Mode = &autoscalerv1alpha1.ReplicaSetScalerSpecModes{
+								Default: &autoscalerv1alpha1.ReplicaSetScalerSpecModeDefault{
+									RolloutRestart: ptr.To(true),
+								},
+							}
+							run.Container().Update()
+						},
+					).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"apply STS scaling and restart",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).ToNot(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("WaitingForRSControllerToScale"))
+
+							By("Checking STS")
+							samplePartition := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.LongestProcessingTimePartition{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							desiredReplicas := len(samplePartition.Object().Status.Replicas)
+							sampleSTS := NewObjectContainer(
+								run,
+								&appsv1.StatefulSet{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ReplicaSetControllerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							Expect(*sampleSTS.Object().Spec.Replicas).To(BeNumerically("==", desiredReplicas))
+							Expect(sampleSTS.Object().Spec.Template.Spec.Containers).To(HaveLen(1))
+							Expect(sampleSTS.Object().Spec.Template.Spec.Containers[0].Env).To(HaveLen(1))
+							Expect(sampleSTS.Object().Spec.Template.Spec.Containers[0].Env[0].Name).
+								To(Equal("ARGOCD_CONTROLLER_REPLICAS"))
+							Expect(sampleSTS.Object().Spec.Template.Spec.Containers[0].Env[0].Value).
+								To(Equal(fmt.Sprintf("%d", desiredReplicas)))
+
+							restartAtAnnotation, ok := sampleSTS.Object().Spec.Template.Annotations["autoscaler.argoproj.io/restartedAt"]
+							Expect(ok).To(BeTrue())
+							restartAt, err := time.Parse(time.RFC3339, restartAtAnnotation)
+							Expect(err).ToNot(HaveOccurred())
+							Expect(time.Since(restartAt)).To(BeNumerically("<", time.Second))
+						},
+					).
+					Commit(collector.Collect).
+					RemoveLastHydration().
+					Hydrate(
+						"STS scaling completed",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							samplePartition := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.LongestProcessingTimePartition{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							desiredReplicas := len(samplePartition.Object().Status.Replicas)
+
+							sampleSTS := NewObjectContainer(
+								run,
+								&appsv1.StatefulSet{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ReplicaSetControllerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							sampleSTS.Object().Status.Replicas = int32(desiredReplicas)
+							sampleSTS.StatusUpdate()
+						},
+					).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"finish reconciling",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).ToNot(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
+							Expect(readyCondition.Reason).To(Equal(StatusTypeReady))
+						},
+					).
+					Commit(collector.Collect)
+			},
+		).
+		Branch(
+			"X-0-Y mode",
+			func(branch *Scenario[*autoscalerv1alpha1.ReplicaSetScaler]) {
+				branch.
+					Hydrate(
+						"X-0-Y mode",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							run.Container().Get().Object().Spec.Mode = &autoscalerv1alpha1.ReplicaSetScalerSpecModes{
+								X0Y: &autoscalerv1alpha1.ReplicaSetScalerSpecModeX0Y{},
+							}
+							run.Container().Update()
+						},
+					).
+					Hydrate(
+						"failure to update sts",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							sampleSTS := NewObjectContainer(
+								run,
+								&appsv1.StatefulSet{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ReplicaSetControllerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							run.FakeClient().WithUpdateFunction(
+								sampleSTS,
+								func(
+									ctx context.Context,
+									obj client.Object,
+									opts ...client.UpdateOption,
+								) error {
+									return errors.New("fake failure to update sts")
+								},
+							)
+						},
+					).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"handle errors",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).To(HaveOccurred())
+							Expect(run.ReconcileError().Error()).To(ContainSubstring("fake failure to update sts"))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("ErrorScalingToZero"))
+						},
+					).
+					Commit(collector.Collect).
+					RemoveLastHydration().
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"apply STS scaling to 0",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).ToNot(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("WaitingForRSControllerToScaleToZero"))
+
+							By("Checking STS")
+							sampleSTS := NewObjectContainer(
+								run,
+								&appsv1.StatefulSet{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ReplicaSetControllerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							Expect(*sampleSTS.Object().Spec.Replicas).To(BeNumerically("==", 0))
+						},
+					).
+					Commit(collector.Collect).
+					Hydrate(
+						"STS scaling to 0 completed",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							sampleSTS := NewObjectContainer(
+								run,
+								&appsv1.StatefulSet{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ReplicaSetControllerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							sampleSTS.Object().Status.Replicas = 0
+							sampleSTS.StatusUpdate()
+						},
+					).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"update shard manager with the expected replicas",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).NotTo(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("WaitingForShardManagerToApplyDesiredState"))
+						},
+					).
+					Commit(collector.Collect).
+					Hydrate(
+						"shard manager reconciled",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							samplePartition := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.LongestProcessingTimePartition{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							sampleShardManager := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.SecretTypeClusterShardManager{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ShardManagerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							sampleShardManager.Object().Status.Replicas = samplePartition.Object().Status.Replicas
+							sampleShardManager.StatusUpdate()
+						},
+					).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"begin RS controller scaling",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).NotTo(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("BeginningRSControllerScaling"))
+
+							By("Checking that we saved shard manager actual state")
+							sampleShardManager := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.SecretTypeClusterShardManager{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ShardManagerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							Expect(run.Container().Object().Status.Replicas).To(Equal(sampleShardManager.Object().Status.Replicas))
+						},
+					).
+					Commit(collector.Collect).
+					Hydrate(
+						"in RS controller scaling phase",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							sampleShardManager := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.SecretTypeClusterShardManager{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ShardManagerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							run.Container().Get().Object().Status.Replicas = sampleShardManager.Object().Status.Replicas
+							run.Container().StatusUpdate()
+						},
+					).
+					Hydrate(
+						"failure to update sts",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							sampleSTS := NewObjectContainer(
+								run,
+								&appsv1.StatefulSet{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ReplicaSetControllerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							run.FakeClient().WithUpdateFunction(
+								sampleSTS,
+								func(
+									ctx context.Context,
+									obj client.Object,
+									opts ...client.UpdateOption,
+								) error {
+									return errors.New("fake failure to update sts")
+								},
+							)
+						},
+					).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"handle errors",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).To(HaveOccurred())
+							Expect(run.ReconcileError().Error()).To(ContainSubstring("fake failure to update sts"))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("ErrorScaling"))
+						},
+					).
+					Commit(collector.Collect).
+					RemoveLastHydration().
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"apply STS scaling",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).ToNot(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("WaitingForRSControllerToScale"))
+
+							By("Checking STS")
+							samplePartition := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.LongestProcessingTimePartition{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							desiredReplicas := len(samplePartition.Object().Status.Replicas)
+							sampleSTS := NewObjectContainer(
+								run,
+								&appsv1.StatefulSet{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ReplicaSetControllerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							Expect(*sampleSTS.Object().Spec.Replicas).To(BeNumerically("==", desiredReplicas))
+							Expect(sampleSTS.Object().Spec.Template.Spec.Containers).To(HaveLen(1))
+							Expect(sampleSTS.Object().Spec.Template.Spec.Containers[0].Env).To(HaveLen(1))
+							Expect(sampleSTS.Object().Spec.Template.Spec.Containers[0].Env[0].Name).
+								To(Equal("ARGOCD_CONTROLLER_REPLICAS"))
+							Expect(sampleSTS.Object().Spec.Template.Spec.Containers[0].Env[0].Value).
+								To(Equal(fmt.Sprintf("%d", desiredReplicas)))
+						},
+					).
+					Commit(collector.Collect).
+					Hydrate(
+						"STS scaling completed",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							samplePartition := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.LongestProcessingTimePartition{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							desiredReplicas := len(samplePartition.Object().Status.Replicas)
+
+							sampleSTS := NewObjectContainer(
+								run,
+								&appsv1.StatefulSet{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ReplicaSetControllerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							sampleSTS.Object().Status.Replicas = int32(desiredReplicas)
+							sampleSTS.StatusUpdate()
+						},
+					).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"finish reconciling",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).ToNot(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
+							Expect(readyCondition.Reason).To(Equal(StatusTypeReady))
+						},
+					).
+					Commit(collector.Collect)
+			},
+		)
+
+	BeforeEach(func() {
+		scenarioRun = collector.NewRun(ctx, k8sClient)
+	})
+
+	AfterEach(func() {
+		collector.Cleanup(scenarioRun)
+		scenarioRun = nil
+	})
+
+	for _, scenarioContext := range collector.All() {
+		Context(scenarioContext.ContextStr, func() {
+			for _, scenario := range scenarioContext.Its {
+				It(scenario.ItStr, func() {
+					scenario.ItFn(scenarioRun)
+				})
+			}
+		})
+	}
+})
