@@ -40,7 +40,7 @@ import (
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	autoscalercontroller "github.com/plumber-cd/argocd-autoscaler/internal/controller/autoscaler"
 	"github.com/plumber-cd/argocd-autoscaler/loadindexers/weightedpnorm"
-	robustscaling "github.com/plumber-cd/argocd-autoscaler/normalizers/robustcaling"
+	robustscaling "github.com/plumber-cd/argocd-autoscaler/normalizers/robustscaling"
 	"github.com/plumber-cd/argocd-autoscaler/partitioners/longestprocessingtime"
 	"github.com/plumber-cd/argocd-autoscaler/pollers/prometheus"
 	// +kubebuilder:scaffold:imports

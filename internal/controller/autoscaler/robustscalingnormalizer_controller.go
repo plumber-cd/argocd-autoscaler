@@ -38,7 +38,7 @@ import (
 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
-	robustscaling "github.com/plumber-cd/argocd-autoscaler/normalizers/robustcaling"
+	robustscaling "github.com/plumber-cd/argocd-autoscaler/normalizers/robustscaling"
 )
 
 // RobustScalingNormalizerReconciler reconciles a RobustScalingNormalizer object
