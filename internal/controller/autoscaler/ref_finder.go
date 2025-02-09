@@ -51,7 +51,7 @@ func findByRef[to any](
 
 	mapping, err := restMapper.RESTMapping(gk, "")
 	if err != nil {
-		log.Error(err, "Failed to map GVK to REST mapping")
+		log.Error(err, "Failed to map GK to REST mapping")
 		return *new(to), err
 	}
 

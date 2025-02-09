@@ -134,23 +134,6 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	shards := shardsProvider.GetShardProviderStatus().Shards
-	if len(shards) == 0 {
-		err := fmt.Errorf("No shards found")
-		log.Error(err, "No shards found, fail")
-		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    StatusTypeReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "NoShardsFound",
-			Message: err.Error(),
-		})
-		if err := r.Status().Update(ctx, poll); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
-		}
-		// We should get a new event when shard manager changes
-		return ctrl.Result{}, nil
-	}
-
 	if poll.Status.LastPollingTime != nil {
 
 		sinceLastPoll := time.Since(poll.Status.LastPollingTime.Time)
@@ -217,26 +200,6 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 		return ctrl.Result{RequeueAfter: time.Second}, err
 	}
-
-	if len(metrics) != len(poll.Spec.Metrics)*len(shards) {
-		err := fmt.Errorf("Expected poll results didn't match number of metrics * number of shards")
-		log.Error(err, "Metrics result mismatch",
-			"expected", len(poll.Spec.Metrics)*len(shards),
-			"actual", len(metrics),
-		)
-		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
-			Type:    StatusTypeReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "ResultsCountMismatch",
-			Message: err.Error(),
-		})
-		if err := r.Status().Update(ctx, poll); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
-		}
-		return ctrl.Result{RequeueAfter: poll.Spec.Period.Duration}, err
-	}
-
 	log.V(1).Info("Polled metrics", "count", len(metrics))
 
 	// Update the status with the new values

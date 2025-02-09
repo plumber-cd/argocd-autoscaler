@@ -27,8 +27,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
-	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
-	"github.com/plumber-cd/argocd-autoscaler/test/harness"
 	. "github.com/plumber-cd/argocd-autoscaler/test/harness"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -36,6 +34,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+
+	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 )
 
 var _ = Describe("SecretTypeClusterShardManager Controller", func() {
@@ -62,7 +62,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 		},
 	).
 		HydrateWithContainer().
-		WithFakeClient(nil).
+		WithFakeClient("clean", nil).
 		BranchResourceNotFoundCheck(collector.Collect).
 		BranchFailureToGetResourceCheck(collector.Collect)
 
@@ -85,38 +85,44 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 	).
 		HydrateWithClientCreatingContainer().
 		Hydrate(
+			"basic",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-				_ = CreateObjectContainer(run.Context, *run.Client, &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "sample-secret",
-						Namespace: run.Namespace.Object().Name,
-						Labels: map[string]string{
-							"mock-label": "mock",
+				CreateObjectContainer(run.Context, *run.Client,
+					&corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "sample-secret",
+							Namespace: run.Namespace.Object().Name,
+							Labels: map[string]string{
+								"mock-label": "mock",
+							},
+						},
+						StringData: map[string]string{
+							"name":   "mock-cluster",
+							"server": "http://mock-cluster:8000",
 						},
 					},
-					StringData: map[string]string{
-						"name":   "mock-cluster",
-						"server": "http://mock-cluster:8000",
-					},
-				})
+				)
 
-				_ = harness.CreateObjectContainer(run.Context, *run.Client, &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "unlabeled-secret",
-						Namespace: run.Namespace.Object().Name,
-						Labels: map[string]string{
-							"mock-label": "mock-2",
+				CreateObjectContainer(run.Context, *run.Client,
+					&corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "unlabeled-secret",
+							Namespace: run.Namespace.Object().Name,
+							Labels: map[string]string{
+								"mock-label": "mock-2",
+							},
+						},
+						StringData: map[string]string{
+							"name":   "mock-cluster-2",
+							"server": "http://mock-cluster-2:8000",
 						},
 					},
-					StringData: map[string]string{
-						"name":   "mock-cluster-2",
-						"server": "http://mock-cluster-2:8000",
-					},
-				})
+				)
 			},
 		).
-		WithFakeClient(nil).
+		WithFakeClient("clean", nil).
 		WithFakeClient(
+			"failing to list secrets",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				run.FakeClient.
 					WithListFunction(&corev1.SecretList{},
@@ -128,7 +134,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 		).
 		BranchFailureToUpdateStatusCheck(collector.Collect).
 		WithCheck(
-			"should handle errors when failing to list secrets",
+			"handle errors",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				Expect(run.ReconcileError).To(HaveOccurred())
 				Expect(run.ReconcileError.Error()).To(Equal("fake error listing secrets"))
@@ -149,7 +155,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 		ResetClientPatches().
 		BranchFailureToUpdateStatusCheck(collector.Collect).
 		WithCheck(
-			"should export shards to the status",
+			"export shards to the status",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				Expect(run.ReconcileError).ToNot(HaveOccurred())
 				Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Duration(0)))
@@ -193,6 +199,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 		).
 		Commit(collector.Collect).
 		Hydrate(
+			"desired partitioning",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				secretsListOptions := &client.ListOptions{
 					Namespace: testNamespace.ObjectKey().Name,
@@ -238,10 +245,11 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 				Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
 			},
 		).
-		WithFakeClient(nil).
 		Branch(
+			"malformed desired partitioning",
 			func(branch *ScenarioWithFakeClient[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				branch.Hydrate(
+					"duplicated replicas",
 					func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 						run.Container.Object().Spec.ShardManagerSpec.Replicas = append(
 							run.Container.Object().Spec.ShardManagerSpec.Replicas,
@@ -251,10 +259,9 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 						Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
 					},
 				).
-					WithFakeClient(nil).
 					BranchFailureToUpdateStatusCheck(collector.Collect).
 					WithCheck(
-						"should handle errors when replicas are duplicated",
+						"handle errors",
 						func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 							Expect(run.ReconcileError).ToNot(HaveOccurred())
 							Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Duration(0)))
@@ -275,7 +282,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			},
 		).
 		WithCheck(
-			"should successfully update shards on secrets",
+			"successfully update shards on secrets",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				Expect(run.ReconcileError).ToNot(HaveOccurred())
 				Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Duration(0)))
@@ -312,6 +319,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 		).
 		Commit(collector.Collect).
 		WithFakeClient(
+			"failing to update secrets",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				run.FakeClient.
 					WithUpdateFunction(run.Container.ClientObject(),
@@ -322,7 +330,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			},
 		).
 		WithCheck(
-			"should handle error updating the secret",
+			"handle errors",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				Expect(run.ReconcileError).To(HaveOccurred())
 				Expect(run.ReconcileError.Error()).To(Equal("fake error updating secret"))
@@ -345,15 +353,17 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 	})
 
 	AfterEach(func() {
-		harness.DeleteNamespace(ctx, k8sClient, testNamespace)
+		DeleteNamespace(ctx, k8sClient, testNamespace)
 		testNamespace = nil
 	})
 
-	Context("When reconciling a resource", func() {
-		for _, scenario := range collector.All() {
-			It(fmt.Sprintf("%s using template %q", scenario.CheckName, scenario.TemplateName), func() {
-				scenario.It(ctx, k8sClient, testNamespace)
-			})
-		}
-	})
+	for _, scenarioContext := range collector.All() {
+		Context(scenarioContext.ContextStr, func() {
+			for _, scenario := range scenarioContext.Its {
+				It(scenario.ItStr, func() {
+					scenario.ItFn(ctx, k8sClient, testNamespace)
+				})
+			}
+		})
+	}
 })
