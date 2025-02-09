@@ -55,7 +55,7 @@ func (r *fakePrometheusPoller) Poll(
 }
 
 var _ = Describe("PrometheusPoll Controller", func() {
-	var testNamespace *ObjectContainer[*corev1.Namespace]
+	var scenarioRun GenericScenarioRun
 
 	var poller *fakePrometheusPoller
 
@@ -71,92 +71,94 @@ var _ = Describe("PrometheusPoll Controller", func() {
 
 	NewScenarioTemplate(
 		"not existing resource",
-		func() *autoscalerv1alpha1.PrometheusPoll {
-			return &autoscalerv1alpha1.PrometheusPoll{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "not-existent",
+		func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
+			samplePoll := NewObjectContainer(
+				run,
+				&autoscalerv1alpha1.PrometheusPoll{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "not-existent",
+						Namespace: run.Namespace().ObjectKey().Name,
+					},
 				},
-			}
+			)
+			run.SetContainer(samplePoll)
 		},
 	).
-		HydrateWithContainer().
-		WithFakeClient("clean", nil).
 		BranchResourceNotFoundCheck(collector.Collect).
 		BranchFailureToGetResourceCheck(collector.Collect)
 
 	NewScenarioTemplate(
 		"basic",
-		func() *autoscalerv1alpha1.PrometheusPoll {
-			return &autoscalerv1alpha1.PrometheusPoll{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "sample-prometheus-poll",
-				},
-				Spec: autoscalerv1alpha1.PrometheusPollSpec{
-					Period:  metav1.Duration{Duration: time.Minute},
-					Address: "http://prometheus:9090",
-					Metrics: []autoscalerv1alpha1.PrometheusMetric{
-						{
-							ID:     "fake-test",
-							Query:  "fake-query",
-							NoData: ptr.To(resource.MustParse("0")),
+		func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
+			samplePoll := NewObjectContainer(
+				run,
+				&autoscalerv1alpha1.PrometheusPoll{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-prometheus-poll",
+						Namespace: run.Namespace().ObjectKey().Name,
+					},
+					Spec: autoscalerv1alpha1.PrometheusPollSpec{
+						Period:  metav1.Duration{Duration: time.Minute},
+						Address: "http://prometheus:9090",
+						Metrics: []autoscalerv1alpha1.PrometheusMetric{
+							{
+								ID:     "fake-test",
+								Query:  "fake-query",
+								NoData: ptr.To(resource.MustParse("0")),
+							},
 						},
 					},
 				},
-			}
+				func(
+					run GenericScenarioRun,
+					container *ObjectContainer[*autoscalerv1alpha1.PrometheusPoll],
+				) {
+					sampleShardManager := NewObjectContainer(
+						run,
+						&autoscalerv1alpha1.SecretTypeClusterShardManager{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "sample-shard-manager",
+								Namespace: run.Namespace().ObjectKey().Name,
+							},
+						},
+					).Create()
+
+					container.Object().Spec.PollerSpec = common.PollerSpec{
+						ShardManagerRef: &corev1.TypedLocalObjectReference{
+							APIGroup: ptr.To(sampleShardManager.GroupVersionKind().Group),
+							Kind:     sampleShardManager.GroupVersionKind().Kind,
+							Name:     sampleShardManager.ObjectKey().Name,
+						},
+					}
+				},
+			).Create()
+			run.SetContainer(samplePoll)
 		},
 	).
-		HydrateWithContainer().
-		Hydrate(
-			"basic",
-			func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
-				sampleShardManager := CreateObjectContainer(run.Context, *run.Client,
-					&autoscalerv1alpha1.SecretTypeClusterShardManager{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "sample-shard-manager",
-							Namespace: run.Namespace.ObjectKey().Name,
-						},
-					},
-				)
-
-				run.SeedObject.Spec.PollerSpec = common.PollerSpec{
-					ShardManagerRef: &corev1.TypedLocalObjectReference{
-						APIGroup: ptr.To(sampleShardManager.GroupVersionKind().Group),
-						Kind:     sampleShardManager.GroupVersionKind().Kind,
-						Name:     sampleShardManager.ObjectKey().Name,
-					},
-				}
-
-				run.Container = CreateObjectContainer(run.Context, *run.Client, run.SeedObject)
-			},
-		).
-		WithFakeClient("clean", nil).
 		Branch(
 			"malformed",
-			func(branch *ScenarioWithFakeClient[*autoscalerv1alpha1.PrometheusPoll]) {
+			func(branch *Scenario[*autoscalerv1alpha1.PrometheusPoll]) {
 				branch.Hydrate(
 					"duplicate metric",
 					func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
-						Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
-						run.Container.Object().Spec.Metrics = append(
-							run.Container.Object().Spec.Metrics,
-							run.Container.Object().Spec.Metrics[0],
+						run.Container().Get().Object().Spec.Metrics = append(
+							run.Container().Object().Spec.Metrics,
+							run.Container().Object().Spec.Metrics[0],
 						)
-						Expect(run.Client.UpdateContainer(ctx, run.Container.ClientObject())).To(Succeed())
-						Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
+						run.Container().Update()
 					},
 				).
 					BranchFailureToUpdateStatusCheck(collector.Collect).
 					WithCheck(
 						"handle errors",
 						func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
-							Expect(run.ReconcileError).NotTo(HaveOccurred())
-							Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Duration(0)))
-							Expect(run.ReconcileResult.Requeue).To(BeFalse())
+							Expect(run.ReconcileError()).NotTo(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
-							Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
 							readyCondition := meta.FindStatusCondition(
-								run.Container.Object().Status.Conditions,
+								run.Container().Get().Object().Status.Conditions,
 								StatusTypeReady,
 							)
 							Expect(readyCondition).NotTo(BeNil())
@@ -170,28 +172,25 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		).
 		Branch(
 			"failing to get shard manager",
-			func(branch *ScenarioWithFakeClient[*autoscalerv1alpha1.PrometheusPoll]) {
+			func(branch *Scenario[*autoscalerv1alpha1.PrometheusPoll]) {
 				branch.Hydrate(
 					"pointing to non-existing shard manager",
 					func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
-						Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
-						run.Container.Object().Spec.PollerSpec.ShardManagerRef.Name = "non-existing-shard-manager"
-						Expect(run.Client.UpdateContainer(ctx, run.Container.ClientObject())).To(Succeed())
-						Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
+						run.Container().Get().Object().Spec.PollerSpec.ShardManagerRef.Name = "non-existing-shard-manager"
+						run.Container().Update()
 					},
 				).
 					BranchFailureToUpdateStatusCheck(collector.Collect).
 					WithCheck(
 						"handle errors",
 						func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
-							Expect(run.ReconcileError).NotTo(HaveOccurred())
-							Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Duration(0)))
-							Expect(run.ReconcileResult.Requeue).To(BeFalse())
+							Expect(run.ReconcileError()).NotTo(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
-							Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
 							readyCondition := meta.FindStatusCondition(
-								run.Container.Object().Status.Conditions,
+								run.Container().Get().Object().Status.Conditions,
 								StatusTypeReady,
 							)
 							Expect(readyCondition).NotTo(BeNil())
@@ -205,41 +204,39 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		).
 		Branch(
 			"shard manager not ready",
-			func(branch *ScenarioWithFakeClient[*autoscalerv1alpha1.PrometheusPoll]) {
+			func(branch *Scenario[*autoscalerv1alpha1.PrometheusPoll]) {
 				branch.Hydrate(
 					"shard manager not ready",
 					func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
 						shardManager := NewObjectContainer(
-							run.Client.Scheme(),
+							run,
 							&autoscalerv1alpha1.SecretTypeClusterShardManager{
 								ObjectMeta: metav1.ObjectMeta{
-									Name:      run.Container.Object().Spec.PollerSpec.ShardManagerRef.Name,
-									Namespace: run.Namespace.Object().Name,
+									Name:      run.Container().Object().Spec.PollerSpec.ShardManagerRef.Name,
+									Namespace: run.Namespace().Object().Name,
 								},
 							},
-						)
-						Expect(run.Client.GetContainer(run.Context, shardManager.ClientObject())).To(Succeed())
+						).Get()
 						meta.SetStatusCondition(&shardManager.Object().Status.Conditions, metav1.Condition{
 							Type:    StatusTypeReady,
 							Status:  metav1.ConditionFalse,
 							Reason:  "FakeNotReady",
 							Message: "Not ready for test",
 						})
-						Expect(run.Client.StatusUpdateContainer(run.Context, shardManager.ClientObject())).To(Succeed())
+						shardManager.StatusUpdate()
 					},
 				).
 					BranchFailureToUpdateStatusCheck(collector.Collect).
 					WithCheck(
 						"update status and exit",
 						func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
-							Expect(run.ReconcileError).NotTo(HaveOccurred())
-							Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Duration(0)))
-							Expect(run.ReconcileResult.Requeue).To(BeFalse())
+							Expect(run.ReconcileError()).NotTo(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
-							Expect(run.Client.GetContainer(run.Context, run.Container.ClientObject())).To(Succeed())
 							readyCondition := meta.FindStatusCondition(
-								run.Container.Object().Status.Conditions,
+								run.Container().Get().Object().Status.Conditions,
 								StatusTypeReady,
 							)
 							Expect(readyCondition).NotTo(BeNil())
@@ -255,15 +252,14 @@ var _ = Describe("PrometheusPoll Controller", func() {
 			"add shards to shard manager",
 			func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
 				shardManager := NewObjectContainer(
-					run.Client.Scheme(),
+					run,
 					&autoscalerv1alpha1.SecretTypeClusterShardManager{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      run.Container.Object().Spec.PollerSpec.ShardManagerRef.Name,
-							Namespace: run.Namespace.Object().Name,
+							Name:      run.Container().Object().Spec.PollerSpec.ShardManagerRef.Name,
+							Namespace: run.Namespace().Object().Name,
 						},
 					},
-				)
-				Expect(run.Client.GetContainer(run.Context, shardManager.ClientObject())).To(Succeed())
+				).Get()
 				shardManager.Object().Status.Shards = []common.Shard{
 					{
 						UID: types.UID("fake-shard-uid"),
@@ -279,33 +275,30 @@ var _ = Describe("PrometheusPoll Controller", func() {
 					Reason:  StatusTypeReady,
 					Message: StatusTypeReady,
 				})
-				Expect(run.Client.StatusUpdateContainer(run.Context, shardManager.ClientObject())).To(Succeed())
+				shardManager.StatusUpdate()
 			},
 		).
 		Branch(
 			"recently polled",
-			func(branch *ScenarioWithFakeClient[*autoscalerv1alpha1.PrometheusPoll]) {
+			func(branch *Scenario[*autoscalerv1alpha1.PrometheusPoll]) {
 				branch.Hydrate(
 					"status with recent poll",
 					func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
-						Expect(run.Client.GetContainer(run.Context, run.Container.ClientObject())).To(Succeed())
-
 						shardManager := NewObjectContainer(
-							run.Client.Scheme(),
+							run,
 							&autoscalerv1alpha1.SecretTypeClusterShardManager{
 								ObjectMeta: metav1.ObjectMeta{
-									Name:      run.Container.Object().Spec.PollerSpec.ShardManagerRef.Name,
-									Namespace: run.Namespace.Object().Name,
+									Name:      run.Container().Object().Spec.PollerSpec.ShardManagerRef.Name,
+									Namespace: run.Namespace().Object().Name,
 								},
 							},
-						)
-						Expect(run.Client.GetContainer(run.Context, shardManager.ClientObject())).To(Succeed())
+						).Get()
 
-						run.Container.Object().Status.Values = []common.MetricValue{}
+						run.Container().Get().Object().Status.Values = []common.MetricValue{}
 						for _, shard := range shardManager.Object().Status.Shards {
-							for _, metric := range run.Container.Object().Spec.Metrics {
-								run.Container.Object().Status.Values = append(
-									run.Container.Object().Status.Values,
+							for _, metric := range run.Container().Object().Spec.Metrics {
+								run.Container().Object().Status.Values = append(
+									run.Container().Object().Status.Values,
 									common.MetricValue{
 										ID:           metric.ID,
 										Shard:        shard,
@@ -315,38 +308,36 @@ var _ = Describe("PrometheusPoll Controller", func() {
 									})
 							}
 						}
-						run.Container.Object().Status.LastPollingTime = ptr.To(metav1.NewTime(
+						run.Container().Object().Status.LastPollingTime = ptr.To(metav1.NewTime(
 							time.Now().Add(-30 * time.Second),
 						))
-						Expect(run.Client.StatusUpdateContainer(run.Context, run.Container.ClientObject())).To(Succeed())
-						Expect(run.Client.GetContainer(run.Context, run.Container.ClientObject())).To(Succeed())
+						run.Container().StatusUpdate()
 					},
 				).
 					WithCheck(
 						"re-queue for the remainder of the period",
 						func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
-							Expect(run.ReconcileError).NotTo(HaveOccurred())
-							Expect(run.ReconcileResult.RequeueAfter).To(BeNumerically("~", 30*time.Second, 2*time.Second))
-							Expect(run.ReconcileResult.Requeue).To(BeFalse())
+							Expect(run.ReconcileError()).NotTo(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(BeNumerically("~", 30*time.Second, 2*time.Second))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 						},
 					).
 					Commit(collector.Collect).
 					Branch(
 						"recently polled but changed shard manager",
-						func(branch *ScenarioWithFakeClient[*autoscalerv1alpha1.PrometheusPoll]) {
+						func(branch *Scenario[*autoscalerv1alpha1.PrometheusPoll]) {
 							branch.Hydrate(
 								"changed shard manager replicas",
 								func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
 									shardManager := NewObjectContainer(
-										run.Client.Scheme(),
+										run,
 										&autoscalerv1alpha1.SecretTypeClusterShardManager{
 											ObjectMeta: metav1.ObjectMeta{
-												Name:      run.Container.Object().Spec.PollerSpec.ShardManagerRef.Name,
-												Namespace: run.Namespace.Object().Name,
+												Name:      run.Container().Object().Spec.PollerSpec.ShardManagerRef.Name,
+												Namespace: run.Namespace().Object().Name,
 											},
 										},
-									)
-									Expect(run.Client.GetContainer(run.Context, shardManager.ClientObject())).To(Succeed())
+									).Get()
 									shardManager.Object().Status.Shards = append(shardManager.Object().Status.Shards, common.Shard{
 										UID: types.UID("fake-shard-uid-2"),
 										ID:  "fake-shard-id-2",
@@ -354,14 +345,14 @@ var _ = Describe("PrometheusPoll Controller", func() {
 											"fake-key": "fake-value",
 										},
 									})
-									Expect(run.Client.StatusUpdateContainer(run.Context, shardManager.ClientObject())).To(Succeed())
+									shardManager.StatusUpdate()
 								},
 							).
 								WithCheck(
 									"poll immediately",
 									func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
-										Expect(run.ReconcileError).To(HaveOccurred())
-										Expect(run.ReconcileError.Error()).To(ContainSubstring("poller not implemented"))
+										Expect(run.ReconcileError()).To(HaveOccurred())
+										Expect(run.ReconcileError().Error()).To(ContainSubstring("poller not implemented"))
 									},
 								).
 								Commit(collector.Collect)
@@ -369,27 +360,26 @@ var _ = Describe("PrometheusPoll Controller", func() {
 					).
 					Branch(
 						"recently polled but changed metrics",
-						func(branch *ScenarioWithFakeClient[*autoscalerv1alpha1.PrometheusPoll]) {
+						func(branch *Scenario[*autoscalerv1alpha1.PrometheusPoll]) {
 							branch.Hydrate(
 								"changed metrics",
 								func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
-									Expect(run.Client.GetContainer(run.Context, run.Container.ClientObject())).To(Succeed())
-									run.Container.Object().Spec.Metrics = append(
-										run.Container.Object().Spec.Metrics,
+									run.Container().Get().Object().Spec.Metrics = append(
+										run.Container().Object().Spec.Metrics,
 										autoscalerv1alpha1.PrometheusMetric{
 											ID:     "fake-test-2",
 											Query:  "fake-query-2",
 											NoData: ptr.To(resource.MustParse("0")),
 										},
 									)
-									Expect(run.Client.UpdateContainer(run.Context, run.Container.ClientObject())).To(Succeed())
+									run.Container().Update()
 								},
 							).
 								WithCheck(
 									"poll immediately",
 									func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
-										Expect(run.ReconcileError).To(HaveOccurred())
-										Expect(run.ReconcileError.Error()).To(ContainSubstring("poller not implemented"))
+										Expect(run.ReconcileError()).To(HaveOccurred())
+										Expect(run.ReconcileError().Error()).To(ContainSubstring("poller not implemented"))
 									},
 								).
 								Commit(collector.Collect)
@@ -429,13 +419,12 @@ var _ = Describe("PrometheusPoll Controller", func() {
 			"poll successfully",
 			func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
 				Expect(poller.polled).To(BeTrue())
-				Expect(run.ReconcileError).ToNot(HaveOccurred())
-				Expect(run.ReconcileResult.RequeueAfter).To(Equal(run.Container.Object().Spec.Period.Duration))
+				Expect(run.ReconcileError()).ToNot(HaveOccurred())
+				Expect(run.ReconcileResult().RequeueAfter).To(Equal(run.Container().Object().Spec.Period.Duration))
 
 				By("Checking conditions")
-				Expect(run.Client.GetContainer(run.Context, run.Container.ClientObject())).To(Succeed())
 				readyCondition := meta.FindStatusCondition(
-					run.Container.Object().Status.Conditions,
+					run.Container().Get().Object().Status.Conditions,
 					StatusTypeReady,
 				)
 				Expect(readyCondition).NotTo(BeNil())
@@ -443,29 +432,28 @@ var _ = Describe("PrometheusPoll Controller", func() {
 				Expect(readyCondition.Reason).To(Equal(StatusTypeReady))
 
 				shardManager := NewObjectContainer(
-					run.Client.Scheme(),
+					run,
 					&autoscalerv1alpha1.SecretTypeClusterShardManager{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      run.Container.Object().Spec.PollerSpec.ShardManagerRef.Name,
-							Namespace: run.Namespace.Object().Name,
+							Name:      run.Container().Object().Spec.PollerSpec.ShardManagerRef.Name,
+							Namespace: run.Namespace().Object().Name,
 						},
 					},
-				)
-				Expect(run.Client.GetContainer(run.Context, shardManager.ClientObject())).To(Succeed())
+				).Get()
 
 				By("Checking polling results")
 				metricsById := map[string]autoscalerv1alpha1.PrometheusMetric{}
-				for _, metric := range run.Container.Object().Spec.Metrics {
+				for _, metric := range run.Container().Object().Spec.Metrics {
 					metricsById[metric.ID] = metric
 				}
 				shardsByUID := map[types.UID]common.Shard{}
 				for _, shard := range shardManager.Object().Status.Shards {
 					shardsByUID[shard.UID] = shard
 				}
-				metricValues := run.Container.Object().Status.Values
+				metricValues := run.Container().Object().Status.Values
 				Expect(metricValues).
 					To(HaveLen(
-						len(run.Container.Object().Spec.Metrics) *
+						len(run.Container().Object().Spec.Metrics) *
 							len(shardManager.Object().Status.Shards),
 					))
 				valuesByMetricIDAndShardUID := map[string]common.MetricValue{}
@@ -504,14 +492,13 @@ var _ = Describe("PrometheusPoll Controller", func() {
 			"handle polling error",
 			func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
 				Expect(poller.polled).To(BeTrue())
-				Expect(run.ReconcileError).To(HaveOccurred())
-				Expect(run.ReconcileError.Error()).To(ContainSubstring("fake error"))
-				Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Second))
+				Expect(run.ReconcileError()).To(HaveOccurred())
+				Expect(run.ReconcileError().Error()).To(ContainSubstring("fake error"))
+				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 
 				By("Checking conditions")
-				Expect(run.Client.GetContainer(run.Context, run.Container.ClientObject())).To(Succeed())
 				readyCondition := meta.FindStatusCondition(
-					run.Container.Object().Status.Conditions,
+					run.Container().Get().Object().Status.Conditions,
 					StatusTypeReady,
 				)
 				Expect(readyCondition).NotTo(BeNil())
@@ -523,13 +510,13 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		Commit(collector.Collect)
 
 	BeforeEach(func() {
-		testNamespace = CreateNamespaceWithRandomName(ctx, k8sClient)
 		poller = &fakePrometheusPoller{}
+		scenarioRun = collector.NewRun(ctx, k8sClient)
 	})
 
 	AfterEach(func() {
-		DeleteNamespace(ctx, k8sClient, testNamespace)
-		testNamespace = nil
+		collector.Cleanup(scenarioRun)
+		scenarioRun = nil
 		poller = nil
 	})
 
@@ -537,7 +524,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 		Context(scenarioContext.ContextStr, func() {
 			for _, scenario := range scenarioContext.Its {
 				It(scenario.ItStr, func() {
-					scenario.ItFn(ctx, k8sClient, testNamespace)
+					scenario.ItFn(scenarioRun)
 				})
 			}
 		})

@@ -15,19 +15,18 @@
 package harness
 
 import (
-	"context"
-
 	. "github.com/onsi/gomega"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// ObjectContainer is a simple wrapper over client.Object with easy and simple access to its NamespacedName and ObjectKey.
+// ObjectContainer is a wrapper over client.Object with easy and simple access to its NamespacedName and ObjectKey.
+// It stores its own context and client, so the object can be manipulated with to re-create specific testing scenario.
+// The client is never a fake client.
 type ObjectContainer[K client.Object] struct {
-	scheme         *runtime.Scheme
+	run            GenericScenarioRun
 	gvk            schema.GroupVersionKind
 	object         K
 	objectKey      client.ObjectKey
@@ -37,9 +36,15 @@ type ObjectContainer[K client.Object] struct {
 // NewObjectContainer creates a new ObjectContainer with the provided object.
 // The object passed in must be initialized with metav1.ObjectMeta, where the NamespacedName and ObjectKey would inferred from.
 // Optionally, the set of prep functions is taken in to prepare an object beyond the metadata (i.e. spec).
-func NewObjectContainer[K client.Object](scheme *runtime.Scheme, obj K, prep ...func(*ObjectContainer[K])) *ObjectContainer[K] {
-
-	gvks, _, err := scheme.ObjectKinds(obj)
+// This can use unprepared client, including client.Client. It does not have to be the one used in a ScenarioRun.
+// NOTE that this function does NOT create a resource in the cluster. The client is only used for schema and RESTMapper.
+// Client is, however, saved for later use for Create/Get/Update/UpdateStatus/Delete methods.
+func NewObjectContainer[K client.Object](
+	run GenericScenarioRun,
+	obj K,
+	prep ...func(GenericScenarioRun, *ObjectContainer[K]),
+) *ObjectContainer[K] {
+	gvks, _, err := run.Client().Scheme().ObjectKinds(obj)
 	if err != nil {
 		panic(err)
 	}
@@ -55,11 +60,20 @@ func NewObjectContainer[K client.Object](scheme *runtime.Scheme, obj K, prep ...
 	gvk := gvks[0]
 
 	if gvk.Version == "" {
-		panic("Version is empty")
+		gk := schema.GroupKind{
+			Group: gvk.Group,
+			Kind:  gvk.Kind,
+		}
+
+		mapping, err := run.Client().RESTMapper().RESTMapping(gk, "")
+		if err != nil {
+			panic("Version is empty")
+		}
+		gvk.Version = mapping.GroupVersionKind.Version
 	}
 
 	container := &ObjectContainer[K]{
-		scheme: scheme,
+		run:    run,
 		gvk:    gvk,
 		object: obj,
 		objectKey: client.ObjectKey{
@@ -72,19 +86,39 @@ func NewObjectContainer[K client.Object](scheme *runtime.Scheme, obj K, prep ...
 		},
 	}
 	for _, p := range prep {
-		p(container)
+		p(run, container)
 	}
 	return container
 }
 
-func CreateObjectContainer[K client.Object](ctx context.Context, client Client, obj K, prep ...func(*ObjectContainer[K])) *ObjectContainer[K] {
-	Expect(obj).NotTo(BeNil())
-	Expect(obj.GetName()).NotTo(BeEmpty())
-	Expect(obj.GetNamespace()).NotTo(BeEmpty())
-	container := NewObjectContainer(client.Scheme(), obj, prep...)
-	Expect(client.CreateContainer(ctx, container.ClientObject())).To(Succeed())
-	Expect(client.GetContainer(ctx, container.ClientObject())).To(Succeed())
-	return container
+// Create wraps client.Client.Create method with this ObjectContainer.
+func (c *ObjectContainer[K]) Create() *ObjectContainer[K] {
+	Expect(c.run.Client().Create(c.run.Context(), c.Object())).To(Succeed())
+	return c.Get()
+}
+
+// Get wraps client.Client.Get method with this ObjectContainer.
+func (c *ObjectContainer[K]) Get() *ObjectContainer[K] {
+	Expect(c.run.Client().Get(c.run.Context(), c.ObjectKey(), c.Object())).To(Succeed())
+	return c
+}
+
+// UpdateContainer wraps client.Client.Update method with with ObjectContainer.
+func (c *ObjectContainer[K]) Update() *ObjectContainer[K] {
+	Expect(c.run.Client().Update(c.run.Context(), c.Object())).To(Succeed())
+	return c.Get()
+}
+
+// StatusUpdateContainer wraps client.Client.Status().Update method with this ObjectContainer.
+func (c *ObjectContainer[K]) StatusUpdate() *ObjectContainer[K] {
+	Expect(c.run.Client().Status().Update(c.run.Context(), c.Object())).To(Succeed())
+	return c.Get()
+}
+
+// DeleteContainer wraps client.Client.Delete method with this ObjectContainer.
+func (c *ObjectContainer[K]) Delete() *ObjectContainer[K] {
+	Expect(c.run.Client().Delete(c.run.Context(), c.Object())).To(Succeed())
+	return c
 }
 
 func (c *ObjectContainer[K]) GroupVersionKind() schema.GroupVersionKind {
@@ -108,16 +142,12 @@ func (c *ObjectContainer[K]) NamespacedName() types.NamespacedName {
 
 // ClientObject returns non-generic ObjectContainer with client.Object type.
 // Might be useful to avoid casting when client function is expecting client.Object.
-func (c *ObjectContainer[K]) ClientObject() *ObjectContainer[client.Object] {
-	return &ObjectContainer[client.Object]{
-		object:         c.Object(),
-		objectKey:      c.ObjectKey(),
-		namespacedName: c.NamespacedName(),
-	}
+func (c *ObjectContainer[K]) ClientObject() client.Object {
+	return c.Object()
 }
 
 // DeepCopy returns a deep copy of the object wrapped in a new instance of ObjectContainer.
 func (c *ObjectContainer[K]) DeepCopy() *ObjectContainer[K] {
 	clone := c.Object().DeepCopyObject().(K)
-	return NewObjectContainer(c.scheme, clone)
+	return NewObjectContainer(c.run, clone)
 }

@@ -21,16 +21,16 @@ import (
 // ScenarioCheckFn is a signature of a function that checks the results of this ScenarioRun.
 type ScenarioCheckFn[K client.Object] func(*ScenarioRun[K])
 
-// ScenarioWithCheck is hydrated and has a fake client and check functions describe how to validate result upon execution.
-type ScenarioWithCheck[K client.Object] struct {
-	*ScenarioWithFakeClient[K]
+// ScenarioCheck is hydrated and has a fake client and check functions describe how to validate result upon execution.
+type ScenarioCheck[K client.Object] struct {
+	*Scenario[K]
 	checkName string
 	checkFn   ScenarioCheckFn[K]
 }
 
 // Commit registers a scenario in the collector by calling a callback.
 // Returns a ScenarioWithFakeClient ready for another set of checks with additional mocks.
-func (s *ScenarioWithCheck[K]) Commit(callback ScenarioRegisterCallback[K]) *ScenarioWithFakeClient[K] {
+func (s *ScenarioCheck[K]) Commit(callback ScenarioRegisterCallback[K]) *Scenario[K] {
 	callback(s)
 	return s.Clone()
 }

@@ -39,8 +39,7 @@ import (
 )
 
 var _ = Describe("SecretTypeClusterShardManager Controller", func() {
-
-	var testNamespace *ObjectContainer[*corev1.Namespace]
+	var scenarioRun GenericScenarioRun
 
 	var collector = NewScenarioCollector[*autoscalerv1alpha1.SecretTypeClusterShardManager](
 		func(fClient client.Client) *SecretTypeClusterShardManagerReconciler {
@@ -53,78 +52,86 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 
 	NewScenarioTemplate(
 		"not existing resource",
-		func() *autoscalerv1alpha1.SecretTypeClusterShardManager {
-			return &autoscalerv1alpha1.SecretTypeClusterShardManager{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "not-existent",
+		func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+			sampleShardManager := NewObjectContainer(
+				run,
+				&autoscalerv1alpha1.SecretTypeClusterShardManager{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "not-existent",
+						Namespace: run.Namespace().ObjectKey().Name,
+					},
 				},
-			}
+			)
+			run.SetContainer(sampleShardManager)
 		},
 	).
-		HydrateWithContainer().
-		WithFakeClient("clean", nil).
 		BranchResourceNotFoundCheck(collector.Collect).
 		BranchFailureToGetResourceCheck(collector.Collect)
 
 	NewScenarioTemplate(
 		"basic",
-		func() *autoscalerv1alpha1.SecretTypeClusterShardManager {
-			return &autoscalerv1alpha1.SecretTypeClusterShardManager{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "sample-shard-manager",
-				},
-				Spec: autoscalerv1alpha1.SecretTypeClusterShardManagerSpec{
-					LabelSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							"mock-label": "mock",
-						},
+		func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+			sampleShardManager := NewObjectContainer(
+				run,
+				&autoscalerv1alpha1.SecretTypeClusterShardManager{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-shard-manager",
+						Namespace: run.Namespace().ObjectKey().Name,
 					},
-				},
-			}
-		},
-	).
-		HydrateWithClientCreatingContainer().
-		Hydrate(
-			"basic",
-			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-				CreateObjectContainer(run.Context, *run.Client,
-					&corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "sample-secret",
-							Namespace: run.Namespace.Object().Name,
-							Labels: map[string]string{
+					Spec: autoscalerv1alpha1.SecretTypeClusterShardManagerSpec{
+						LabelSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
 								"mock-label": "mock",
 							},
 						},
-						StringData: map[string]string{
-							"name":   "mock-cluster",
-							"server": "http://mock-cluster:8000",
-						},
 					},
-				)
-
-				CreateObjectContainer(run.Context, *run.Client,
-					&corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "unlabeled-secret",
-							Namespace: run.Namespace.Object().Name,
-							Labels: map[string]string{
-								"mock-label": "mock-2",
+				},
+				func(
+					run GenericScenarioRun,
+					_ *ObjectContainer[*autoscalerv1alpha1.SecretTypeClusterShardManager],
+				) {
+					NewObjectContainer(
+						run,
+						&corev1.Secret{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "sample-secret",
+								Namespace: run.Namespace().Object().Name,
+								Labels: map[string]string{
+									"mock-label": "mock",
+								},
+							},
+							StringData: map[string]string{
+								"name":   "mock-cluster",
+								"server": "http://mock-cluster:8000",
 							},
 						},
-						StringData: map[string]string{
-							"name":   "mock-cluster-2",
-							"server": "http://mock-cluster-2:8000",
+					).Create()
+
+					NewObjectContainer(
+						run,
+						&corev1.Secret{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "unlabeled-secret",
+								Namespace: run.Namespace().Object().Name,
+								Labels: map[string]string{
+									"mock-label": "mock-2",
+								},
+							},
+							StringData: map[string]string{
+								"name":   "mock-cluster-2",
+								"server": "http://mock-cluster-2:8000",
+							},
 						},
-					},
-				)
-			},
-		).
-		WithFakeClient("clean", nil).
-		WithFakeClient(
-			"failing to list secrets",
+					).Create()
+				},
+			).Create()
+			run.SetContainer(sampleShardManager)
+		},
+	).
+		Hydrate(
+			"failure to list secrets",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-				run.FakeClient.
+				run.FakeClient().
 					WithListFunction(&corev1.SecretList{},
 						func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 							return errors.New("fake error listing secrets")
@@ -136,14 +143,13 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 		WithCheck(
 			"handle errors",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-				Expect(run.ReconcileError).To(HaveOccurred())
-				Expect(run.ReconcileError.Error()).To(Equal("fake error listing secrets"))
-				Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Second))
+				Expect(run.ReconcileError()).To(HaveOccurred())
+				Expect(run.ReconcileError().Error()).To(Equal("fake error listing secrets"))
+				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 
 				By("Checking ready condition")
-				Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
 				readyCondition := meta.FindStatusCondition(
-					run.Container.Object().Status.Conditions,
+					run.Container().Get().Object().Status.Conditions,
 					StatusTypeReady,
 				)
 				Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
@@ -152,38 +158,37 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			},
 		).
 		Commit(collector.Collect).
-		ResetClientPatches().
+		DeHydrate().
 		BranchFailureToUpdateStatusCheck(collector.Collect).
 		WithCheck(
 			"export shards to the status",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-				Expect(run.ReconcileError).ToNot(HaveOccurred())
-				Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult.Requeue).To(BeFalse())
+				Expect(run.ReconcileError()).ToNot(HaveOccurred())
+				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
-				Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
 				readyCondition := meta.FindStatusCondition(
-					run.Container.Object().Status.Conditions,
+					run.Container().Get().Object().Status.Conditions,
 					StatusTypeReady,
 				)
 				Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
 				Expect(readyCondition.Reason).To(Equal(StatusTypeReady))
 
 				secretsListOptions := &client.ListOptions{
-					Namespace: testNamespace.ObjectKey().Name,
+					Namespace: run.Namespace().ObjectKey().Name,
 					LabelSelector: labels.SelectorFromSet(
-						run.Container.Object().Spec.LabelSelector.MatchLabels,
+						run.Container().Object().Spec.LabelSelector.MatchLabels,
 					),
 				}
 				shardSecrets := &corev1.SecretList{}
-				Expect(run.Client.List(ctx, shardSecrets, secretsListOptions)).To(Succeed())
+				Expect(run.Client().List(ctx, shardSecrets, secretsListOptions)).To(Succeed())
 				shardSecretsByUID := map[types.UID]corev1.Secret{}
 				for _, secret := range shardSecrets.Items {
 					shardSecretsByUID[secret.GetUID()] = secret
 				}
 
-				Expect(run.Container.Object().Status.Shards).To(HaveLen(len(shardSecretsByUID)))
-				for _, shard := range run.Container.Object().Status.Shards {
+				Expect(run.Container().Object().Status.Shards).To(HaveLen(len(shardSecretsByUID)))
+				for _, shard := range run.Container().Object().Status.Shards {
 					secret, ok := shardSecretsByUID[shard.UID]
 					Expect(ok).To(BeTrue())
 					Expect(shard.UID).To(Equal(secret.GetUID()))
@@ -202,22 +207,22 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			"desired partitioning",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				secretsListOptions := &client.ListOptions{
-					Namespace: testNamespace.ObjectKey().Name,
+					Namespace: run.Namespace().ObjectKey().Name,
 					LabelSelector: labels.SelectorFromSet(
-						run.Container.Object().Spec.LabelSelector.MatchLabels,
+						run.Container().Object().Spec.LabelSelector.MatchLabels,
 					),
 				}
 				shardSecrets := &corev1.SecretList{}
-				Expect(run.Client.List(ctx, shardSecrets, secretsListOptions)).To(Succeed())
+				Expect(run.Client().List(ctx, shardSecrets, secretsListOptions)).To(Succeed())
 				Expect(shardSecrets.Items).ToNot(BeEmpty())
 
-				run.Container.Object().Spec.ShardManagerSpec = common.ShardManagerSpec{
+				run.Container().Object().Spec.ShardManagerSpec = common.ShardManagerSpec{
 					Replicas: common.ReplicaList{},
 				}
 
 				for i, secret := range shardSecrets.Items {
-					run.Container.Object().Spec.ShardManagerSpec.Replicas = append(
-						run.Container.Object().Spec.ShardManagerSpec.Replicas,
+					run.Container().Object().Spec.ShardManagerSpec.Replicas = append(
+						run.Container().Object().Spec.ShardManagerSpec.Replicas,
 						common.Replica{
 							ID: fmt.Sprintf("%d", i),
 							LoadIndexes: []common.LoadIndex{
@@ -241,36 +246,33 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 					)
 				}
 
-				Expect(run.Client.UpdateContainer(ctx, run.Container.ClientObject())).To(Succeed())
-				Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
+				run.Container().Update()
 			},
 		).
 		Branch(
 			"malformed desired partitioning",
-			func(branch *ScenarioWithFakeClient[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
+			func(branch *Scenario[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				branch.Hydrate(
 					"duplicated replicas",
 					func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-						run.Container.Object().Spec.ShardManagerSpec.Replicas = append(
-							run.Container.Object().Spec.ShardManagerSpec.Replicas,
-							run.Container.Object().Spec.ShardManagerSpec.Replicas[0],
+						run.Container().Get().Object().Spec.ShardManagerSpec.Replicas = append(
+							run.Container().Object().Spec.ShardManagerSpec.Replicas,
+							run.Container().Object().Spec.ShardManagerSpec.Replicas[0],
 						)
-						Expect(run.Client.UpdateContainer(ctx, run.Container.ClientObject())).To(Succeed())
-						Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
+						run.Container().Update()
 					},
 				).
 					BranchFailureToUpdateStatusCheck(collector.Collect).
 					WithCheck(
 						"handle errors",
 						func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-							Expect(run.ReconcileError).ToNot(HaveOccurred())
-							Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Duration(0)))
-							Expect(run.ReconcileResult.Requeue).To(BeFalse())
+							Expect(run.ReconcileError()).ToNot(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking ready condition")
-							Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
 							readyCondition := meta.FindStatusCondition(
-								run.Container.Object().Status.Conditions,
+								run.Container().Get().Object().Status.Conditions,
 								StatusTypeReady,
 							)
 							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
@@ -284,14 +286,13 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 		WithCheck(
 			"successfully update shards on secrets",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-				Expect(run.ReconcileError).ToNot(HaveOccurred())
-				Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult.Requeue).To(BeFalse())
+				Expect(run.ReconcileError()).ToNot(HaveOccurred())
+				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking ready condition")
-				Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
 				readyCondition := meta.FindStatusCondition(
-					run.Container.Object().Status.Conditions,
+					run.Container().Get().Object().Status.Conditions,
 					StatusTypeReady,
 				)
 				Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
@@ -299,18 +300,18 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 
 				By("Checking secret was assigned a shard")
 				secretsListOptions := &client.ListOptions{
-					Namespace: testNamespace.ObjectKey().Name,
+					Namespace: run.Namespace().ObjectKey().Name,
 					LabelSelector: labels.SelectorFromSet(
-						run.Container.Object().Spec.LabelSelector.MatchLabels,
+						run.Container().Object().Spec.LabelSelector.MatchLabels,
 					),
 				}
 				shardSecrets := &corev1.SecretList{}
-				Expect(run.Client.List(ctx, shardSecrets, secretsListOptions)).To(Succeed())
+				Expect(run.Client().List(ctx, shardSecrets, secretsListOptions)).To(Succeed())
 				shardSecretsByUID := map[types.UID]corev1.Secret{}
 				for _, secret := range shardSecrets.Items {
 					shardSecretsByUID[secret.GetUID()] = secret
 				}
-				for _, replica := range run.Container.Object().Spec.ShardManagerSpec.Replicas {
+				for _, replica := range run.Container().Object().Spec.ShardManagerSpec.Replicas {
 					secret, ok := shardSecretsByUID[replica.LoadIndexes[0].Shard.UID]
 					Expect(ok).To(BeTrue())
 					Expect(secret.Data["shard"]).To(Equal([]byte(replica.ID)))
@@ -318,11 +319,11 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			},
 		).
 		Commit(collector.Collect).
-		WithFakeClient(
+		Hydrate(
 			"failing to update secrets",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-				run.FakeClient.
-					WithUpdateFunction(run.Container.ClientObject(),
+				run.FakeClient().
+					WithUpdateFunction(run.Container(),
 						func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 							return errors.New("fake error updating secret")
 						},
@@ -332,14 +333,13 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 		WithCheck(
 			"handle errors",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
-				Expect(run.ReconcileError).To(HaveOccurred())
-				Expect(run.ReconcileError.Error()).To(Equal("fake error updating secret"))
-				Expect(run.ReconcileResult.RequeueAfter).To(Equal(time.Second))
+				Expect(run.ReconcileError()).To(HaveOccurred())
+				Expect(run.ReconcileError().Error()).To(Equal("fake error updating secret"))
+				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 
 				By("Checking ready condition")
-				Expect(run.Client.GetContainer(ctx, run.Container.ClientObject())).To(Succeed())
 				readyCondition := meta.FindStatusCondition(
-					run.Container.Object().Status.Conditions,
+					run.Container().Get().Object().Status.Conditions,
 					StatusTypeReady,
 				)
 				Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
@@ -349,19 +349,19 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 		)
 
 	BeforeEach(func() {
-		testNamespace = CreateNamespaceWithRandomName(ctx, k8sClient)
+		scenarioRun = collector.NewRun(ctx, k8sClient)
 	})
 
 	AfterEach(func() {
-		DeleteNamespace(ctx, k8sClient, testNamespace)
-		testNamespace = nil
+		collector.Cleanup(scenarioRun)
+		scenarioRun = nil
 	})
 
 	for _, scenarioContext := range collector.All() {
 		Context(scenarioContext.ContextStr, func() {
 			for _, scenario := range scenarioContext.Its {
 				It(scenario.ItStr, func() {
-					scenario.ItFn(ctx, k8sClient, testNamespace)
+					scenario.ItFn(scenarioRun)
 				})
 			}
 		})

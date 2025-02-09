@@ -20,7 +20,10 @@ import (
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/uuid"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -30,23 +33,23 @@ import (
 type ScenarioReconcilerFn[R reconcile.TypedReconciler[reconcile.Request]] func(client.Client) R
 
 // ScenarioRegisterCallback is a signature of a callback function to register this scenario to the collector.
-type ScenarioRegisterCallback[K client.Object] func(*ScenarioWithCheck[K])
+type ScenarioRegisterCallback[K client.Object] func(*ScenarioCheck[K])
 
 // ScenarioItFn is a signature of a function that is called from ginkgo to run a scenario.
-type ScenarioItFn func(context.Context, *Client, *ObjectContainer[*corev1.Namespace])
+type ScenarioItFn[K client.Object] func(GenericScenarioRun)
 
 // ScenarioIt is a wrapper for ginkgo.
 // It represents executable unit of code for the It function in ginkgo.
-type ScenarioIt struct {
+type ScenarioIt[K client.Object] struct {
 	ItStr string
-	ItFn  ScenarioItFn
+	ItFn  ScenarioItFn[K]
 }
 
 // ScenarioContext is a wrapper for ginkgo.
 // It represents executable unit of code for the Context function in ginkgo.
-type ScenarioContext struct {
+type ScenarioContext[K client.Object] struct {
 	ContextStr string
-	Its        []*ScenarioIt
+	Its        []*ScenarioIt[K]
 }
 
 // ScenarioCollector is a collector to instruct ginkgo.
@@ -55,7 +58,7 @@ type ScenarioContext struct {
 // In the runtime phase, registered scenarios are executed using their ScenarioItFn functions.
 type ScenarioCollector[K client.Object, R reconcile.TypedReconciler[reconcile.Request]] struct {
 	reconcilerFn ScenarioReconcilerFn[R]
-	checks       []*ScenarioWithCheck[K]
+	checks       []*ScenarioCheck[K]
 }
 
 // NewScenarioCollector creates a new scenario collector.
@@ -68,27 +71,49 @@ func NewScenarioCollector[K client.Object, R reconcile.TypedReconciler[reconcile
 }
 
 // Collect is a callback function to register a scenario in the collector.
-func (c *ScenarioCollector[K, R]) Collect(check *ScenarioWithCheck[K]) {
+func (c *ScenarioCollector[K, R]) NewRun(ctx context.Context, k8sClient client.Client) *ScenarioRun[K] {
+	By("Creating a new run")
+	Expect(ctx).NotTo(BeNil())
+	Expect(k8sClient).NotTo(BeNil())
+	run := &ScenarioRun[K]{
+		ctx:        ctx,
+		client:     k8sClient,
+		fakeClient: NewFakeClient(k8sClient),
+	}
+	By("Creating a test namespace")
+	name := "test-" + string(uuid.NewUUID())
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: name,
+		},
+	}
+	run.namespace = NewObjectContainer(run, namespace).Create()
+	return run
+}
+
+func (c *ScenarioCollector[K, R]) Cleanup(run GenericScenarioRun) {
+	By("Deleting the test namespace")
+	run.Namespace().Get().Delete()
+}
+
+// Collect is a callback function to register a scenario in the collector.
+func (c *ScenarioCollector[K, R]) Collect(check *ScenarioCheck[K]) {
 	c.checks = append(c.checks, check)
 }
 
 // All is a function that returns all scenarios that was registered as a list of ScenarioIt.
-func (c *ScenarioCollector[K, R]) All() []ScenarioContext {
-	contexts := map[string]*ScenarioContext{}
+func (c *ScenarioCollector[K, R]) All() []ScenarioContext[K] {
+	contexts := map[string]*ScenarioContext[K]{}
 	orderedContexts := []string{}
 	for _, check := range c.checks {
-		contextStr := fmt.Sprintf(
-			"using %s template with %s hydration using %s client",
-			check.templateName,
-			strings.Join(append([]string{check.hydrationName}, check.hydrationPatches...), " + "),
-			check.fakeClientName,
-		)
-		if len(check.fakeClientPatches) > 0 {
-			contextStr += fmt.Sprintf(" that is %s", strings.Join(check.fakeClientPatches, " and "))
+		contextStr := fmt.Sprintf("using %s scenario", check.templateName)
+		if len(check.hydrations) > 0 {
+			contextStr += fmt.Sprintf(" and %s patches", strings.Join(check.hydrations, " + "))
 		}
 
 		if _, ok := contexts[contextStr]; !ok {
-			contexts[contextStr] = &ScenarioContext{
+			contexts[contextStr] = &ScenarioContext[K]{
 				ContextStr: contextStr,
 			}
 			orderedContexts = append(orderedContexts, contextStr)
@@ -106,38 +131,26 @@ func (c *ScenarioCollector[K, R]) All() []ScenarioContext {
 				caseStr,
 			)
 		}
-		scenarioIt := &ScenarioIt{
+		scenarioIt := &ScenarioIt[K]{
 			ItStr: caseStr,
-			ItFn: func(ctx context.Context, client *Client, ns *ObjectContainer[*corev1.Namespace]) {
-				By("Creating scenario run")
-				run := &ScenarioRun[K]{
-					Context:   ctx,
-					Client:    client,
-					Namespace: ns,
-				}
-				By("Seeding object for template " + check.templateName)
-				run.SeedObject = check.seedFn()
-				run.SeedObject.SetNamespace(run.Namespace.Object().Name)
-				By("Hydrating " + check.hydrationName)
-				check.hydrationFn(run)
-				for i, fn := range check.hydrationPatchesFn {
-					By("Patching hydration with " + check.hydrationPatches[i])
-					fn(run)
-				}
-				By("Creating fake client " + check.fakeClientName)
-				check.fakeClientFn(run)
-				for i, fn := range check.fakeClientPatchesFn {
-					By("Patching fake client with " + check.fakeClientPatches[i])
+			ItFn: func(scenarioRun GenericScenarioRun) {
+				run, ok := scenarioRun.(*ScenarioRun[K])
+				Expect(ok).To(BeTrue())
+				By("Seeding scenario using " + check.templateName)
+				check.seedFn(run)
+				for i, fn := range check.hydrationsFn {
+					By("Patching with " + check.hydrations[i])
 					fn(run)
 				}
 				By("Creating reconciler")
-				reconciler := c.reconcilerFn(run.FakeClient)
+				reconciler := c.reconcilerFn(run.fakeClient)
+				Expect(reconciler).NotTo(BeNil())
 				By("Reconciling")
-				result, err := reconciler.Reconcile(run.Context, reconcile.Request{
-					NamespacedName: run.Container.NamespacedName(),
+				result, err := reconciler.Reconcile(run.ctx, reconcile.Request{
+					NamespacedName: run.container.NamespacedName(),
 				})
-				run.ReconcileResult = result
-				run.ReconcileError = err
+				run.reconcileResult = result
+				run.reconcileError = err
 				By("Checking " + check.checkName)
 				check.checkFn(run)
 				// By("Simulating error")
@@ -146,7 +159,7 @@ func (c *ScenarioCollector[K, R]) All() []ScenarioContext {
 		}
 		scenarioContext.Its = append(scenarioContext.Its, scenarioIt)
 	}
-	contextsList := make([]ScenarioContext, len(orderedContexts))
+	contextsList := make([]ScenarioContext[K], len(orderedContexts))
 	for i, contextStr := range orderedContexts {
 		contextsList[i] = *contexts[contextStr]
 	}

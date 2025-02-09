@@ -81,7 +81,7 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 		*normalizer.Spec.MetricValuesProviderRef,
 	)
 	if err != nil {
-		log.Error(err, "Failed to find poller by ref")
+		log.Error(err, "Failed to find metric provider by ref")
 		meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
 			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
@@ -132,6 +132,7 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 		// If this is a math problem - re-queuing won't help
 		return ctrl.Result{}, nil
 	}
+	log.V(1).Info("Normalized successfully", "len", len(normalizedValues))
 
 	normalizer.Status.Values = normalizedValues
 	meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{

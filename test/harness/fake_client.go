@@ -36,6 +36,12 @@ type UpdateSubResourceFn func(ctx context.Context, obj client.Object, opts ...cl
 // DeleteFn is the client.Client.Delete function signature
 type DeleteFn func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error
 
+// GenericObjectContainer is an interface for ObjectContainer that doesn't require to know its generic type.
+type GenericObjectContainer interface {
+	ClientObject() client.Object
+	ObjectKey() client.ObjectKey
+}
+
 // FakeClient is a fake client.Client implementation.
 // It allows to register custom Get, List, Update and Delete functions for specific objects.
 type FakeClient struct {
@@ -47,6 +53,7 @@ type FakeClient struct {
 	deleteFn              map[reflect.Type]map[string]DeleteFn
 }
 
+// NewFakeClient returns a new FakeClient instance.
 func NewFakeClient(client client.Client) *FakeClient {
 	return &FakeClient{
 		Client: client,
@@ -61,14 +68,14 @@ type FakeStatusWriter struct {
 }
 
 // WithGetFunction registers a custom Get function for the given object.
-func (f *FakeClient) WithGetFunction(container *ObjectContainer[client.Object], fn GetFn) *FakeClient {
+func (f *FakeClient) WithGetFunction(container GenericObjectContainer, fn GetFn) *FakeClient {
 	if f.getFunctions == nil {
 		f.getFunctions = make(map[reflect.Type]map[string]GetFn)
 	}
-	if f.getFunctions[reflect.TypeOf(container.Object())] == nil {
-		f.getFunctions[reflect.TypeOf(container.Object())] = make(map[string]GetFn)
+	if f.getFunctions[reflect.TypeOf(container.ClientObject())] == nil {
+		f.getFunctions[reflect.TypeOf(container.ClientObject())] = make(map[string]GetFn)
 	}
-	f.getFunctions[reflect.TypeOf(container.Object())][container.ObjectKey().String()] = fn
+	f.getFunctions[reflect.TypeOf(container.ClientObject())][container.ObjectKey().String()] = fn
 	return f
 }
 
@@ -106,14 +113,14 @@ func (f *FakeClient) List(ctx context.Context, list client.ObjectList, opts ...c
 }
 
 // WithUpdateFunction registers a custom Update function for the given object.
-func (f *FakeClient) WithUpdateFunction(container *ObjectContainer[client.Object], fn UpdateFn) *FakeClient {
+func (f *FakeClient) WithUpdateFunction(container GenericObjectContainer, fn UpdateFn) *FakeClient {
 	if f.updateFunctions == nil {
 		f.updateFunctions = make(map[reflect.Type]map[string]UpdateFn)
 	}
-	if f.updateFunctions[reflect.TypeOf(container.Object())] == nil {
-		f.updateFunctions[reflect.TypeOf(container.Object())] = make(map[string]UpdateFn)
+	if f.updateFunctions[reflect.TypeOf(container.ClientObject())] == nil {
+		f.updateFunctions[reflect.TypeOf(container.ClientObject())] = make(map[string]UpdateFn)
 	}
-	f.updateFunctions[reflect.TypeOf(container.Object())][container.ObjectKey().String()] = fn
+	f.updateFunctions[reflect.TypeOf(container.ClientObject())][container.ObjectKey().String()] = fn
 	return f
 }
 
@@ -139,14 +146,14 @@ func (f *FakeClient) Status() client.StatusWriter {
 }
 
 // WithStatusUpdateFunction registers a custom Update function for the given object status.
-func (f *FakeClient) WithStatusUpdateFunction(container *ObjectContainer[client.Object], fn UpdateSubResourceFn) *FakeClient {
+func (f *FakeClient) WithStatusUpdateFunction(container GenericObjectContainer, fn UpdateSubResourceFn) *FakeClient {
 	if f.statusUpdateFunctions == nil {
 		f.statusUpdateFunctions = make(map[reflect.Type]map[string]UpdateSubResourceFn)
 	}
-	if f.statusUpdateFunctions[reflect.TypeOf(container.Object())] == nil {
-		f.statusUpdateFunctions[reflect.TypeOf(container.Object())] = make(map[string]UpdateSubResourceFn)
+	if f.statusUpdateFunctions[reflect.TypeOf(container.ClientObject())] == nil {
+		f.statusUpdateFunctions[reflect.TypeOf(container.ClientObject())] = make(map[string]UpdateSubResourceFn)
 	}
-	f.statusUpdateFunctions[reflect.TypeOf(container.Object())][container.ObjectKey().String()] = fn
+	f.statusUpdateFunctions[reflect.TypeOf(container.ClientObject())][container.ObjectKey().String()] = fn
 	return f
 }
 
@@ -164,14 +171,14 @@ func (s *FakeStatusWriter) Update(ctx context.Context, obj client.Object, opts .
 }
 
 // WithDeleteFunction registers a custom Delete function for the given object.
-func (f *FakeClient) WithDeleteFunction(container *ObjectContainer[client.Object], fn DeleteFn) *FakeClient {
+func (f *FakeClient) WithDeleteFunction(container GenericObjectContainer, fn DeleteFn) *FakeClient {
 	if f.deleteFn == nil {
 		f.deleteFn = make(map[reflect.Type]map[string]DeleteFn)
 	}
-	if f.deleteFn[reflect.TypeOf(container.Object())] == nil {
-		f.deleteFn[reflect.TypeOf(container.Object())] = make(map[string]DeleteFn)
+	if f.deleteFn[reflect.TypeOf(container.ClientObject())] == nil {
+		f.deleteFn[reflect.TypeOf(container.ClientObject())] = make(map[string]DeleteFn)
 	}
-	f.deleteFn[reflect.TypeOf(container.Object())][container.ObjectKey().String()] = fn
+	f.deleteFn[reflect.TypeOf(container.ClientObject())][container.ObjectKey().String()] = fn
 	return f
 }
 
