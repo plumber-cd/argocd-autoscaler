@@ -60,7 +60,7 @@ func (list ReplicaList) SerializeToString() string {
 	}
 	sort.Strings(keys)
 
-	var serializedItems []string
+	serializedItems := make([]string, 0, len(keys))
 	for _, k := range keys {
 		serializedItems = append(serializedItems, fmt.Sprintf("%s=%v", k, m[k]))
 	}

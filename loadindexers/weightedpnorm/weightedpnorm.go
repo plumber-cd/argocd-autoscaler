@@ -66,16 +66,16 @@ func (li *LoadIndexerImpl) Calculate(
 
 	loadIndexes := []common.LoadIndex{}
 	for shardUID, values := range metricsByShard {
-		value, err := li.loadIndex(
+		value := li.loadIndex(
 			p,
 			weights,
 			values,
 		)
+		valueAsString := strconv.FormatFloat(value, 'f', -1, 64)
+		valueAsResource, err := resource.ParseQuantity(valueAsString)
 		if err != nil {
 			return nil, err
 		}
-		valueAsString := strconv.FormatFloat(value, 'f', -1, 64)
-		valueAsResource, err := resource.ParseQuantity(valueAsString)
 		loadIndexes = append(loadIndexes, common.LoadIndex{
 			Shard:        shardsByUID[shardUID],
 			Value:        valueAsResource,
@@ -90,8 +90,7 @@ func (_ *LoadIndexerImpl) loadIndex(
 	p int32,
 	weights map[string]autoscaler.WeightedPNormLoadIndexWeight,
 	values []common.MetricValue,
-) (float64, error) {
-
+) float64 {
 	sum := 0.0
 	for _, m := range values {
 		weight, ok := weights[m.ID]
@@ -106,5 +105,5 @@ func (_ *LoadIndexerImpl) loadIndex(
 		sum += weightValue * math.Pow(math.Abs(value), float64(p))
 	}
 
-	return math.Pow(sum, float64(1)/float64(p)), nil
+	return math.Pow(sum, float64(1)/float64(p))
 }

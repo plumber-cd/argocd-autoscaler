@@ -34,7 +34,8 @@ type ObjectContainer[K client.Object] struct {
 }
 
 // NewObjectContainer creates a new ObjectContainer with the provided object.
-// The object passed in must be initialized with metav1.ObjectMeta, where the NamespacedName and ObjectKey would inferred from.
+// The object passed in must be initialized with metav1.ObjectMeta,
+// where the NamespacedName and ObjectKey would inferred from.
 // Optionally, the set of prep functions is taken in to prepare an object beyond the metadata (i.e. spec).
 // This can use unprepared client, including client.Client. It does not have to be the one used in a ScenarioRun.
 // NOTE that this function does NOT create a resource in the cluster. The client is only used for schema and RESTMapper.

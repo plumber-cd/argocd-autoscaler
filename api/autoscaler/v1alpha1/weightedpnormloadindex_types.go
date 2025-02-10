@@ -38,7 +38,7 @@ type WeightedPNormLoadIndexWeight struct {
 	// meaning that if there are negative input values (based on previous normalization),
 	// they will be reducing the load index accordingly to their weight.
 	// For example - Robust Scaling normalization results in 0 representing a median.
-	// Depending on the original source of normalized values, this may or may not be desireable.
+	// Depending on the original source of normalized values, this may or may not be desirable.
 	// Set to false to assume replace all negative values with 0.
 	// That will prevent load index reductions and it will only go up from positive values.
 	// For Robust Scaling normalization, for example,
@@ -55,7 +55,7 @@ type WeightedPNormLoadIndexSpec struct {
 	// +kubebuilder:validation:Required
 	P int32 `json:"p,omitempty"`
 
-	// Weigths is the list of metrics and their weights to use in this load index.
+	// Weights is the list of metrics and their weights to use in this load index.
 	// +kubebuilder:validation:Required
 	Weights []WeightedPNormLoadIndexWeight `json:"weights,omitempty"`
 }

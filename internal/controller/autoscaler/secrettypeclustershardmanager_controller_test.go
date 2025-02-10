@@ -311,7 +311,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				Expect(run.ReconcileError()).To(HaveOccurred())
 				Expect(run.ReconcileError().Error()).To(Equal("fake error updating secret"))
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking ready condition")

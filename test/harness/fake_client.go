@@ -159,7 +159,11 @@ func (f *FakeClient) WithStatusUpdateFunction(container GenericObjectContainer, 
 
 // Update calls the custom Update function if it was registered for the given object status.
 // Otherwise, it calls the original client.Client.Status().Update function.
-func (s *FakeStatusWriter) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+func (s *FakeStatusWriter) Update(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.SubResourceUpdateOption,
+) error {
 	if s.parent.statusUpdateFunctions != nil {
 		if functions, ok := s.parent.statusUpdateFunctions[reflect.TypeOf(obj)]; ok {
 			if fn, ok := functions[client.ObjectKeyFromObject(obj).String()]; ok {

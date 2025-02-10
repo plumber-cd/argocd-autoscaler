@@ -147,7 +147,8 @@ func (s *Scenario[K]) Branch(
 	return s
 }
 
-// BranchResourceNotFoundCheck is a shortcut function that uses scenario client and a set of checks that are expecting clean exit with no re-queue.
+// BranchResourceNotFoundCheck is a shortcut function that uses fake client
+// and a set of checks that are expecting clean exit with no re-queue.
 // Acts as a separate branch, does not modify the state, and allows to continue the scenario without impacting it.
 func (s *Scenario[K]) BranchResourceNotFoundCheck(callback ScenarioRegisterCallback[K]) *Scenario[K] {
 	s.Branch("resource not found", func(branch *Scenario[K]) {
@@ -162,7 +163,8 @@ func (s *Scenario[K]) BranchResourceNotFoundCheck(callback ScenarioRegisterCallb
 	return s
 }
 
-// BranchFailureToGetResourceCheck is a shortcut function that uses a WithClientFromParentThatFailsToGetResource() and a set of checks that are expecting a corresponding error from it.
+// BranchFailureToGetResourceCheck is a shortcut function that uses a WithClientFromParentThatFailsToGetResource()
+// and a set of checks that are expecting a corresponding error from it.
 // Acts as a separate branch, does not modify the state, and allows to continue the scenario without impacting it.
 func (s *Scenario[K]) BranchFailureToGetResourceCheck(callback ScenarioRegisterCallback[K]) *Scenario[K] {
 	s.Branch("failure to get resource", func(branch *Scenario[K]) {
@@ -179,7 +181,8 @@ func (s *Scenario[K]) BranchFailureToGetResourceCheck(callback ScenarioRegisterC
 	return s
 }
 
-// BranchFailureToUpdateStatusCheck is a shortcut function that uses a WithClientFromParentThatFailsToUpdateStatus() and a set of check that are expecting a corresponding error from it.
+// BranchFailureToUpdateStatusCheck is a shortcut function that uses a WithClientFromParentThatFailsToUpdateStatus()
+// and a set of check that are expecting a corresponding error from it.
 // Acts as a separate branch, does not modify the state, and allows to continue the scenario without impacting it.
 func (s *Scenario[K]) BranchFailureToUpdateStatusCheck(callback ScenarioRegisterCallback[K]) *Scenario[K] {
 	s.Branch("failure to update status", func(branch *Scenario[K]) {

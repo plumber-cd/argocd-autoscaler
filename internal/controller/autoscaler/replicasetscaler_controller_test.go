@@ -493,7 +493,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).To(HaveOccurred())
 							Expect(run.ReconcileError().Error()).To(ContainSubstring("fake failure to update shard manager"))
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
@@ -513,7 +513,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						"update shard manager with the expected replicas",
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
@@ -557,7 +557,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						"begin RS controller scaling",
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
@@ -629,7 +629,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).To(HaveOccurred())
 							Expect(run.ReconcileError().Error()).To(ContainSubstring("fake failure to update sts"))
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
@@ -649,7 +649,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						"apply STS scaling",
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).ToNot(HaveOccurred())
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
@@ -707,7 +707,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						"apply STS scaling and restart",
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).ToNot(HaveOccurred())
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
@@ -847,7 +847,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).To(HaveOccurred())
 							Expect(run.ReconcileError().Error()).To(ContainSubstring("fake failure to update sts"))
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
@@ -867,7 +867,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						"apply STS scaling to 0",
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).ToNot(HaveOccurred())
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
@@ -935,7 +935,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).To(HaveOccurred())
 							Expect(run.ReconcileError().Error()).To(ContainSubstring("fake failure to update shard manager"))
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
@@ -955,7 +955,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						"update shard manager with the expected replicas",
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
@@ -999,7 +999,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						"begin RS controller scaling",
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
@@ -1071,7 +1071,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).To(HaveOccurred())
 							Expect(run.ReconcileError().Error()).To(ContainSubstring("fake failure to update sts"))
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
@@ -1091,7 +1091,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						"apply STS scaling",
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).ToNot(HaveOccurred())
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(time.Second)))
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")

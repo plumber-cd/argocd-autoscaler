@@ -49,6 +49,8 @@ const (
 	ReplicaSetReconcilerModeDefault        = ReplicaSetReconcilerMode("default")
 	ReplicaSetReconcilerModeRolloutRestart = ReplicaSetReconcilerMode("rollout-restart")
 	ReplicaSetReconcilerModeX0Y            = ReplicaSetReconcilerMode("x0y")
+
+	ReplicaSetControllerKindStatefulSet = "StatefulSet"
 )
 
 type ReplicaSetController struct {
@@ -69,6 +71,8 @@ type ReplicaSetScalerReconciler struct {
 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.0/pkg/reconcile
+//
+//nolint:gocyclo
 func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 	log.V(1).Info("Received reconcile request")
@@ -203,7 +207,7 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	replicaSetController := ReplicaSetController{}
 	switch scaler.Spec.ReplicaSetControllerRef.Kind {
-	case "StatefulSet":
+	case ReplicaSetControllerKindStatefulSet:
 		replicaSetController.Kind = scaler.Spec.ReplicaSetControllerRef.Kind
 	default:
 		err := fmt.Errorf("Unsupported ReplicaSetControllerRef.Kind")
@@ -227,7 +231,7 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	switch replicaSetController.Kind {
-	case "StatefulSet":
+	case ReplicaSetControllerKindStatefulSet:
 		statefulSetController, err := findByRef[*appsv1.StatefulSet](
 			ctx,
 			r.Scheme,
@@ -407,7 +411,7 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 func (r *ReplicaSetScalerReconciler) GetRSControllerDesiredReplicas(replicaSetController ReplicaSetController) int32 {
 	switch replicaSetController.Kind {
-	case "StatefulSet":
+	case ReplicaSetControllerKindStatefulSet:
 		return *replicaSetController.StatefulSet.Spec.Replicas
 	default:
 		panic("unreachable")
@@ -416,7 +420,7 @@ func (r *ReplicaSetScalerReconciler) GetRSControllerDesiredReplicas(replicaSetCo
 
 func (r *ReplicaSetScalerReconciler) GetRSControllerActualReplicas(replicaSetController ReplicaSetController) int32 {
 	switch replicaSetController.Kind {
-	case "StatefulSet":
+	case ReplicaSetControllerKindStatefulSet:
 		return replicaSetController.StatefulSet.Status.Replicas
 	default:
 		panic("unreachable")
@@ -426,7 +430,7 @@ func (r *ReplicaSetScalerReconciler) GetRSControllerActualReplicas(replicaSetCon
 func (r *ReplicaSetScalerReconciler) ScaleTo(ctx context.Context, replicaSetController ReplicaSetController, replicas int32, restart bool) error {
 	var obj client.Object
 	switch replicaSetController.Kind {
-	case "StatefulSet":
+	case ReplicaSetControllerKindStatefulSet:
 		replicaSetController.StatefulSet.Spec.Replicas = ptr.To(replicas)
 		containerFound := false
 		for containerIndex, container := range replicaSetController.StatefulSet.Spec.Template.Spec.Containers {
