@@ -55,16 +55,17 @@ type MostWantedTwoPhaseHysteresisEvaluationReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.4/pkg/reconcile
 func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	log.V(1).Info("Received reconcile request")
+	log.V(2).Info("Received reconcile request")
+	defer log.V(2).Info("Reconcile request completed")
 
 	evaluation := &autoscaler.MostWantedTwoPhaseHysteresisEvaluation{}
 	if err := r.Get(ctx, req.NamespacedName, evaluation); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.V(1).Info("Resource not found. Ignoring since object must be deleted")
+			log.V(2).Info("Resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get resource")
-		return ctrl.Result{RequeueAfter: time.Second}, err
+		return ctrl.Result{}, err
 	}
 
 	partitionProvider, err := findByRef[common.PartitionProvider](
@@ -84,14 +85,16 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, evaluation); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should get a new event when partition provider is created
 		return ctrl.Result{}, nil
 	}
+	log.V(1).Info("Partition provider found", "partitionProviderRef", evaluation.Spec.PartitionProviderRef)
 
 	if !meta.IsStatusConditionPresentAndEqual(partitionProvider.GetPartitionProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
+		log.V(1).Info("Partition provider not ready", "partitionProviderRef", evaluation.Spec.PartitionProviderRef)
 		meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
@@ -103,14 +106,15 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 			),
 		})
 		if err := r.Status().Update(ctx, evaluation); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should get a new event when partition provider changes
 		return ctrl.Result{}, nil
 	}
 
 	replicas := partitionProvider.GetPartitionProviderStatus().Replicas
+	log.V(2).Info("Currently reported replicas by partition provider", "count", len(replicas))
 
 	// Maintain the history
 	evaluation.Status.History = append(evaluation.Status.History,
@@ -124,6 +128,7 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 			cleanHistory = append(cleanHistory, record)
 		}
 	}
+	log.V(1).Info("Trim the history", "from", len(evaluation.Status.History), "to", len(cleanHistory))
 	evaluation.Status.History = cleanHistory
 	if len(evaluation.Status.History) < int(evaluation.Spec.MinimumSampleSize) {
 		err := fmt.Errorf("Minimum sample size not reached")
@@ -135,18 +140,22 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, evaluation); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We need to re-queue it for the next poll, but this is NOT an error
 		return ctrl.Result{RequeueAfter: evaluation.Spec.PollingPeriod.Duration}, nil
 	}
+	log.V(2).Info("Minimum sample size reached, proceeding to evaluate",
+		"minimumSampleSize", evaluation.Spec.MinimumSampleSize,
+		"currentSampleSize", len(evaluation.Status.History))
 
 	historyRecords := map[string]autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
 	historyRecordsLastSeen := map[string]metav1.Time{}
 	historyRecorsSeenTimes := map[string]int{}
 	for _, record := range evaluation.Status.History {
 		serializedRecord := record.Replicas.SerializeToString()
+		log.V(2).Info("Noticing record", "record", serializedRecord)
 		if _, ok := historyRecordsLastSeen[serializedRecord]; !ok ||
 			record.Timestamp.After(historyRecordsLastSeen[serializedRecord].Time) {
 			historyRecords[serializedRecord] = record
@@ -158,20 +167,25 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 	topSeenRecord := autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
 	maxSeenCount := 0
 	for serializedRecord, seenTimes := range historyRecorsSeenTimes {
+		log.V(2).Info("Evaluating records", "record", serializedRecord, "seenTimes", seenTimes)
 		if seenTimes > maxSeenCount {
 			maxSeenCount = seenTimes
 			topSeenRecord = historyRecords[serializedRecord]
 		} else if seenTimes == maxSeenCount &&
 			historyRecords[serializedRecord].Timestamp.After(topSeenRecord.Timestamp.Time) {
+			log.V(2).Info("Tie breaker", "left", topSeenRecord, "right", serializedRecord)
 			topSeenRecord = historyRecords[serializedRecord]
 		}
 	}
+	log.V(2).Info("Top seen record", "record", topSeenRecord.Replicas.SerializeToString())
 
 	evaluation.Status.Projection = topSeenRecord.Replicas
 	if evaluation.Status.LastEvaluationTimestamp == nil ||
 		time.Since(evaluation.Status.LastEvaluationTimestamp.Time) >= evaluation.Spec.StabilizationPeriod.Duration {
 		evaluation.Status.Replicas = topSeenRecord.Replicas
 		evaluation.Status.LastEvaluationTimestamp = ptr.To(metav1.Now())
+		log.Info("New partitioning has won",
+			"replicas", len(evaluation.Status.Replicas), "lastEvaluationTimestamp", evaluation.Status.LastEvaluationTimestamp)
 	}
 
 	meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
@@ -180,9 +194,10 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		Reason: StatusTypeReady,
 	})
 	if err := r.Status().Update(ctx, evaluation); err != nil {
-		log.Error(err, "Failed to update resource status")
-		return ctrl.Result{RequeueAfter: time.Second}, err
+		log.V(1).Info("Failed to update resource status", "err", err)
+		return ctrl.Result{}, err
 	}
+	log.Info("Resource status updated", "projection", len(evaluation.Status.Projection))
 
 	// Re-queue for the next poll
 	return ctrl.Result{RequeueAfter: evaluation.Spec.PollingPeriod.Duration}, nil

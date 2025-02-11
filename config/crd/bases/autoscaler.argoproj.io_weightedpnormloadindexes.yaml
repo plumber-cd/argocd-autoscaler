@@ -102,9 +102,7 @@ spec:
                       - type: integer
                       - type: string
                       description: Weight of this metric.
-                      format: float
                       pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                      type: number
                       x-kubernetes-int-or-string: true
                   required:
                   - id
@@ -220,9 +218,7 @@ spec:
                       - type: integer
                       - type: string
                       description: Value is a value of this load index.
-                      format: float
                       pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                      type: number
                       x-kubernetes-int-or-string: true
                   required:
                   - displayValue

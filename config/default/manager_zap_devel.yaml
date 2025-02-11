@@ -2,3 +2,9 @@
 - op: add
   path: /spec/template/spec/containers/0/args/0
   value: --zap-devel
+# - op: add
+#   path: /spec/template/spec/containers/0/args/0
+#   value: --zap-encoder=console
+# - op: add
+#   path: /spec/template/spec/containers/0/args/0
+#   value: --zap-log-level=1

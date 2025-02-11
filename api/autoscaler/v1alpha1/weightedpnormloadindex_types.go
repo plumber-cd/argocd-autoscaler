@@ -30,8 +30,6 @@ type WeightedPNormLoadIndexWeight struct {
 
 	// Weight of this metric.
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Type:=number
-	// +kubebuilder:validation:Format:=float
 	Weight resource.Quantity `json:"weight,omitempty"`
 
 	// Negative by default is true,

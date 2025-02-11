@@ -37,8 +37,6 @@ type PrometheusMetric struct {
 	// NoData if set will be used as the value when no data is available in Prometheus.
 	// If not set - missing data will result in error.
 	// There are metrics like argocd_app_k8s_request_total that might have a bug and not being reported for prolonged periods of time.
-	// +kubebuilder:validation:Type:=number
-	// +kubebuilder:validation:Format:=float
 	NoData *resource.Quantity `json:"noData,omitempty"`
 }
 

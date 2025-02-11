@@ -184,9 +184,7 @@ spec:
                       - type: integer
                       - type: string
                       description: Value is the value of the metric.
-                      format: float
                       pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                      type: number
                       x-kubernetes-int-or-string: true
                   required:
                   - displayValue

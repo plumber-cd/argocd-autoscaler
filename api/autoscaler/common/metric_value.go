@@ -31,8 +31,6 @@ type MetricValue struct {
 	Query string `json:"query,omitempty"`
 	// Value is the value of the metric.
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Type:=number
-	// +kubebuilder:validation:Format:=float
 	Value resource.Quantity `json:"value,omitempty"`
 	// DisplayValue is the string representation of the without precision guarantee.
 	// This is meaningless and exists purely for convenience of someone who is looking at the kubectl get output.

@@ -19,7 +19,6 @@ package autoscaler
 import (
 	"context"
 	"fmt"
-	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -57,22 +56,24 @@ type WeightedPNormLoadIndexReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.4/pkg/reconcile
 func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	log.V(1).Info("Received reconcile request")
+	log.V(2).Info("Received reconcile request")
+	defer log.V(2).Info("Reconcile request completed")
 
 	loadIndex := &autoscaler.WeightedPNormLoadIndex{}
 	if err := r.Get(ctx, req.NamespacedName, loadIndex); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.V(1).Info("Resource not found. Ignoring since object must be deleted")
+			log.V(2).Info("Resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get resource")
-		return ctrl.Result{RequeueAfter: time.Second}, err
+		return ctrl.Result{}, err
 	}
 
 	weightsByID := map[string]autoscaler.WeightedPNormLoadIndexWeight{}
 	for _, weight := range loadIndex.Spec.Weights {
+		log.V(2).Info("Reading weights configuration", "metric", weight.ID)
 		if _, exists := weightsByID[weight.ID]; exists {
-			err := fmt.Errorf("duplicate weight definition for metric ID '%s'", weight.ID)
+			err := fmt.Errorf("duplicate weight configuration for metric ID '%s'", weight.ID)
 			log.Error(err, "Resource malformed")
 			meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
 				Type:    StatusTypeReady,
@@ -81,14 +82,15 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 				Message: err.Error(),
 			})
 			if err := r.Status().Update(ctx, loadIndex); err != nil {
-				log.Error(err, "Failed to update resource status")
-				return ctrl.Result{RequeueAfter: time.Second}, err
+				log.V(1).Info("Failed to update resource status", "err", err)
+				return ctrl.Result{}, err
 			}
 			// Resource is malformed - re-queuing won't help
 			return ctrl.Result{}, nil
 		}
 		weightsByID[weight.ID] = weight
 	}
+	log.V(1).Info("Weights configuration read", "count", len(weightsByID))
 
 	metricValuesProvider, err := findByRef[common.MetricValuesProvider](
 		ctx,
@@ -107,14 +109,19 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, loadIndex); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should get a new event when metric provider is created
 		return ctrl.Result{}, nil
 	}
+	log.V(1).Info("Metric values provider found",
+		"metricValuesProvider", loadIndex.Spec.MetricValuesProviderRef)
 
-	if !meta.IsStatusConditionPresentAndEqual(metricValuesProvider.GetMetricValuesProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(
+		metricValuesProvider.GetMetricValuesProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
+		log.V(1).Info("Metric values provider not ready",
+			"metricValuesProvider", loadIndex.Spec.MetricValuesProviderRef)
 		meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
@@ -126,8 +133,8 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 			),
 		})
 		if err := r.Status().Update(ctx, loadIndex); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should get a new event when metric provider changes
 		return ctrl.Result{}, nil
@@ -148,13 +155,14 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, loadIndex); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// re-queuing won't help if this is a math problem
 		// It could also be malformed data from the upstream, but net result is the same
 		return ctrl.Result{}, nil
 	}
+	log.Info("Load indexes calculated", "count", len(loadIndexes))
 
 	loadIndex.Status.Values = loadIndexes
 	meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{
@@ -163,9 +171,10 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 		Reason: StatusTypeReady,
 	})
 	if err := r.Status().Update(ctx, loadIndex); err != nil {
-		log.Error(err, "Failed to update resource status")
-		return ctrl.Result{RequeueAfter: time.Second}, err
+		log.V(1).Info("Failed to update resource status", "err", err)
+		return ctrl.Result{}, err
 	}
+	log.Info("Resource status updated", "indexes", len(loadIndexes))
 
 	// We don't need to do anything unless metric provider data changes
 	return ctrl.Result{}, nil

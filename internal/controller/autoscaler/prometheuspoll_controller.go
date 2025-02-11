@@ -57,20 +57,22 @@ type PrometheusPollReconciler struct {
 // move the current state of the cluster closer to the desired state.
 func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	log.V(1).Info("Received reconcile request")
+	log.V(2).Info("Received reconcile request")
+	defer log.V(2).Info("Reconcile request completed")
 
 	poll := &autoscaler.PrometheusPoll{}
 	if err := r.Get(ctx, req.NamespacedName, poll); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.V(1).Info("Resource not found. Ignoring since object must be deleted")
+			log.V(2).Info("Resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get resource")
-		return ctrl.Result{RequeueAfter: time.Second}, err
+		return ctrl.Result{}, err
 	}
 
 	metricIDs := map[string]bool{}
 	for _, metric := range poll.Spec.Metrics {
+		log.V(2).Info("Reading metric configuration", "metric", metric.ID)
 		if _, exists := metricIDs[metric.ID]; exists {
 			err := fmt.Errorf("duplicate metric for ID '%s'", metric.ID)
 			log.Error(err, "Malformed resource")
@@ -81,14 +83,15 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				Message: err.Error(),
 			})
 			if err := r.Status().Update(ctx, poll); err != nil {
-				log.Error(err, "Failed to update resource status")
-				return ctrl.Result{RequeueAfter: time.Second}, err
+				log.V(1).Info("Failed to update resource status", "err", err)
+				return ctrl.Result{}, err
 			}
 			// Re-queuing will change nothing - resource is malformed
 			return ctrl.Result{}, nil
 		}
 		metricIDs[metric.ID] = true
 	}
+	log.V(1).Info("Metrics read", "count", len(poll.Spec.Metrics))
 
 	shardsProvider, err := findByRef[common.ShardsProvider](
 		ctx,
@@ -107,14 +110,16 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, poll); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should receive an event if shard manager is created
 		return ctrl.Result{}, nil
 	}
+	log.V(1).Info("Shard manager found", "shardManager", poll.Spec.ShardManagerRef)
 
 	if !meta.IsStatusConditionPresentAndEqual(shardsProvider.GetShardProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
+		log.V(1).Info("Shard manager not ready", "shardManager", poll.Spec.ShardManagerRef)
 		meta.SetStatusCondition(&poll.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
@@ -126,8 +131,8 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			),
 		})
 		if err := r.Status().Update(ctx, poll); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should get a new event when shard manager changes
 		return ctrl.Result{}, nil
@@ -135,12 +140,11 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	shards := shardsProvider.GetShardProviderStatus().Shards
 	if poll.Status.LastPollingTime != nil {
-
 		sinceLastPoll := time.Since(poll.Status.LastPollingTime.Time)
-		log.V(1).Info("Reconciliation request for pre-existing poll", "sinceLastPoll", sinceLastPoll)
+		log.V(2).Info("Reconciliation request for pre-existing poll", "sinceLastPoll", sinceLastPoll)
 
 		if sinceLastPoll < poll.Spec.Period.Duration {
-
+			log.V(2).Info("Not enough time has passed since last poll, checking if shards or metrics have changed")
 			// Check if the list of shards has changed since the last poll
 			previouslyObservedShards := []types.UID{}
 			for _, metricValue := range poll.Status.Values {
@@ -174,6 +178,12 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			}
 			slices.Sort(currentlyObservedMetrics)
 
+			log.V(2).Info("Comparing shards and metrics",
+				"previouslyObservedShards", previouslyObservedShards,
+				"currentlyObservedShards", currentlyObservedShards,
+				"previouslyObserverMetrics", previouslyObserverMetrics,
+				"currentlyObservedMetrics", currentlyObservedMetrics)
+
 			if slices.Equal(previouslyObservedShards, currentlyObservedShards) &&
 				slices.Equal(previouslyObserverMetrics, currentlyObservedMetrics) {
 				remainingWaitTime := poll.Spec.Period.Duration - sinceLastPoll
@@ -181,7 +191,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 					"remaining", remainingWaitTime)
 				return ctrl.Result{RequeueAfter: remainingWaitTime}, nil
 			}
-			log.V(1).Info("Shards or metrics have changed since last poll, re-queuing immediately")
+			log.V(2).Info("Shards or metrics have changed since last poll, re-queuing immediately")
 		}
 	}
 
@@ -195,10 +205,10 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, poll); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: time.Second}, err
+		return ctrl.Result{}, err
 	}
 	log.V(1).Info("Polled metrics", "count", len(metrics))
 
@@ -211,9 +221,10 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		Reason: StatusTypeReady,
 	})
 	if err := r.Status().Update(ctx, poll); err != nil {
-		log.Error(err, "Failed to update resource status")
-		return ctrl.Result{RequeueAfter: time.Second}, err
+		log.V(1).Info("Failed to update resource status", "err", err)
+		return ctrl.Result{}, err
 	}
+	log.Info("Resource status updated", "values", len(metrics), "lastPollingTime", poll.Status.LastPollingTime)
 
 	return ctrl.Result{RequeueAfter: poll.Spec.Period.Duration}, nil
 }

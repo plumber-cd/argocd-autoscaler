@@ -75,24 +75,27 @@ type ReplicaSetScalerReconciler struct {
 //nolint:gocyclo
 func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	log.V(1).Info("Received reconcile request")
+	log.V(2).Info("Received reconcile request")
+	defer log.V(2).Info("Reconcile request completed")
 
 	scaler := &autoscaler.ReplicaSetScaler{}
 	if err := r.Get(ctx, req.NamespacedName, scaler); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.V(1).Info("Resource not found. Ignoring since object must be deleted")
+			log.V(2).Info("Resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get resource")
-		return ctrl.Result{RequeueAfter: time.Second}, err
+		return ctrl.Result{}, err
 	}
 
 	var mode ReplicaSetReconcilerMode
 	if scaler.Spec.Mode != nil {
 		if scaler.Spec.Mode.X0Y != nil {
+			log.V(2).Info("X-0-Y mode is explicitly set")
 			mode = ReplicaSetReconcilerModeX0Y
 		}
 		if scaler.Spec.Mode.Default != nil {
+			log.V(2).Info("Default mode is explicitly set")
 			if mode != "" {
 				err := fmt.Errorf("Scaler spec is invalid - only one mode can be set")
 				log.Error(err, "Validation error")
@@ -103,8 +106,8 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					Message: err.Error(),
 				})
 				if err := r.Status().Update(ctx, scaler); err != nil {
-					log.Error(err, "Failed to update resource status")
-					return ctrl.Result{RequeueAfter: time.Second}, err
+					log.V(1).Info("Failed to update resource status", "err", err)
+					return ctrl.Result{}, err
 				}
 				// We should get a new event when spec changes
 				return ctrl.Result{}, nil
@@ -113,11 +116,13 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 	if mode == "" {
+		log.V(2).Info("No mode was explicitly set - assuming default")
 		mode = ReplicaSetReconcilerModeDefault
 		scaler.Spec.Mode = &autoscaler.ReplicaSetScalerSpecModes{
 			Default: &autoscaler.ReplicaSetScalerSpecModeDefault{},
 		}
 	}
+	log.V(1).Info("Scaler operation mode", "mode", mode)
 
 	partitionProvider, err := findByRef[common.PartitionProvider](
 		ctx,
@@ -136,14 +141,16 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, scaler); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should get a new event when partition provider is created
 		return ctrl.Result{}, nil
 	}
+	log.V(1).Info("Partition provider found", "partitionProviderRed", scaler.Spec.PartitionProviderRef)
 
 	if !meta.IsStatusConditionPresentAndEqual(partitionProvider.GetPartitionProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
+		log.V(1).Info("Partition provider not ready", "partitionProviderRef", scaler.Spec.PartitionProviderRef)
 		meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
@@ -155,8 +162,8 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			),
 		})
 		if err := r.Status().Update(ctx, scaler); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should get a new event when partition provider changes
 		return ctrl.Result{}, nil
@@ -179,14 +186,16 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, scaler); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should get a new event when shard manager is created
 		return ctrl.Result{}, nil
 	}
+	log.V(1).Info("Shard manager found", "shardManagerRef", scaler.Spec.ShardManagerRef)
 
 	if !meta.IsStatusConditionPresentAndEqual(shardManager.GetShardManagerStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
+		log.V(1).Info("Shard manager not ready", "shardManagerRef", scaler.Spec.ShardManagerRef)
 		meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
@@ -198,8 +207,8 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			),
 		})
 		if err := r.Status().Update(ctx, scaler); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should get a new event when shard manager changes
 		return ctrl.Result{}, nil
@@ -208,6 +217,7 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	replicaSetController := ReplicaSetController{}
 	switch scaler.Spec.ReplicaSetControllerRef.Kind {
 	case ReplicaSetControllerKindStatefulSet:
+		log.V(2).Info("Supported ReplicaSet Controller", "kind", scaler.Spec.ReplicaSetControllerRef.Kind)
 		replicaSetController.Kind = scaler.Spec.ReplicaSetControllerRef.Kind
 	default:
 		err := fmt.Errorf("Unsupported ReplicaSetControllerRef.Kind")
@@ -223,8 +233,8 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			),
 		})
 		if err := r.Status().Update(ctx, scaler); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should get a new event when scaler changes
 		return ctrl.Result{}, nil
@@ -249,12 +259,13 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				Message: err.Error(),
 			})
 			if err := r.Status().Update(ctx, scaler); err != nil {
-				log.Error(err, "Failed to update resource status")
-				return ctrl.Result{RequeueAfter: time.Second}, err
+				log.V(1).Info("Failed to update resource status", "err", err)
+				return ctrl.Result{}, err
 			}
 			// We should get a new event when statefulset is created
 			return ctrl.Result{}, nil
 		}
+		log.V(1).Info("StatefulSet found", "statefulSetRef", scaler.Spec.ReplicaSetControllerRef)
 		replicaSetController.StatefulSet = statefulSetController
 	default:
 		panic("unreachable")
@@ -268,6 +279,8 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 		// Check if RS is set to zero already, and if not - scale it to zero
 		if r.GetRSControllerDesiredReplicas(replicaSetController) > 0 {
+			log.V(1).Info("X-0-Y mode is active and RS is not currently at 0, scaling to 0 now",
+				"ref", scaler.Spec.ReplicaSetControllerRef)
 			if err := r.ScaleTo(ctx, replicaSetController, int32(0), false); err != nil {
 				log.Error(err, "Failed to scale replica set controller to zero",
 					"replicaSetControllerKind", scaler.Spec.ReplicaSetControllerRef.Kind,
@@ -279,24 +292,28 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					Message: err.Error(),
 				})
 				if err := r.Status().Update(ctx, scaler); err != nil {
-					log.Error(err, "Failed to update resource status")
-					return ctrl.Result{RequeueAfter: time.Second}, err
+					log.V(1).Info("Failed to update resource status", "err", err)
+					return ctrl.Result{}, err
 				}
 				// We should try again
-				return ctrl.Result{RequeueAfter: time.Second}, err
+				return ctrl.Result{}, err
 			}
+			log.Info("RS scaled to 0",
+				"ref", scaler.Spec.ReplicaSetControllerRef)
 		}
 
 		// Check if RS was already scaled to zero
 		if r.GetRSControllerActualReplicas(replicaSetController) > 0 {
+			log.V(1).Info("X-0-Y mode is active and RS is still scaling down",
+				"ref", scaler.Spec.ReplicaSetControllerRef)
 			meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
 				Type:   StatusTypeReady,
 				Status: metav1.ConditionFalse,
 				Reason: "WaitingForRSControllerToScaleToZero",
 			})
 			if err := r.Status().Update(ctx, scaler); err != nil {
-				log.Error(err, "Failed to update resource status")
-				return ctrl.Result{RequeueAfter: time.Second}, err
+				log.V(1).Info("Failed to update resource status", "err", err)
+				return ctrl.Result{}, err
 			}
 			// We should wait a little more
 			return ctrl.Result{RequeueAfter: time.Second}, nil
@@ -305,11 +322,13 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Check if shard manager desired state meets partition provider requirements
 	if partitionProvider.GetPartitionProviderStatus().Replicas.SerializeToString() != shardManager.GetShardManagerSpec().Replicas.SerializeToString() {
+		log.V(1).Info("Partition provider desired state does not match shard manager actual state",
+			"partitionProviderRef", scaler.Spec.PartitionProviderRef,
+			"shardManagerRef", scaler.Spec.ShardManagerRef)
 		shardManager.GetShardManagerSpec().Replicas = partitionProvider.GetPartitionProviderStatus().Replicas
 		if err := r.Client.Update(ctx, shardManager.GetShardManagerClientObject()); err != nil {
 			log.Error(err, "Failed to update shard manager desired state",
-				"shardManagerKind", scaler.Spec.ShardManagerRef.Kind,
-				"shardManagerName", scaler.Spec.ShardManagerRef.Name)
+				"shardManagerRef", scaler.Spec.ShardManagerRef)
 			meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
 				Type:    StatusTypeReady,
 				Status:  metav1.ConditionFalse,
@@ -317,24 +336,29 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				Message: err.Error(),
 			})
 			if err := r.Status().Update(ctx, scaler); err != nil {
-				log.Error(err, "Failed to update resource status")
-				return ctrl.Result{RequeueAfter: time.Second}, err
+				log.V(1).Info("Failed to update resource status", "err", err)
+				return ctrl.Result{}, err
 			}
 			// We should try again
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			return ctrl.Result{}, err
 		}
+		log.Info("Shard manager desired state updated",
+			"shardManagerRef", scaler.Spec.ShardManagerRef,
+			"desiredReplicas", len(partitionProvider.GetPartitionProviderStatus().Replicas))
 	}
 
 	// Check if shard manager actual state meets partition provider requirements
 	if partitionProvider.GetPartitionProviderStatus().Replicas.SerializeToString() != shardManager.GetShardManagerStatus().Replicas.SerializeToString() {
+		log.Info("Still waiting for shard manager to apply desired state",
+			"shardManagerRef", scaler.Spec.ShardManagerRef)
 		meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
 			Reason: "WaitingForShardManagerToApplyDesiredState",
 		})
 		if err := r.Status().Update(ctx, scaler); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should wait a little more
 		return ctrl.Result{RequeueAfter: time.Second}, nil
@@ -342,6 +366,8 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Assume that at this point the sharding manager applied the desired state
 	if scaler.Status.Replicas.SerializeToString() != shardManager.GetShardManagerStatus().Replicas.SerializeToString() {
+		log.V(1).Info("Shard manager applied configuration - moving into the scaling phase",
+			"shardManagerRef", scaler.Spec.ShardManagerRef)
 		scaler.Status.Replicas = shardManager.GetShardManagerSpec().Replicas
 		meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
@@ -349,8 +375,8 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			Reason: "BeginningRSControllerScaling",
 		})
 		if err := r.Status().Update(ctx, scaler); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// Re-queue to continue
 		return ctrl.Result{RequeueAfter: time.Second}, nil
@@ -358,14 +384,19 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Check if RS is already scaled, and if not - apply the change
 	desiredReplicas := int32(len(partitionProvider.GetPartitionProviderStatus().Replicas))
-	if r.GetRSControllerDesiredReplicas(replicaSetController) != desiredReplicas {
-		restart := mode == ReplicaSetReconcilerModeDefault &&
-			scaler.Spec.Mode.Default.RolloutRestart != nil &&
-			*scaler.Spec.Mode.Default.RolloutRestart
+	actualReplicas := r.GetRSControllerActualReplicas(replicaSetController)
+	restart := mode == ReplicaSetReconcilerModeDefault &&
+		scaler.Spec.Mode.Default.RolloutRestart != nil &&
+		*scaler.Spec.Mode.Default.RolloutRestart
+	if restart || actualReplicas != desiredReplicas {
+		log.V(1).Info("Applying RS controller changes",
+			"ref", scaler.Spec.ReplicaSetControllerRef,
+			"desiredReplicas", desiredReplicas,
+			"actualReplicas", actualReplicas,
+			"restart", restart)
 		if err := r.ScaleTo(ctx, replicaSetController, desiredReplicas, restart); err != nil {
 			log.Error(err, "Failed to scale replica set controller",
-				"replicaSetControllerKind", scaler.Spec.ReplicaSetControllerRef.Kind,
-				"replicaSetControllerName", scaler.Spec.ReplicaSetControllerRef.Name)
+				"replicaSetControllerRef", scaler.Spec.ReplicaSetControllerRef)
 			meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
 				Type:    StatusTypeReady,
 				Status:  metav1.ConditionFalse,
@@ -373,24 +404,31 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				Message: err.Error(),
 			})
 			if err := r.Status().Update(ctx, scaler); err != nil {
-				log.Error(err, "Failed to update resource status")
-				return ctrl.Result{RequeueAfter: time.Second}, err
+				log.V(1).Info("Failed to update resource status", "err", err)
+				return ctrl.Result{}, err
 			}
 			// We should try again
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			return ctrl.Result{}, err
 		}
+		log.Info("Applied RS controller changes",
+			"ref", scaler.Spec.ReplicaSetControllerRef,
+			"desiredReplicas", desiredReplicas,
+			"actualReplicas", actualReplicas,
+			"restart", restart)
 	}
 
 	// Check if RS was already scaled
 	if r.GetRSControllerActualReplicas(replicaSetController) != desiredReplicas {
+		log.V(1).Info("RS is still scaling",
+			"ref", scaler.Spec.ReplicaSetControllerRef)
 		meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
 			Reason: "WaitingForRSControllerToScale",
 		})
 		if err := r.Status().Update(ctx, scaler); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should wait a little more
 		return ctrl.Result{RequeueAfter: time.Second}, nil
@@ -402,9 +440,10 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		Reason: StatusTypeReady,
 	})
 	if err := r.Status().Update(ctx, scaler); err != nil {
-		log.Error(err, "Failed to update resource status")
-		return ctrl.Result{RequeueAfter: time.Second}, err
+		log.V(1).Info("Failed to update resource status", "err", err)
+		return ctrl.Result{}, err
 	}
+	log.V(1).Info("Scaler is ready")
 
 	return ctrl.Result{}, nil
 }

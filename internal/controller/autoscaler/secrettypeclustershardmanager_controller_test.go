@@ -145,7 +145,6 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				Expect(run.ReconcileError()).To(HaveOccurred())
 				Expect(run.ReconcileError().Error()).To(Equal("fake error listing secrets"))
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 
 				By("Checking ready condition")
 				readyCondition := meta.FindStatusCondition(
@@ -276,7 +275,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 								StatusTypeReady,
 							)
 							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
-							Expect(readyCondition.Reason).To(Equal("FailedToListReplicas"))
+							Expect(readyCondition.Reason).To(Equal("FailedToReadDesiredReplicaShard"))
 							Expect(readyCondition.Message).To(Equal("duplicate replica found"))
 						},
 					).
@@ -311,8 +310,6 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				Expect(run.ReconcileError()).To(HaveOccurred())
 				Expect(run.ReconcileError().Error()).To(Equal("fake error updating secret"))
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking ready condition")
 				readyCondition := meta.FindStatusCondition(
@@ -378,7 +375,6 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				Expect(run.ReconcileError()).To(HaveOccurred())
 				Expect(run.ReconcileError().Error()).To(Equal("fake error updating secret"))
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 
 				By("Checking ready condition")
 				readyCondition := meta.FindStatusCondition(

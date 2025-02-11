@@ -19,7 +19,6 @@ package autoscaler
 import (
 	"context"
 	"errors"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -58,16 +57,17 @@ type SecretTypeClusterShardManagerReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.0/pkg/reconcile
 func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	log.V(1).Info("Received reconcile request")
+	log.V(2).Info("Received reconcile request")
+	defer log.V(2).Info("Reconcile request completed")
 
 	manager := &autoscaler.SecretTypeClusterShardManager{}
 	if err := r.Get(ctx, req.NamespacedName, manager); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.V(1).Info("Resource not found. Ignoring since object must be deleted")
+			log.V(2).Info("Resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get resource")
-		return ctrl.Result{RequeueAfter: time.Second}, err
+		return ctrl.Result{}, err
 	}
 
 	// Find all clusters
@@ -90,29 +90,32 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, manager); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Error(err, "Failed to update resource status")
+			return ctrl.Result{}, err
 		}
 		// Connection error? Let's try again
-		return ctrl.Result{RequeueAfter: time.Second}, err
+		return ctrl.Result{}, err
 	}
 	log.V(1).Info("Found secrets", "count", len(secrets.Items))
 
 	replicasByUID := map[types.UID]common.Replica{}
 	for _, replica := range manager.Spec.Replicas {
+		log.V(2).Info("Reading desired replica", "replica", replica.ID)
 		for _, loadIndex := range replica.LoadIndexes {
+			log.V(2).Info("Reading desired replica shard", "replica", replica.ID, "shard", loadIndex.Shard.ID)
 			if _, ok := replicasByUID[loadIndex.Shard.UID]; ok {
 				err := errors.New("duplicate replica found")
-				log.Error(err, "Failed to list replicas")
+				log.Error(err, "Failed to read desired replica shard",
+					"replica", replica.ID, "shard", loadIndex.Shard.ID, "shardUID", loadIndex.Shard.UID)
 				meta.SetStatusCondition(&manager.Status.Conditions, metav1.Condition{
 					Type:    StatusTypeReady,
 					Status:  metav1.ConditionFalse,
-					Reason:  "FailedToListReplicas",
+					Reason:  "FailedToReadDesiredReplicaShard",
 					Message: err.Error(),
 				})
 				if err := r.Status().Update(ctx, manager); err != nil {
-					log.Error(err, "Failed to update resource status")
-					return ctrl.Result{RequeueAfter: time.Second}, err
+					log.V(1).Info("Failed to update resource status", "err", err)
+					return ctrl.Result{}, err
 				}
 				// Resource is malformed, no point in retrying
 				return ctrl.Result{}, nil
@@ -120,6 +123,7 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 			replicasByUID[loadIndex.Shard.UID] = replica
 		}
 	}
+	log.V(1).Info("Desired replicas read", "count", len(replicasByUID))
 
 	shards := []common.Shard{}
 	secretsToUpdate := []corev1.Secret{}
@@ -133,22 +137,30 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 				"server":    string(secret.Data["server"]),
 			},
 		}
+		log.V(2).Info("Reading shard", "shard", shard.ID)
 		shards = append(shards, shard)
 
 		actualReplicaBytes, actualReplicaSet := secret.Data["shard"]
 		var actualReplica string
 		if actualReplicaSet {
 			actualReplica = string(actualReplicaBytes)
+			log.V(2).Info("Shard had prior assignment", "shard", shard.ID, "replica", actualReplica)
 		}
 		desiredReplica, desiredReplicaSet := replicasByUID[secret.GetUID()]
+		if !desiredReplicaSet {
+			log.V(2).Info("Shard had desired replica", "shard", shard.ID, "desired", desiredReplica.ID)
+		}
 		if desiredReplicaSet && (!actualReplicaSet || desiredReplica.ID != actualReplica) {
 			log.V(1).Info("Secret is outdated", "secret", secret.Name, "actual", actualReplica, "desired", desiredReplica.ID)
 			secret.Data["shard"] = []byte(desiredReplica.ID)
 			secretsToUpdate = append(secretsToUpdate, secret)
 		}
 	}
+	log.V(1).Info("Shards read", "count", len(shards))
 
 	for _, secret := range secretsToUpdate {
+		log.V(2).Info("Updating secret",
+			"secret", secret.Name, "namespace", secret.Namespace, "data", string(secret.Data["shard"]))
 		if err := r.Update(ctx, &secret); err != nil {
 			log.Error(err, "Failed to update secret", "secret", secret.Name)
 			meta.SetStatusCondition(&manager.Status.Conditions, metav1.Condition{
@@ -158,12 +170,15 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 				Message: err.Error(),
 			})
 			if err := r.Status().Update(ctx, manager); err != nil {
-				log.Error(err, "Failed to update resource status")
-				return ctrl.Result{RequeueAfter: time.Second}, err
+				log.V(1).Info("Failed to update resource status", "err", err)
+				return ctrl.Result{}, err
 			}
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			return ctrl.Result{}, err
 		}
+		log.Info("Secret updated",
+			"secret", secret.Name, "namespace", secret.Namespace, "data", string(secret.Data["shard"]))
 	}
+	log.V(1).Info("Secrets updated", "count", len(secretsToUpdate))
 
 	manager.Status.Shards = shards
 	manager.Status.Replicas = manager.Spec.Replicas
@@ -173,9 +188,10 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 		Reason: StatusTypeReady,
 	})
 	if err := r.Status().Update(ctx, manager); err != nil {
-		log.Error(err, "Failed to update resource status")
-		return ctrl.Result{RequeueAfter: time.Second}, err
+		log.V(1).Info("Failed to update resource status", "err", err)
+		return ctrl.Result{}, err
 	}
+	log.Info("Resource status updated", "shards", len(shards), "replicas", len(manager.Spec.Replicas))
 
 	return ctrl.Result{}, nil
 }

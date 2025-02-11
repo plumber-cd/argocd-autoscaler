@@ -5,7 +5,6 @@ metadata:
     app.kubernetes.io/name: argocd-autoscaler
     app.kubernetes.io/managed-by: kustomize
   name: prometheuspoll-sample
-  namespace: system
 spec:
   shardManagerRef:
     apiGroup: autoscaler.argoproj.io

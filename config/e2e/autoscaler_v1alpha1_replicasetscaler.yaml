@@ -5,7 +5,6 @@ metadata:
     app.kubernetes.io/name: argocd-autoscaler
     app.kubernetes.io/managed-by: kustomize
   name: replicasetscaler-sample
-  namespace: system
 spec:
   partitionProviderRef:
     apiGroup: autoscaler.argoproj.io
@@ -19,7 +18,7 @@ spec:
     apiGroup: apps
     kind: StatefulSet
     name: argocd-autoscaler-argocd-application-controller
-  mode:
+  mode: {}
     # default:
     #   rolloutRestart: true
     # x0y: {}

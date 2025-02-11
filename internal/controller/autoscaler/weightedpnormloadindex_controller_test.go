@@ -147,7 +147,7 @@ var _ = Describe("WeightedPNormLoadIndex Controller", func() {
 				Expect(readyCondition).NotTo(BeNil())
 				Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
 				Expect(readyCondition.Reason).To(Equal("WeightsMalformed"))
-				Expect(readyCondition.Message).To(Equal("duplicate weight definition for metric ID 'fake-metric'"))
+				Expect(readyCondition.Message).To(Equal("duplicate weight configuration for metric ID 'fake-metric'"))
 			},
 		).
 		Commit(collector.Collect).

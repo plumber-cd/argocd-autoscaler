@@ -19,7 +19,6 @@ package autoscaler
 import (
 	"context"
 	"fmt"
-	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -57,16 +56,17 @@ type LongestProcessingTimePartitionReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.4/pkg/reconcile
 func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	log.V(1).Info("Received reconcile request")
+	log.V(2).Info("Received reconcile request")
+	defer log.V(2).Info("Reconcile request completed")
 
 	partition := &autoscaler.LongestProcessingTimePartition{}
 	if err := r.Get(ctx, req.NamespacedName, partition); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.V(1).Info("Resource not found. Ignoring since object must be deleted")
+			log.V(2).Info("Resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get resource")
-		return ctrl.Result{RequeueAfter: time.Second}, err
+		return ctrl.Result{}, err
 	}
 
 	loadIndexProvider, err := findByRef[common.LoadIndexProvider](
@@ -86,14 +86,16 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, partition); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should get a new event when load index provider is created
 		return ctrl.Result{}, nil
 	}
+	log.V(1).Info("Load index provider found", "loadIndexProvider", partition.Spec.LoadIndexProviderRef)
 
 	if !meta.IsStatusConditionPresentAndEqual(loadIndexProvider.GetLoadIndexProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
+		log.V(1).Info("Load index provider not ready", "loadIndexProvider", partition.Spec.LoadIndexProviderRef)
 		meta.SetStatusCondition(&partition.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
@@ -105,8 +107,8 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 			),
 		})
 		if err := r.Status().Update(ctx, partition); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should get a new event when load index provider changes
 		return ctrl.Result{}, nil
@@ -123,12 +125,13 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, partition); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// If it's a math problem, we can't fix it by re-queuing
 		return ctrl.Result{}, nil
 	}
+	log.V(1).Info("Partitioned successfully", "replicas", len(replicas))
 
 	partition.Status.Replicas = replicas
 	meta.SetStatusCondition(&partition.Status.Conditions, metav1.Condition{
@@ -137,9 +140,10 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 		Reason: StatusTypeReady,
 	})
 	if err := r.Status().Update(ctx, partition); err != nil {
-		log.Error(err, "Failed to update resource status")
-		return ctrl.Result{RequeueAfter: time.Second}, err
+		log.V(1).Info("Failed to update resource status", "err", err)
+		return ctrl.Result{}, err
 	}
+	log.Info("Resource status updated", "replicas", len(replicas))
 
 	// We don't need to do anything unless load index provider data changes
 	return ctrl.Result{}, nil

@@ -494,7 +494,6 @@ var _ = Describe("PrometheusPoll Controller", func() {
 				Expect(poller.polled).To(BeTrue())
 				Expect(run.ReconcileError()).To(HaveOccurred())
 				Expect(run.ReconcileError().Error()).To(ContainSubstring("fake error"))
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(

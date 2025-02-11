@@ -19,7 +19,6 @@ package autoscaler
 import (
 	"context"
 	"fmt"
-	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -60,16 +59,17 @@ type RobustScalingNormalizerReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.4/pkg/reconcile
 func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	log.V(1).Info("Received reconcile request")
+	log.V(2).Info("Received reconcile request")
+	defer log.V(2).Info("Reconcile request completed")
 
 	normalizer := &autoscaler.RobustScalingNormalizer{}
 	if err := r.Get(ctx, req.NamespacedName, normalizer); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.V(1).Info("Resource not found. Ignoring since object must be deleted")
+			log.V(2).Info("Resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get resource")
-		return ctrl.Result{RequeueAfter: time.Second}, err
+		return ctrl.Result{}, err
 	}
 
 	metricValuesProvider, err := findByRef[common.MetricValuesProvider](
@@ -89,14 +89,17 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, normalizer); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should get a new event when metrics provider is created
 		return ctrl.Result{}, nil
 	}
+	log.V(1).Info("Metric values provider found", "metricValuesProvider", normalizer.Spec.MetricValuesProviderRef)
 
-	if !meta.IsStatusConditionPresentAndEqual(metricValuesProvider.GetMetricValuesProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(
+		metricValuesProvider.GetMetricValuesProviderStatus().Conditions, StatusTypeReady, metav1.ConditionTrue) {
+		log.V(1).Info("Metric values provider not ready", "metricValuesProvider", normalizer.Spec.MetricValuesProviderRef)
 		meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
 			Status: metav1.ConditionFalse,
@@ -108,8 +111,8 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 			),
 		})
 		if err := r.Status().Update(ctx, normalizer); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// We should get a new event when poller changes
 		return ctrl.Result{}, nil
@@ -126,13 +129,13 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, normalizer); err != nil {
-			log.Error(err, "Failed to update resource status")
-			return ctrl.Result{RequeueAfter: time.Second}, err
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
 		}
 		// If this is a math problem - re-queuing won't help
 		return ctrl.Result{}, nil
 	}
-	log.V(1).Info("Normalized successfully", "len", len(normalizedValues))
+	log.V(1).Info("Metrics normalized", "count", len(normalizedValues))
 
 	normalizer.Status.Values = normalizedValues
 	meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{
@@ -141,9 +144,10 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 		Reason: StatusTypeReady,
 	})
 	if err := r.Status().Update(ctx, normalizer); err != nil {
-		log.Error(err, "Failed to update resource status")
-		return ctrl.Result{RequeueAfter: time.Second}, err
+		log.V(1).Info("Failed to update resource status", "err", err)
+		return ctrl.Result{}, err
 	}
+	log.Info("Resource status updated", "values", len(normalizedValues))
 
 	// We don't need to do anything unless poller data changes
 	return ctrl.Result{}, nil

@@ -173,8 +173,6 @@ func (s *Scenario[K]) BranchFailureToGetResourceCheck(callback ScenarioRegisterC
 			WithCheck("handle errors", func(run *ScenarioRun[K]) {
 				Expect(run.ReconcileError()).To(HaveOccurred())
 				Expect(run.ReconcileError().Error()).To(Equal("fake error getting resource"))
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 			}).
 			Commit(callback)
 	})
@@ -191,7 +189,6 @@ func (s *Scenario[K]) BranchFailureToUpdateStatusCheck(callback ScenarioRegister
 			WithCheck("handle errors", func(run *ScenarioRun[K]) {
 				Expect(run.ReconcileError()).To(HaveOccurred())
 				Expect(run.ReconcileError().Error()).To(Equal("fake error updating status"))
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
 			}).
 			Commit(callback)
 	})
