@@ -49,7 +49,7 @@ type SecretTypeClusterShardManagerReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=secrettypeclustershardmanagers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=secrettypeclustershardmanagers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=secrettypeclustershardmanagers/finalizers,verbs=update

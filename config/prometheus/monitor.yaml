@@ -3,6 +3,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   labels:
+    prometheus: argocd-autoscaler
     control-plane: controller-manager
     app.kubernetes.io/name: argocd-autoscaler
     app.kubernetes.io/managed-by: kustomize

@@ -5,11 +5,12 @@ metadata:
     app.kubernetes.io/name: argocd-autoscaler
     app.kubernetes.io/managed-by: kustomize
   name: mostwantedtwophasehysteresisevaluation-sample
+  namespace: system
 spec:
   partitionProviderRef:
     apiGroup: autoscaler.argoproj.io
     kind: LongestProcessingTimePartition
-    name: longestprocessingtimepartition-sample
+    name: argocd-autoscaler-longestprocessingtimepartition-sample
   pollingPeriod: 5s
   stabilizationPeriod: 1m
   minimumSampleSize: 10

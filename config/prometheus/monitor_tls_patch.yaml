@@ -7,7 +7,12 @@ metadata:
   namespace: system
 spec:
   endpoints:
-    - tlsConfig:
+    - path: /metrics
+      port: https # Ensure this is the name of the port that exposes HTTPS metrics
+      scheme: https
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        serverName: argocd-autoscaler-controller-manager-metrics-service.argocd-autoscaler-system.svc.cluster.local
         insecureSkipVerify: false
         ca:
           secret:

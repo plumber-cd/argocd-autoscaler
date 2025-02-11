@@ -10,8 +10,7 @@ spec:
     apiGroup: autoscaler.argoproj.io
     kind: SecretTypeClusterShardManager
     name: secrettypeclustershardmanager-sample
-  initialDelay: 5s
-  period: 30s
+  period: 5s
   address: http://localhost:9090
   metrics:
   - id: argocd_app_info

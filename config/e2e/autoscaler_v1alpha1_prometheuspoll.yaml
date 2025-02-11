@@ -1,0 +1,18 @@
+apiVersion: autoscaler.argoproj.io/v1alpha1
+kind: PrometheusPoll
+metadata:
+  labels:
+    app.kubernetes.io/name: argocd-autoscaler
+    app.kubernetes.io/managed-by: kustomize
+  name: prometheuspoll-sample
+  namespace: system
+spec:
+  shardManagerRef:
+    apiGroup: autoscaler.argoproj.io
+    kind: SecretTypeClusterShardManager
+    name: argocd-autoscaler-secrettypeclustershardmanager-sample
+  period: 5s
+  address: http://prometheus-operated.prometheus.svc.cluster.local:9090
+  metrics:
+  - id: up
+    query: up

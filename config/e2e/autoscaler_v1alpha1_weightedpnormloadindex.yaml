@@ -1,0 +1,17 @@
+apiVersion: autoscaler.argoproj.io/v1alpha1
+kind: WeightedPNormLoadIndex
+metadata:
+  labels:
+    app.kubernetes.io/name: argocd-autoscaler
+    app.kubernetes.io/managed-by: kustomize
+  name: weightedpnormloadindex-sample
+  namespace: system
+spec:
+  metricValuesProviderRef:
+    apiGroup: autoscaler.argoproj.io
+    kind: RobustScalingNormalizer
+    name: argocd-autoscaler-robustscalingnormalizer-sample
+  p: 1
+  weights:
+  - id: up
+    weight: "1"

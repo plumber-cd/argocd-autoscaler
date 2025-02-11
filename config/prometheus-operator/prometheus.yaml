@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: argocd-autoscaler
+  labels:
+    prometheus: argocd-autoscaler
+spec:
+  serviceAccountName: prometheus
+  prometheusExternalLabelName: prometheus
+  serviceMonitorNamespaceSelector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-autoscaler
+  serviceMonitorSelector:
+    matchLabels:
+      prometheus: argocd-autoscaler

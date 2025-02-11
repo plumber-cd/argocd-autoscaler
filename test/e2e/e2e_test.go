@@ -17,11 +17,8 @@ limitations under the License.
 package e2e
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -42,8 +39,18 @@ const metricsServiceName = "argocd-autoscaler-controller-manager-metrics-service
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
 const metricsRoleBindingName = "argocd-autoscaler-metrics-binding"
 
+const shardName = "argocd-autoscaler-sample-cluster"
+const shardManagerName = "argocd-autoscaler-secrettypeclustershardmanager-sample"
+const pollerName = "argocd-autoscaler-prometheuspoll-sample"
+const normalizerName = "argocd-autoscaler-robustscalingnormalizer-sample"
+const loadIndexerName = "argocd-autoscaler-weightedpnormloadindex-sample"
+const partitionName = "argocd-autoscaler-longestprocessingtimepartition-sample"
+const evaluationName = "argocd-autoscaler-mostwantedtwophasehysteresisevaluation-sample"
+const scalingName = "argocd-autoscaler-replicasetscaler-sample"
+
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
+	var deployLogs string
 
 	// Before running the tests, set up the environment by creating the namespace,
 	// enforce the restricted security policy to the namespace, installing CRDs,
@@ -65,10 +72,18 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
-		By("deploying the controller-manager")
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
+		By("creating sample resources")
+		cmd = exec.Command("kubectl", "apply", "-k", "config/e2e")
 		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
+		Expect(err).NotTo(HaveOccurred(), "Failed to create sample resources")
+
+		By("deploying the controller-manager")
+		// This actually has to do with cert manager struggling to inject CAs into CRDs
+		Eventually(func(g Gomega) {
+			cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
+			deployLogs, err = utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
+		}, "60s").Should(Succeed())
 	})
 
 	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
@@ -78,8 +93,16 @@ var _ = Describe("Manager", Ordered, func() {
 		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
 		_, _ = utils.Run(cmd)
 
+		By("cleaning up the ClusterRoleBinding for the service account to allow access to metrics")
+		cmd = exec.Command("kubectl", "delete", "clusterrolebinding", metricsRoleBindingName)
+		_, _ = utils.Run(cmd)
+
 		By("undeploying the controller-manager")
 		cmd = exec.Command("make", "undeploy")
+		_, _ = utils.Run(cmd)
+
+		By("undeploying sample resources")
+		cmd = exec.Command("kubectl", "delete", "--ignore-not-found=true", "-k", "config/e2e")
 		_, _ = utils.Run(cmd)
 
 		By("uninstalling CRDs")
@@ -96,11 +119,14 @@ var _ = Describe("Manager", Ordered, func() {
 	AfterEach(func() {
 		specReport := CurrentSpecReport()
 		if specReport.Failed() {
+			By("Fetching deploy logs")
+			_, _ = fmt.Fprintf(GinkgoWriter, "Deploy logs:\n%s", deployLogs)
+
 			By("Fetching controller manager pod logs")
 			cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
 			controllerLogs, err := utils.Run(cmd)
 			if err == nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Controller logs:\n %s", controllerLogs)
+				_, _ = fmt.Fprintf(GinkgoWriter, "Controller logs:\n%s", controllerLogs)
 			} else {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get Controller logs: %s", err)
 			}
@@ -118,7 +144,7 @@ var _ = Describe("Manager", Ordered, func() {
 			cmd = exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
 			metricsOutput, err := utils.Run(cmd)
 			if err == nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Metrics logs:\n %s", metricsOutput)
+				_, _ = fmt.Fprintf(GinkgoWriter, "Metrics logs:\n%s", metricsOutput)
 			} else {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get curl-metrics logs: %s", err)
 			}
@@ -189,11 +215,6 @@ var _ = Describe("Manager", Ordered, func() {
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "ServiceMonitor should exist")
 
-			By("getting the service account token")
-			token, err := serviceAccountToken()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(token).NotTo(BeEmpty())
-
 			By("waiting for the metrics endpoint to be ready")
 			verifyMetricsEndpointReady := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "endpoints", metricsServiceName, "-n", namespace)
@@ -219,12 +240,30 @@ var _ = Describe("Manager", Ordered, func() {
 				"--image=curlimages/curl:latest",
 				"--overrides",
 				fmt.Sprintf(`{
+                    "metadata": {
+                        "labels": {
+                            "metrics": "enabled"
+                        }
+                    },
 					"spec": {
 						"containers": [{
 							"name": "curl",
 							"image": "curlimages/curl:latest",
 							"command": ["/bin/sh", "-c"],
-							"args": ["curl -v -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics"],
+							"args": ["`+
+					`while true; `+
+					`do `+
+					`URL=\"https://%s.%s.svc.cluster.local:8443/metrics\"; `+
+					`echo $URL; `+
+					`TOKEN=\"$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\"; `+
+					`echo $TOKEN; `+
+					`curl --fail --connect-timeout 5 -v `+
+					`-k -H \"Authorization: Bearer $TOKEN\" `+
+					`\"$URL\" && `+
+					`exit 0; `+
+					`sleep 5s; `+
+					`done`+
+					`"],
 							"securityContext": {
 								"allowPrivilegeEscalation": false,
 								"capabilities": {
@@ -239,7 +278,7 @@ var _ = Describe("Manager", Ordered, func() {
 						}],
 						"serviceAccount": "%s"
 					}
-				}`, token, metricsServiceName, namespace, serviceAccountName))
+				}`, metricsServiceName, namespace, serviceAccountName))
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create curl-metrics pod")
 
@@ -271,49 +310,171 @@ var _ = Describe("Manager", Ordered, func() {
 		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
 		//    strings.ToLower(<Kind>),
 		// ))
+
+		It("should ensure controller reconciled resources", func() {
+			By("validating that the shard manager exported shards")
+			verifyShardsDiscovered := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get",
+					"-n", namespace,
+					"secrets",
+					"-l", "test.argocd.argoproj.io/secret-type=cluster",
+					"-o", "go-template={{ range .items }}"+
+						"{{ .metadata.uid }}"+
+						"{{ end }}",
+				)
+				podOutput, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve secrets with type cluster")
+				secretUIDs := utils.GetNonEmptyLines(podOutput)
+				g.Expect(secretUIDs).To(HaveLen(1), "expected 1 shard")
+
+				cmd = exec.Command("kubectl", "get",
+					"-n", namespace,
+					"secrettypeclustershardmanagers.autoscaler.argoproj.io",
+					shardManagerName,
+					"-o", "go-template={{ range .status.shards }}"+
+						"{{ .uid }}"+
+						"{{ end }}",
+				)
+				podOutput, err = utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve shard manager")
+				shardsUIDs := utils.GetNonEmptyLines(podOutput)
+				g.Expect(shardsUIDs).To(HaveLen(len(secretUIDs)), "expected all secrets to be discovered as shards")
+			}
+			Eventually(verifyShardsDiscovered).Should(Succeed())
+
+			By("validating that the poller exported metrics")
+			verifyPoller := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get",
+					"-n", namespace,
+					"prometheuspolls.autoscaler.argoproj.io",
+					pollerName,
+					"-o", "go-template={{ len .status.values }}",
+				)
+				discoveredMetrics, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve poller information")
+				g.Expect(discoveredMetrics).To(Equal("1"), "expected to poll number of shards * number of metrics")
+			}
+			Eventually(verifyPoller).Should(Succeed())
+
+			By("validating that the normalizer exported metrics")
+			verifyNormalizer := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get",
+					"-n", namespace,
+					"robustscalingnormalizers.autoscaler.argoproj.io",
+					normalizerName,
+					"-o", "go-template={{ len .status.values }}",
+				)
+				normalizedMetrics, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve normalizer information")
+				g.Expect(normalizedMetrics).To(Equal("1"), "expected to normalize all polled metrics")
+			}
+			Eventually(verifyNormalizer).Should(Succeed())
+
+			By("validating that the load indexer calculated successfully")
+			verifyLoadIndexer := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get",
+					"-n", namespace,
+					"weightedpnormloadindexes.autoscaler.argoproj.io",
+					loadIndexerName,
+					"-o", "go-template={{ len .status.values }}",
+				)
+				loadIndexes, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve load indexer information")
+				g.Expect(loadIndexes).To(Equal("1"), "expected number of load indexes equal to the number of shards")
+			}
+			Eventually(verifyLoadIndexer).Should(Succeed())
+
+			By("validating that partition was successful")
+			verifyPartition := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get",
+					"-n", namespace,
+					"longestprocessingtimepartitions.autoscaler.argoproj.io",
+					partitionName,
+					"-o", "go-template={{ len .status.replicas }}",
+				)
+				partitions, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve partition information")
+				g.Expect(partitions).To(Equal("1"), "expected number of partitions equal to the number of shards")
+			}
+			Eventually(verifyPartition).Should(Succeed())
+
+			By("validating that evaluation was successful")
+			verifyEvaluation := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get",
+					"-n", namespace,
+					"mostwantedtwophasehysteresisevaluations.autoscaler.argoproj.io",
+					evaluationName,
+					"-o", "go-template={{ len .status.replicas }}",
+				)
+				partitions, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve partition information")
+				g.Expect(partitions).To(Equal("1"), "expected number of partitions equal to the number of shards")
+			}
+			Eventually(verifyEvaluation).Should(Succeed())
+
+			By("validating that the scaling was successful")
+			verifyScaling := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get",
+					"-n", namespace,
+					"replicasetscalers.autoscaler.argoproj.io",
+					scalingName,
+					"-o", "go-template="+
+						"{{ range .status.replicas }}"+
+						"{{ $id := .id }}"+
+						"{{ range .loadIndexes }}"+
+						"{{ $id }}:{{ .shard.id }}"+
+						"{{ end }}"+
+						"{{ end }}",
+				)
+				podOutput, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve scaler information")
+				partitions := utils.GetNonEmptyLines(podOutput)
+				g.Expect(partitions).To(HaveLen(1), "expected 1 partition")
+
+				cmd = exec.Command("kubectl", "get",
+					"-n", namespace,
+					"secrets",
+					shardName,
+					"-o", "go-template={{ .data.shard }}",
+				)
+				partitionIndex, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve partition information")
+				g.Expect(partitionIndex).To(Equal("MA=="), "expected shard 1 to be assigned to replica 1")
+			}
+			Eventually(verifyScaling).Should(Succeed())
+
+			verifyAppControllersScaled := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get",
+					"pods", "-l", "app.kubernetes.io/name=argocd-application-controller",
+					"-o", "go-template={{ range .items }}"+
+						"{{ if not .metadata.deletionTimestamp }}"+
+						"{{ .metadata.name }}"+
+						"{{ \"\\n\" }}{{ end }}{{ end }}",
+					"-n", namespace,
+				)
+
+				podOutput, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve application controller pods information")
+				podNames := utils.GetNonEmptyLines(podOutput)
+				g.Expect(podNames).To(HaveLen(1), "expected 1 argocd-application-controller pods running")
+				for i, podName := range podNames {
+					g.Expect(podName).
+						To(ContainSubstring("argocd-autoscaler-argocd-application-controller-" + fmt.Sprint(i)))
+
+					// Validate the pod's status
+					cmd = exec.Command("kubectl", "get",
+						"pods", podName, "-o", "jsonpath={.status.phase}",
+						"-n", namespace,
+					)
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("Running"), "Incorrect app controller pod status "+podName)
+				}
+			}
+			Eventually(verifyAppControllersScaled).Should(Succeed())
+		})
 	})
 })
-
-// serviceAccountToken returns a token for the specified service account in the given namespace.
-// It uses the Kubernetes TokenRequest API to generate a token by directly sending a request
-// and parsing the resulting token from the API response.
-func serviceAccountToken() (string, error) {
-	const tokenRequestRawString = `{
-		"apiVersion": "authentication.k8s.io/v1",
-		"kind": "TokenRequest"
-	}`
-
-	// Temporary file to store the token request
-	secretName := fmt.Sprintf("%s-token-request", serviceAccountName)
-	tokenRequestFile := filepath.Join("/tmp", secretName)
-	err := os.WriteFile(tokenRequestFile, []byte(tokenRequestRawString), os.FileMode(0o644))
-	if err != nil {
-		return "", err
-	}
-
-	var out string
-	verifyTokenCreation := func(g Gomega) {
-		// Execute kubectl command to create the token
-		cmd := exec.Command("kubectl", "create", "--raw", fmt.Sprintf(
-			"/api/v1/namespaces/%s/serviceaccounts/%s/token",
-			namespace,
-			serviceAccountName,
-		), "-f", tokenRequestFile)
-
-		output, err := cmd.CombinedOutput()
-		g.Expect(err).NotTo(HaveOccurred())
-
-		// Parse the JSON output to extract the token
-		var token tokenRequest
-		err = json.Unmarshal(output, &token)
-		g.Expect(err).NotTo(HaveOccurred())
-
-		out = token.Status.Token
-	}
-	Eventually(verifyTokenCreation).Should(Succeed())
-
-	return out, err
-}
 
 // getMetricsOutput retrieves and returns the logs from the curl pod used to access the metrics endpoint.
 func getMetricsOutput() string {
@@ -323,12 +484,4 @@ func getMetricsOutput() string {
 	Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from curl pod")
 	Expect(metricsOutput).To(ContainSubstring("< HTTP/1.1 200 OK"))
 	return metricsOutput
-}
-
-// tokenRequest is a simplified representation of the Kubernetes TokenRequest API response,
-// containing only the token field that we need to extract.
-type tokenRequest struct {
-	Status struct {
-		Token string `json:"token"`
-	} `json:"status"`
 }
