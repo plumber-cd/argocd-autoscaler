@@ -477,26 +477,35 @@ var _ = Describe("Manager", Ordered, func() {
 						map[string]string{
 							"shard_manager_type": "secret_type_cluster",
 							"shard_manager_ref":  fmt.Sprintf("%s/%s", namespace, shardManagerName),
+							"shard_uid":          "*",
 							"shard_id":           shardName,
 							"shard_namespace":    namespace,
-							"dest_server":        "https://kubernetes.default.svc",
-							"dest_name":          "sample-cluster",
+							"shard_name":         "sample-cluster",
+							"shard_server":       "https://kubernetes.default.svc",
 							"replica_id":         "0",
 						}, 1),
 
 					CreatePrometheusMetric("argocd_autoscaler_poll_values",
 						map[string]string{
-							"poll_type": "prometheus",
-							"poll_ref":  fmt.Sprintf("%s/%s", namespace, pollerName),
-							"shard_id":  shardName,
-							"metric_id": "up",
+							"poll_type":       "prometheus",
+							"poll_ref":        fmt.Sprintf("%s/%s", namespace, pollerName),
+							"shard_uid":       "*",
+							"shard_id":        shardName,
+							"shard_namespace": namespace,
+							"shard_name":      "sample-cluster",
+							"shard_server":    "https://kubernetes.default.svc",
+							"metric_id":       "up",
 						}, 1),
 
 					CreatePrometheusMetric("argocd_autoscaler_normalizer_values",
 						map[string]string{
 							"normalizer_type": "robust_scaling",
 							"normalizer_ref":  fmt.Sprintf("%s/%s", namespace, normalizerName),
+							"shard_uid":       "*",
 							"shard_id":        shardName,
+							"shard_namespace": namespace,
+							"shard_name":      "sample-cluster",
+							"shard_server":    "https://kubernetes.default.svc",
 							"metric_id":       "up",
 						}, 1),
 
@@ -504,15 +513,23 @@ var _ = Describe("Manager", Ordered, func() {
 						map[string]string{
 							"load_index_type": "weighted_p_norm",
 							"load_index_ref":  fmt.Sprintf("%s/%s", namespace, loadIndexerName),
+							"shard_uid":       "*",
 							"shard_id":        shardName,
+							"shard_namespace": namespace,
+							"shard_name":      "sample-cluster",
+							"shard_server":    "https://kubernetes.default.svc",
 						}, 1),
 
 					CreatePrometheusMetric("argocd_autoscaler_partition_shards",
 						map[string]string{
-							"partition_type": "longest_processing_time",
-							"partition_ref":  fmt.Sprintf("%s/%s", namespace, partitionName),
-							"shard_id":       shardName,
-							"replica_id":     "0",
+							"partition_type":  "longest_processing_time",
+							"partition_ref":   fmt.Sprintf("%s/%s", namespace, partitionName),
+							"shard_uid":       "*",
+							"shard_id":        shardName,
+							"shard_namespace": namespace,
+							"shard_name":      "sample-cluster",
+							"shard_server":    "https://kubernetes.default.svc",
+							"replica_id":      "0",
 						}, 1),
 
 					CreatePrometheusMetric("argocd_autoscaler_partition_replicas_total_load",
@@ -526,7 +543,11 @@ var _ = Describe("Manager", Ordered, func() {
 						map[string]string{
 							"evaluation_type": "most_wanted_two_phase_hysteresis",
 							"evaluation_ref":  fmt.Sprintf("%s/%s", namespace, evaluationName),
+							"shard_uid":       "*",
 							"shard_id":        shardName,
+							"shard_namespace": namespace,
+							"shard_name":      "sample-cluster",
+							"shard_server":    "https://kubernetes.default.svc",
 							"replica_id":      "0",
 						}, 1),
 
@@ -541,7 +562,11 @@ var _ = Describe("Manager", Ordered, func() {
 						map[string]string{
 							"evaluation_type": "most_wanted_two_phase_hysteresis",
 							"evaluation_ref":  fmt.Sprintf("%s/%s", namespace, evaluationName),
+							"shard_uid":       "*",
 							"shard_id":        shardName,
+							"shard_namespace": namespace,
+							"shard_name":      "sample-cluster",
+							"shard_server":    "https://kubernetes.default.svc",
 							"replica_id":      "0",
 						}, 1),
 

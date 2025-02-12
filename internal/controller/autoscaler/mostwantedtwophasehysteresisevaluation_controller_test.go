@@ -180,9 +180,11 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 						LoadIndexes: []common.LoadIndex{
 							{
 								Shard: common.Shard{
-									UID:  types.UID("shard-0"),
-									ID:   "shard-0",
-									Data: map[string]string{"key": "value"},
+									UID:       types.UID("shard-0"),
+									ID:        "shard-0",
+									Namespace: run.Namespace().ObjectKey().Name,
+									Name:      "fake-shard-name-0",
+									Server:    "fake-shard-server-0",
 								},
 								Value:        resource.MustParse("1"),
 								DisplayValue: "1",

@@ -61,10 +61,11 @@ var (
 		},
 		[]string{
 			"shard_manager_ref",
+			"shard_uid",
 			"shard_id",
 			"shard_namespace",
-			"dest_server",
-			"dest_name",
+			"shard_name",
+			"shard_server",
 			"replica_id",
 		},
 	)
@@ -130,10 +131,11 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 		log.V(2).Info("Secret found", "secret", secret.Name)
 		secretTypeClusterShardManagerDiscoveredShardsGauge.WithLabelValues(
 			req.NamespacedName.String(),
+			string(secret.GetUID()),
 			secret.Name,
 			secret.Namespace,
-			string(secret.Data["server"]),
 			string(secret.Data["name"]),
+			string(secret.Data["server"]),
 			string(secret.Data["shard"]),
 		).Set(1)
 	}
@@ -169,13 +171,11 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 	secretsToUpdate := []corev1.Secret{}
 	for _, secret := range secrets.Items {
 		shard := common.Shard{
-			ID:  secret.Name,
-			UID: secret.GetUID(),
-			Data: map[string]string{
-				"namespace": secret.Namespace,
-				"name":      string(secret.Data["name"]),
-				"server":    string(secret.Data["server"]),
-			},
+			ID:        secret.Name,
+			UID:       secret.GetUID(),
+			Namespace: secret.Namespace,
+			Name:      string(secret.Data["name"]),
+			Server:    string(secret.Data["server"]),
 		}
 		log.V(2).Info("Reading shard", "shard", shard.ID)
 		shards = append(shards, shard)

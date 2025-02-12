@@ -200,9 +200,11 @@ var _ = Describe("LongestProcessingTimePartition Controller", func() {
 				sampleLoadIndex.Object().Status.Values = []common.LoadIndex{
 					{
 						Shard: common.Shard{
-							UID:  "fake-shard-uid",
-							ID:   "fake-shard-id",
-							Data: map[string]string{"fake-key": "fake-value"},
+							UID:       "fake-shard-uid",
+							ID:        "fake-shard-id",
+							Namespace: run.Namespace().ObjectKey().Name,
+							Name:      "fake-shard-name",
+							Server:    "fake-server",
 						},
 						Value:        resource.MustParse("1"),
 						DisplayValue: "1",

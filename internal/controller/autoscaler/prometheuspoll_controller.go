@@ -62,7 +62,11 @@ var (
 		},
 		[]string{
 			"poll_ref",
+			"shard_uid",
 			"shard_id",
+			"shard_namespace",
+			"shard_name",
+			"shard_server",
 			"metric_id",
 		},
 	)
@@ -241,7 +245,11 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		log.V(2).Info("Metric polled", "metric", metric.ID, "value", metric.Value)
 		prometheusPollValuesGauge.WithLabelValues(
 			req.NamespacedName.String(),
+			string(metric.Shard.UID),
 			metric.Shard.ID,
+			metric.Shard.Namespace,
+			metric.Shard.Name,
+			metric.Shard.Server,
 			metric.ID,
 		).Set(metric.Value.AsApproximateFloat64())
 	}

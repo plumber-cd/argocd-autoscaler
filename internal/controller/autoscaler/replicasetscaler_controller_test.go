@@ -223,9 +223,11 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						LoadIndexes: []common.LoadIndex{
 							{
 								Shard: common.Shard{
-									UID:  types.UID("shard-0"),
-									ID:   "shard-0",
-									Data: map[string]string{"key": "value"},
+									UID:       types.UID("shard-0"),
+									ID:        "shard-0",
+									Namespace: run.Namespace().ObjectKey().Name,
+									Name:      "shard-0",
+									Server:    "shard-0",
 								},
 								Value:        resource.MustParse("1"),
 								DisplayValue: "1",
@@ -239,9 +241,11 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						LoadIndexes: []common.LoadIndex{
 							{
 								Shard: common.Shard{
-									UID:  types.UID("shard-1"),
-									ID:   "shard-1",
-									Data: map[string]string{"key": "value"},
+									UID:       types.UID("shard-1"),
+									ID:        "shard-1",
+									Namespace: run.Namespace().ObjectKey().Name,
+									Name:      "shard-1",
+									Server:    "shard-1",
 								},
 								Value:        resource.MustParse("1"),
 								DisplayValue: "1",
@@ -255,9 +259,11 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						LoadIndexes: []common.LoadIndex{
 							{
 								Shard: common.Shard{
-									UID:  types.UID("shard-2"),
-									ID:   "shard-2",
-									Data: map[string]string{"key": "value"},
+									UID:       types.UID("shard-2"),
+									ID:        "shard-2",
+									Namespace: run.Namespace().ObjectKey().Name,
+									Name:      "shard-2",
+									Server:    "shard-2",
 								},
 								Value:        resource.MustParse("1"),
 								DisplayValue: "1",

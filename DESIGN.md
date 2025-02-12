@@ -60,7 +60,9 @@ Shard represents a cluster managed by ArgoCD Application Controller.
 
 - `.uid` - unique identifier of the shard.
 - `.id` - identifier of the shard, not guaranteed to be unique and mostly used for human readability in logs and metrics.
-- `.data` - is a map of strings with arbitrary data about this shard.
+- `.namespace` - a namespace where this shard was found in
+- `.name` - a name of the shard as seen in the ArgoCD i.e. name of destination cluster
+- `.server` - a url of the destination server as seen in the ArgoCD for this shard
 
 ### Metric Value
 
@@ -95,16 +97,15 @@ It would find all secrets with standard `argocd.argoproj.io/secret-type: cluster
 `.status.shards` as a list of Shards.
 
 `.id` would be `.metadata.name` of the secret, `.uid` would be `.metadata.uid` of the secret.
-
-For `.data` - we would map `.data.name` and `.data.server` 1:1 from the secret,
-additionally adding `.data.namespace` of the secret.
+`.namespace` will be the namespace of the secret.
+`.name` and `.server` would be extracted from the secret `.data.name` and `.data.server` fields.
 
 To assign shards to replicas, the manager will be updating `.data.shard` on the secret.
 
 ## Poller
 
 Poller is responsible for gathering metrics from each shard.
-It uses Shard Manager reference from `.spec.shardManagerRef` to discover the shards, and it can use `.data` field of each shard
+It uses Shard Manager reference from `.spec.shardManagerRef` to discover the shards, and it can use data from the shard
 to construct appropriate queries.
 
 Poller exports the list of metrics it fetched into the `.status.values` as a list of Metric Value objects.
@@ -145,7 +146,7 @@ For gauges:
 quantile_over_time(
     0.95,
     (
-        sum(argocd_app_info{job="argocd-metrics",namespace="{{ .data.namespace }}",dest_server="{{ .data.server }}"})
+        sum(argocd_app_info{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .shardServer }}"})
     )[24h:1m]
 )
 ```
@@ -156,13 +157,13 @@ For counters:
 quantile_over_time(
     0.95,
     (
-        sum(increase(argocd_app_reconcile_count{job="argocd-metrics",namespace="{{ .data.namespace }}",dest_server="{{ .data.server }}"}[1m]))
+        sum(increase(argocd_app_reconcile_count{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .shardServer }}"}[1m]))
     )[24h:1m]
 )
 ```
 
 Also, note that in my installation, `server` label from `argocd_app_k8s_request_total` for some reason
-reports as `https://100.64.0.1:443` for cluster that actual `.data.server` is set to `https://kubernetes.default.svc`.
+reports as `https://100.64.0.1:443` for cluster that actual `.shardServer` is set to `https://kubernetes.default.svc`.
 Similarly, `host` label from `rest_client_requests_total` is actually just a host instead of a URL for all clusters.
 For `kubernetes.default.svc` it becomes `100.64.0.1:443`.
 YMMW.

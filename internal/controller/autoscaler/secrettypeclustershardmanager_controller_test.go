@@ -192,12 +192,9 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 					Expect(ok).To(BeTrue())
 					Expect(shard.UID).To(Equal(secret.GetUID()))
 					Expect(shard.ID).To(Equal(secret.Name))
-					stringData := map[string]string{}
-					for key, value := range secret.Data {
-						stringData[key] = string(value)
-					}
-					stringData["namespace"] = secret.Namespace
-					Expect(shard.Data).To(Equal(stringData))
+					Expect(shard.Namespace).To(Equal(secret.Namespace))
+					Expect(shard.Name).To(Equal(string(secret.Data["name"])))
+					Expect(shard.Server).To(Equal(string(secret.Data["server"])))
 				}
 			},
 		).
@@ -227,13 +224,11 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 							LoadIndexes: []common.LoadIndex{
 								{
 									Shard: common.Shard{
-										UID: secret.GetUID(),
-										ID:  secret.Name,
-										Data: map[string]string{
-											"namespace": secret.Namespace,
-											"name":      string(secret.Data["name"]),
-											"server":    string(secret.Data["server"]),
-										},
+										UID:       secret.GetUID(),
+										ID:        secret.Name,
+										Namespace: secret.Namespace,
+										Name:      string(secret.Data["name"]),
+										Server:    string(secret.Data["server"]),
 									},
 									Value:        resource.MustParse("1"),
 									DisplayValue: "1",

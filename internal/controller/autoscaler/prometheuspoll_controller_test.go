@@ -262,11 +262,11 @@ var _ = Describe("PrometheusPoll Controller", func() {
 				).Get()
 				shardManager.Object().Status.Shards = []common.Shard{
 					{
-						UID: types.UID("fake-shard-uid"),
-						ID:  "fake-shard-id",
-						Data: map[string]string{
-							"fake-key": "fake-value",
-						},
+						UID:       types.UID("fake-shard-uid"),
+						ID:        "fake-shard-id",
+						Namespace: run.Namespace().ObjectKey().Name,
+						Name:      "fake-shard-name",
+						Server:    "fake-shard-server",
 					},
 				}
 				meta.SetStatusCondition(&shardManager.Object().Status.Conditions, metav1.Condition{
@@ -339,11 +339,11 @@ var _ = Describe("PrometheusPoll Controller", func() {
 										},
 									).Get()
 									shardManager.Object().Status.Shards = append(shardManager.Object().Status.Shards, common.Shard{
-										UID: types.UID("fake-shard-uid-2"),
-										ID:  "fake-shard-id-2",
-										Data: map[string]string{
-											"fake-key": "fake-value",
-										},
+										UID:       types.UID("fake-shard-uid-2"),
+										ID:        "fake-shard-id-2",
+										Namespace: run.Namespace().ObjectKey().Name,
+										Name:      "fake-shard-name-2",
+										Server:    "fake-shard-server-2",
 									})
 									shardManager.StatusUpdate()
 								},

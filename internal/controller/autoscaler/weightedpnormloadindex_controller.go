@@ -61,7 +61,11 @@ var (
 		},
 		[]string{
 			"load_index_ref",
+			"shard_uid",
 			"shard_id",
+			"shard_namespace",
+			"shard_name",
+			"shard_server",
 		},
 	)
 )
@@ -192,7 +196,11 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 		log.V(2).Info("Load Index", "value", li.Value)
 		weightedPNormLoadIndexValuesGauge.WithLabelValues(
 			req.NamespacedName.String(),
+			string(li.Shard.UID),
 			li.Shard.ID,
+			li.Shard.Namespace,
+			li.Shard.Name,
+			li.Shard.Server,
 		).Set(li.Value.AsApproximateFloat64())
 	}
 

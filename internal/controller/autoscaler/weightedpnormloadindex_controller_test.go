@@ -238,9 +238,11 @@ var _ = Describe("WeightedPNormLoadIndex Controller", func() {
 					{
 						ID: "fake-metric",
 						Shard: common.Shard{
-							UID:  "fake-uid",
-							ID:   "fake-id",
-							Data: map[string]string{"fake-key": "fake-value"},
+							UID:       "fake-uid",
+							ID:        "fake-id",
+							Namespace: run.Namespace().ObjectKey().Name,
+							Name:      "fake-shard-name",
+							Server:    "fake-shard-server",
 						},
 						Query:        "fake-query",
 						Value:        resource.MustParse("0"),

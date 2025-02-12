@@ -61,7 +61,11 @@ var (
 		},
 		[]string{
 			"normalizer_ref",
+			"shard_uid",
 			"shard_id",
+			"shard_namespace",
+			"shard_name",
+			"shard_server",
 			"metric_id",
 		},
 	)
@@ -166,7 +170,11 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 		log.V(2).Info("Metric normalized", "metric", metric.ID, "value", metric.Value)
 		robustScalingNormalizerValuesGauge.WithLabelValues(
 			req.NamespacedName.String(),
+			string(metric.Shard.UID),
 			metric.Shard.ID,
+			metric.Shard.Namespace,
+			metric.Shard.Name,
+			metric.Shard.Server,
 			metric.ID,
 		).Set(metric.Value.AsApproximateFloat64())
 	}

@@ -61,7 +61,11 @@ var (
 		},
 		[]string{
 			"partition_ref",
+			"shard_uid",
 			"shard_id",
+			"shard_namespace",
+			"shard_name",
+			"shard_server",
 			"replica_id",
 		},
 	)
@@ -181,7 +185,11 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 		for _, li := range replica.LoadIndexes {
 			longestProcessingTimePartitionShardsGauge.WithLabelValues(
 				req.NamespacedName.String(),
+				string(li.Shard.UID),
 				li.Shard.ID,
+				li.Shard.Namespace,
+				li.Shard.Name,
+				li.Shard.Server,
 				replica.ID,
 			).Set(1)
 		}

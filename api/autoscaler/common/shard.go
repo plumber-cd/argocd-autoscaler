@@ -22,16 +22,31 @@ import (
 // It is suitable to be used by Pollers.
 // Attributes may be used in Go Templates for the poller if it supports that.
 type Shard struct {
-	// UID unique identifier of this shard so it can be uniquely identified in the list of shards.
-	// The reason this is not baked into SourceRef is because actual resource may or may not exists.
+	// UID unique identifier of this shard.
+	// There is multiple seemingly duplicative fields here, but this is the only one that is unique.
+	// For example, when the shard is represented as a secret with type=cluster label,
+	// the UID of the secret is a UID of the shard.
+	// Meaning that it would change if the secret is re-created.
+	// That's what is meant by "unique" in this context.
 	// When the discovery was external - this may be arbitrary string unique to that shard.
 	// +kubebuilder:validation:Required
 	UID types.UID `json:"uid,omitempty"`
 	// ID of this shard. It may or may not be unique, depending on the discoverer.
-	// It is expected to be used to populate Go Templates params for the poller (if the poller supports that).
+	// For a secret with type=cluster label, this would be the name of the secret.
 	// +kubebuilder:validation:Required
 	ID string `json:"id,omitempty"`
-	// Data is a map that will be used to populate Go Templates params for the poller (if the poller supports that).
+	// Namespace of this shard.
+	// For a secret with type=cluster label, this would be the namespace of the secret.
+	// If shard is managed externally - it is expected to be set to some value.
+	// Same as the Application Controller is in - would be a logical choice.
 	// +kubebuilder:validation:Required
-	Data map[string]string `json:"data,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+	// Name of this shard.
+	// This must be the same as the name of this destination cluster as seen by Application Controller.
+	// +kubebuilder:validation:Required
+	Name string `json:"name,omitempty"`
+	// Server of this shard.
+	// This must be the same as the server URL of this destination cluster as seen by Application Controller.
+	// +kubebuilder:validation:Required
+	Server string `json:"server,omitempty"`
 }

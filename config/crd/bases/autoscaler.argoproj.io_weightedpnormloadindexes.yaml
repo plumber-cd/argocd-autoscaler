@@ -190,27 +190,43 @@ spec:
                       description: Shard is the shard that this load index is calculated
                         for.
                       properties:
-                        data:
-                          additionalProperties:
-                            type: string
-                          description: Data is a map that will be used to populate
-                            Go Templates params for the poller (if the poller supports
-                            that).
-                          type: object
                         id:
                           description: |-
                             ID of this shard. It may or may not be unique, depending on the discoverer.
-                            It is expected to be used to populate Go Templates params for the poller (if the poller supports that).
+                            For a secret with type=cluster label, this would be the name of the secret.
+                          type: string
+                        name:
+                          description: |-
+                            Name of this shard.
+                            This must be the same as the name of this destination cluster as seen by Application Controller.
+                          type: string
+                        namespace:
+                          description: |-
+                            Namespace of this shard.
+                            For a secret with type=cluster label, this would be the namespace of the secret.
+                            If shard is managed externally - it is expected to be set to some value.
+                            Same as the Application Controller is in - would be a logical choice.
+                          type: string
+                        server:
+                          description: |-
+                            Server of this shard.
+                            This must be the same as the server URL of this destination cluster as seen by Application Controller.
                           type: string
                         uid:
                           description: |-
-                            UID unique identifier of this shard so it can be uniquely identified in the list of shards.
-                            The reason this is not baked into SourceRef is because actual resource may or may not exists.
+                            UID unique identifier of this shard.
+                            There is multiple seemingly duplicative fields here, but this is the only one that is unique.
+                            For example, when the shard is represented as a secret with type=cluster label,
+                            the UID of the secret is a UID of the shard.
+                            Meaning that it would change if the secret is re-created.
+                            That's what is meant by "unique" in this context.
                             When the discovery was external - this may be arbitrary string unique to that shard.
                           type: string
                       required:
-                      - data
                       - id
+                      - name
+                      - namespace
+                      - server
                       - uid
                       type: object
                     value:

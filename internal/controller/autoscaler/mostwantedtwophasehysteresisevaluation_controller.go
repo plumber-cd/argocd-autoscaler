@@ -60,7 +60,11 @@ var (
 		},
 		[]string{
 			"evaluation_ref",
+			"shard_uid",
 			"shard_id",
+			"shard_namespace",
+			"shard_name",
+			"shard_server",
 			"replica_id",
 		},
 	)
@@ -87,7 +91,11 @@ var (
 		},
 		[]string{
 			"evaluation_ref",
+			"shard_uid",
 			"shard_id",
+			"shard_namespace",
+			"shard_name",
+			"shard_server",
 			"replica_id",
 		},
 	)
@@ -256,7 +264,11 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		for _, li := range replica.LoadIndexes {
 			mostWantedTwoPhaseHysteresisEvaluationProjectedShardsGauge.WithLabelValues(
 				req.NamespacedName.String(),
+				string(li.Shard.UID),
 				li.Shard.ID,
+				li.Shard.Namespace,
+				li.Shard.Name,
+				li.Shard.Server,
 				replica.ID,
 			).Set(1)
 		}
@@ -283,7 +295,11 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 			for _, li := range replica.LoadIndexes {
 				mostWantedTwoPhaseHysteresisEvaluationShardsGauge.WithLabelValues(
 					req.NamespacedName.String(),
+					string(li.Shard.UID),
 					li.Shard.ID,
+					li.Shard.Namespace,
+					li.Shard.Name,
+					li.Shard.Server,
 					replica.ID,
 				).Set(1)
 			}
