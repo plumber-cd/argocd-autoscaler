@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -38,6 +39,7 @@ import (
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	robustscaling "github.com/plumber-cd/argocd-autoscaler/normalizers/robustscaling"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // RobustScalingNormalizerReconciler reconciles a RobustScalingNormalizer object
@@ -46,6 +48,27 @@ type RobustScalingNormalizerReconciler struct {
 	Scheme *runtime.Scheme
 
 	Normalizer robustscaling.Normalizer
+}
+
+var (
+	robustScalingNormalizerValuesGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace:   "argocd_autoscaler",
+			Subsystem:   "normalizer",
+			Name:        "values",
+			Help:        "Metrics normalized by this normalizer",
+			ConstLabels: prometheus.Labels{"normalizer_type": "robust_scaling"},
+		},
+		[]string{
+			"normalizer_ref",
+			"shard_id",
+			"metric_id",
+		},
+	)
+)
+
+func init() {
+	metrics.Registry.MustRegister(robustScalingNormalizerValuesGauge)
 }
 
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=robustscalingnormalizers,verbs=get;list;watch;create;update;patch;delete
@@ -136,6 +159,17 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 		return ctrl.Result{}, nil
 	}
 	log.V(1).Info("Metrics normalized", "count", len(normalizedValues))
+	robustScalingNormalizerValuesGauge.DeletePartialMatch(prometheus.Labels{
+		"normalizer_ref": req.NamespacedName.String(),
+	})
+	for _, metric := range normalizedValues {
+		log.V(2).Info("Metric normalized", "metric", metric.ID, "value", metric.Value)
+		robustScalingNormalizerValuesGauge.WithLabelValues(
+			req.NamespacedName.String(),
+			metric.Shard.ID,
+			metric.ID,
+		).Set(metric.Value.AsApproximateFloat64())
+	}
 
 	normalizer.Status.Values = normalizedValues
 	meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{

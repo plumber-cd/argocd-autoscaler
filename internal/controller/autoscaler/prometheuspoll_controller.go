@@ -22,6 +22,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,12 +34,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
-	"github.com/plumber-cd/argocd-autoscaler/pollers/prometheus"
+	poller "github.com/plumber-cd/argocd-autoscaler/pollers/prometheus"
 )
 
 // PrometheusPollReconciler reconciles a PrometheusPoll object
@@ -46,7 +48,28 @@ type PrometheusPollReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 
-	Poller prometheus.Poller
+	Poller poller.Poller
+}
+
+var (
+	prometheusPollValuesGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace:   "argocd_autoscaler",
+			Subsystem:   "poll",
+			Name:        "values",
+			Help:        "Metrics polled by this poller",
+			ConstLabels: prometheus.Labels{"poll_type": "prometheus"},
+		},
+		[]string{
+			"poll_ref",
+			"shard_id",
+			"metric_id",
+		},
+	)
+)
+
+func init() {
+	metrics.Registry.MustRegister(prometheusPollValuesGauge)
 }
 
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=prometheuspolls,verbs=get;list;watch;create;update;patch;delete
@@ -211,6 +234,17 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 	log.V(1).Info("Polled metrics", "count", len(metrics))
+	prometheusPollValuesGauge.DeletePartialMatch(prometheus.Labels{
+		"poll_ref": req.NamespacedName.String(),
+	})
+	for _, metric := range metrics {
+		log.V(2).Info("Metric polled", "metric", metric.ID, "value", metric.Value)
+		prometheusPollValuesGauge.WithLabelValues(
+			req.NamespacedName.String(),
+			metric.Shard.ID,
+			metric.ID,
+		).Set(metric.Value.AsApproximateFloat64())
+	}
 
 	// Update the status with the new values
 	poll.Status.Values = metrics

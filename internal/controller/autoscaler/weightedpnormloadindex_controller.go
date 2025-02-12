@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -38,6 +39,7 @@ import (
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	"github.com/plumber-cd/argocd-autoscaler/loadindexers/weightedpnorm"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // WeightedPNormLoadIndexReconciler reconciles a WeightedPNormLoadIndex object
@@ -46,6 +48,26 @@ type WeightedPNormLoadIndexReconciler struct {
 	Scheme *runtime.Scheme
 
 	LoadIndexer weightedpnorm.LoadIndexer
+}
+
+var (
+	weightedPNormLoadIndexValuesGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace:   "argocd_autoscaler",
+			Subsystem:   "load_index",
+			Name:        "values",
+			Help:        "Load Index values",
+			ConstLabels: prometheus.Labels{"load_index_type": "weighted_p_norm"},
+		},
+		[]string{
+			"load_index_ref",
+			"shard_id",
+		},
+	)
+)
+
+func init() {
+	metrics.Registry.MustRegister(weightedPNormLoadIndexValuesGauge)
 }
 
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=weightedpnormloadindexes,verbs=get;list;watch;create;update;patch;delete
@@ -163,6 +185,16 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 		return ctrl.Result{}, nil
 	}
 	log.Info("Load indexes calculated", "count", len(loadIndexes))
+	weightedPNormLoadIndexValuesGauge.DeletePartialMatch(prometheus.Labels{
+		"load_index_ref": req.NamespacedName.String(),
+	})
+	for _, li := range loadIndexes {
+		log.V(2).Info("Load Index", "value", li.Value)
+		weightedPNormLoadIndexValuesGauge.WithLabelValues(
+			req.NamespacedName.String(),
+			li.Shard.ID,
+		).Set(li.Value.AsApproximateFloat64())
+	}
 
 	loadIndex.Status.Values = loadIndexes
 	meta.SetStatusCondition(&loadIndex.Status.Conditions, metav1.Condition{

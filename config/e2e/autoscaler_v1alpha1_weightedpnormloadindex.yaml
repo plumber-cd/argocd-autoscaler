@@ -10,7 +10,7 @@ spec:
     apiGroup: autoscaler.argoproj.io
     kind: RobustScalingNormalizer
     name: argocd-autoscaler-robustscalingnormalizer-sample
-  p: 1
+  p: 2
   weights:
   - id: up
     weight: "1"

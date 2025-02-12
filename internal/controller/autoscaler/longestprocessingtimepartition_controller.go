@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -38,6 +39,7 @@ import (
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	"github.com/plumber-cd/argocd-autoscaler/partitioners/longestprocessingtime"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // LongestProcessingTimePartitionReconciler reconciles a LongestProcessingTimePartition object
@@ -46,6 +48,43 @@ type LongestProcessingTimePartitionReconciler struct {
 	Scheme *runtime.Scheme
 
 	Partitioner longestprocessingtime.Partitioner
+}
+
+var (
+	longestProcessingTimePartitionShardsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace:   "argocd_autoscaler",
+			Subsystem:   "partition",
+			Name:        "shards",
+			Help:        "Shards as partitioned",
+			ConstLabels: prometheus.Labels{"partition_type": "longest_processing_time"},
+		},
+		[]string{
+			"partition_ref",
+			"shard_id",
+			"replica_id",
+		},
+	)
+	longestProcessingTimePartitionReplicasTotalLoadGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace:   "argocd_autoscaler",
+			Subsystem:   "partition",
+			Name:        "replicas_total_load",
+			Help:        "Sum of the load indexes assigned to a replica",
+			ConstLabels: prometheus.Labels{"partition_type": "longest_processing_time"},
+		},
+		[]string{
+			"partition_ref",
+			"replica_id",
+		},
+	)
+)
+
+func init() {
+	metrics.Registry.MustRegister(
+		longestProcessingTimePartitionShardsGauge,
+		longestProcessingTimePartitionReplicasTotalLoadGauge,
+	)
 }
 
 // +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=longestprocessingtimepartitions,verbs=get;list;watch;create;update;patch;delete
@@ -132,6 +171,25 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 		return ctrl.Result{}, nil
 	}
 	log.V(1).Info("Partitioned successfully", "replicas", len(replicas))
+	longestProcessingTimePartitionShardsGauge.DeletePartialMatch(prometheus.Labels{
+		"partition_ref": req.NamespacedName.String(),
+	})
+	longestProcessingTimePartitionReplicasTotalLoadGauge.DeletePartialMatch(prometheus.Labels{
+		"partition_ref": req.NamespacedName.String(),
+	})
+	for _, replica := range replicas {
+		for _, li := range replica.LoadIndexes {
+			longestProcessingTimePartitionShardsGauge.WithLabelValues(
+				req.NamespacedName.String(),
+				li.Shard.ID,
+				replica.ID,
+			).Set(1)
+		}
+		longestProcessingTimePartitionReplicasTotalLoadGauge.WithLabelValues(
+			req.NamespacedName.String(),
+			replica.ID,
+		).Set(replica.TotalLoad.AsApproximateFloat64())
+	}
 
 	partition.Status.Replicas = replicas
 	meta.SetStatusCondition(&partition.Status.Conditions, metav1.Condition{

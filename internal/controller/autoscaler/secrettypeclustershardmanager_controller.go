@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -33,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -46,6 +48,30 @@ import (
 type SecretTypeClusterShardManagerReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+}
+
+var (
+	secretTypeClusterShardManagerDiscoveredShardsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace:   "argocd_autoscaler",
+			Subsystem:   "shard_manager",
+			Name:        "discovered_shards",
+			Help:        "Shards that are discovered by the shard manager",
+			ConstLabels: prometheus.Labels{"shard_manager_type": "secret_type_cluster"},
+		},
+		[]string{
+			"shard_manager_ref",
+			"shard_id",
+			"shard_namespace",
+			"dest_server",
+			"dest_name",
+			"replica_id",
+		},
+	)
+)
+
+func init() {
+	metrics.Registry.MustRegister(secretTypeClusterShardManagerDiscoveredShardsGauge)
 }
 
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;update;patch
@@ -97,6 +123,20 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 		return ctrl.Result{}, err
 	}
 	log.V(1).Info("Found secrets", "count", len(secrets.Items))
+	secretTypeClusterShardManagerDiscoveredShardsGauge.DeletePartialMatch(prometheus.Labels{
+		"shard_manager_ref": req.NamespacedName.String(),
+	})
+	for _, secret := range secrets.Items {
+		log.V(2).Info("Secret found", "secret", secret.Name)
+		secretTypeClusterShardManagerDiscoveredShardsGauge.WithLabelValues(
+			req.NamespacedName.String(),
+			secret.Name,
+			secret.Namespace,
+			string(secret.Data["server"]),
+			string(secret.Data["name"]),
+			string(secret.Data["shard"]),
+		).Set(1)
+	}
 
 	replicasByUID := map[types.UID]common.Replica{}
 	for _, replica := range manager.Spec.Replicas {
