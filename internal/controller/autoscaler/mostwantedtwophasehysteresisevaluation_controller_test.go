@@ -17,7 +17,6 @@ limitations under the License.
 package autoscaler
 
 import (
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -83,9 +82,8 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 								Name: "N/A",
 							},
 						},
-						PollingPeriod:       metav1.Duration{Duration: time.Minute},
-						StabilizationPeriod: metav1.Duration{Duration: time.Hour},
-						MinimumSampleSize:   5,
+						PollingPeriod:       metav1.Duration{Duration: time.Second},
+						StabilizationPeriod: metav1.Duration{Duration: 5 * time.Minute},
 					},
 				},
 			).Create()
@@ -207,45 +205,8 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 		).
 		BranchFailureToUpdateStatusCheck(collector.Collect).
 		WithCheck(
-			"bail out on minimum sample size not reached",
+			"succeed",
 			func(run *ScenarioRun[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
-				samplePartition := NewObjectContainer(
-					run,
-					&autoscalerv1alpha1.LongestProcessingTimePartition{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
-							Namespace: run.Namespace().ObjectKey().Name,
-						},
-					},
-				)
-				for i := 0; i < int(run.Container().Object().Spec.MinimumSampleSize-1); i++ {
-					Expect(run.ReconcileError()).ToNot(HaveOccurred())
-					Expect(run.ReconcileResult().RequeueAfter).
-						To(Equal(run.Container().Object().Spec.PollingPeriod.Duration))
-					Expect(run.ReconcileResult().Requeue).To(BeFalse())
-
-					By("Checking conditions")
-					readyCondition := meta.FindStatusCondition(
-						run.Container().Get().Object().Status.Conditions,
-						StatusTypeReady,
-					)
-					Expect(readyCondition).NotTo(BeNil())
-					Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
-					Expect(readyCondition.Reason).To(Equal("MinimumSampleSizeNotReached"))
-					Expect(readyCondition.Message).To(ContainSubstring("Minimum sample size not reached"))
-
-					By("Checking history records")
-					samplePartition.Get()
-					history := run.Container().Object().Status.History
-					Expect(history).To(HaveLen(i + 1))
-					record := history[i]
-					Expect(record.Replicas).To(Equal(samplePartition.Object().Status.Replicas))
-
-					By("Reconciling resource sample #" + fmt.Sprintf("%d", i+2))
-					time.Sleep(5 * time.Second)
-					run.Reconcile()
-				}
-
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).
 					To(Equal(run.Container().Object().Spec.PollingPeriod.Duration))
@@ -261,57 +222,28 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 				Expect(readyCondition.Reason).To(Equal(StatusTypeReady))
 
 				By("Checking history records")
+				samplePartition := NewObjectContainer(
+					run,
+					&autoscalerv1alpha1.LongestProcessingTimePartition{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
+							Namespace: run.Namespace().ObjectKey().Name,
+						},
+					},
+				)
 				samplePartition.Get()
 				history := run.Container().Object().Status.History
-				Expect(history).To(HaveLen(int(run.Container().Object().Spec.MinimumSampleSize)))
-				record := history[int(run.Container().Object().Spec.MinimumSampleSize)-1]
-				Expect(record.Replicas).To(Equal(samplePartition.Object().Status.Replicas))
+				Expect(history).To(HaveLen(1))
 
 				By("Checking evaluation results")
-				Expect(run.Container().Object().Status.LastEvaluationTimestamp.Time).To(BeTemporally("~", time.Now(), 2*time.Second))
-				Expect(run.Container().Object().Status.Projection).To(Equal(samplePartition.Object().Status.Replicas))
 				Expect(run.Container().Object().Status.Replicas).To(Equal(samplePartition.Object().Status.Replicas))
+				Expect(run.Container().Object().Status.Projection).To(Equal(samplePartition.Object().Status.Replicas))
+				Expect(run.Container().Object().Status.LastEvaluationTimestamp.Time).
+					To(BeTemporally("~", time.Now(), time.Second))
 
-				By("Simulate stabilization period expiring")
-				run.Container().Object().Status.LastEvaluationTimestamp = &metav1.Time{
-					Time: time.Now().Add(-run.Container().Object().Spec.StabilizationPeriod.Duration).
-						Add(-time.Second),
-				}
-				for i := range run.Container().Object().Status.History {
-					run.Container().Object().Status.History[i].Timestamp = *run.Container().Object().Status.LastEvaluationTimestamp
-				}
-				run.Container().StatusUpdate()
-
-				for i := 0; i < int(run.Container().Object().Spec.MinimumSampleSize-1); i++ {
-					By("Reconciling resource sample #" + fmt.Sprintf("%d", i+1))
-					time.Sleep(5 * time.Second)
-					run.Reconcile()
-
-					Expect(run.ReconcileError()).ToNot(HaveOccurred())
-					Expect(run.ReconcileResult().RequeueAfter).
-						To(Equal(run.Container().Object().Spec.PollingPeriod.Duration))
-					Expect(run.ReconcileResult().Requeue).To(BeFalse())
-
-					By("Checking conditions")
-					readyCondition := meta.FindStatusCondition(
-						run.Container().Get().Object().Status.Conditions,
-						StatusTypeReady,
-					)
-					Expect(readyCondition).NotTo(BeNil())
-					Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
-					Expect(readyCondition.Reason).To(Equal("MinimumSampleSizeNotReached"))
-					Expect(readyCondition.Message).To(ContainSubstring("Minimum sample size not reached"))
-
-					By("Checking history records")
-					samplePartition.Get()
-					history := run.Container().Object().Status.History
-					Expect(history).To(HaveLen(i + 1))
-					record := history[i]
-					Expect(record.Replicas).To(Equal(samplePartition.Object().Status.Replicas))
-				}
-
-				By("Reconciling resource sample #" + fmt.Sprintf("%d", run.Container().Object().Spec.MinimumSampleSize))
-				time.Sleep(5 * time.Second)
+				By("Checking seconds reconciliation")
+				firstReconcileTime := run.Container().Object().Status.LastEvaluationTimestamp.Time
+				time.Sleep(6 * time.Second)
 				run.Reconcile()
 
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
@@ -329,27 +261,28 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 				Expect(readyCondition.Reason).To(Equal(StatusTypeReady))
 
 				By("Checking history records")
+				samplePartition = NewObjectContainer(
+					run,
+					&autoscalerv1alpha1.LongestProcessingTimePartition{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
+							Namespace: run.Namespace().ObjectKey().Name,
+						},
+					},
+				)
 				samplePartition.Get()
 				history = run.Container().Object().Status.History
-				Expect(history).To(HaveLen(int(run.Container().Object().Spec.MinimumSampleSize)))
-				record = history[int(run.Container().Object().Spec.MinimumSampleSize)-1]
-				Expect(record.Replicas).To(Equal(samplePartition.Object().Status.Replicas))
+				Expect(history).To(HaveLen(1))
+				Expect(history[0].SeenTimes).To(Equal(int32(2)))
 
 				By("Checking evaluation results")
-				Expect(run.Container().Object().Status.LastEvaluationTimestamp.Time).To(BeTemporally("~", time.Now(), 2*time.Second))
-				Expect(run.Container().Object().Status.Projection).To(Equal(samplePartition.Object().Status.Replicas))
 				Expect(run.Container().Object().Status.Replicas).To(Equal(samplePartition.Object().Status.Replicas))
+				Expect(run.Container().Object().Status.Projection).To(Equal(samplePartition.Object().Status.Replicas))
+				Expect(run.Container().Object().Status.LastEvaluationTimestamp.Time).
+					To(Equal(firstReconcileTime))
 			},
 		).
-		Commit(collector.Collect).
-		Hydrate(
-			"with one min sample requirement",
-			func(run *ScenarioRun[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
-				run.Container().Object().Spec.MinimumSampleSize = 1
-				run.Container().Update()
-			},
-		).
-		BranchFailureToUpdateStatusCheck(collector.Collect)
+		Commit(collector.Collect)
 
 	BeforeEach(func() {
 		scenarioRun = collector.NewRun(ctx, k8sClient)

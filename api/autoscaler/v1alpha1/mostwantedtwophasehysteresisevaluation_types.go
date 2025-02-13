@@ -33,20 +33,20 @@ type MostWantedTwoPhaseHysteresisEvaluationSpec struct {
 	// Older historical records are always pruned.
 	// +kubebuilder:validation:Required
 	StabilizationPeriod metav1.Duration `json:"stabilizationPeriod,omitempty"`
-
-	// MinimumSampleSize is the minimum number of samples to consider before first evaluating.
-	// +kubebuilder:validation:Required
-	MinimumSampleSize int32 `json:"minimumSampleSize,omitempty"`
 }
 
 type MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord struct {
-	// Timestamp is the time at which the record was created.
+	// Timestamp is the time at which the record was last seen.
 	// +kubebuilder:validation:Required
 	Timestamp metav1.Time `json:"timestamp,omitempty"`
 
 	// Replicas is the partition as it was seen at this moment in time.
 	// +kubebuilder:validation:Required
 	Replicas common.ReplicaList `json:"replicas,omitempty"`
+
+	// SeenTimes is the counter of how many times have this record been seen.
+	// +kubebuilder:validation:Required
+	SeenTimes int32 `json:"seenTimes,omitempty"`
 }
 
 // MostWantedTwoPhaseHysteresisEvaluationStatus defines the observed state of MostWantedTwoPhaseHysteresisEvaluation.
@@ -57,7 +57,6 @@ type MostWantedTwoPhaseHysteresisEvaluationStatus struct {
 	History []MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord `json:"history,omitempty"`
 
 	// LastEvaluationTimestamp is the time at which the last evaluation was performed.
-
 	LastEvaluationTimestamp *metav1.Time `json:"lastEvaluationTimestamp,omitempty"`
 
 	// Projection shows what the partitioning choice would have been if evaluation was performed during last poll.

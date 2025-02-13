@@ -204,56 +204,58 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 	replicas := partitionProvider.GetPartitionProviderStatus().Replicas
 	log.V(2).Info("Currently reported replicas by partition provider", "count", len(replicas))
 
+	seenBefore := false
+	for i, record := range evaluation.Status.History {
+		if record.Replicas.SerializeToString() == replicas.SerializeToString() {
+			seenBefore = true
+			evaluation.Status.History[i].SeenTimes++
+			evaluation.Status.History[i].Timestamp = metav1.Now()
+			break
+		}
+	}
+	if !seenBefore {
+		evaluation.Status.History = append(evaluation.Status.History,
+			autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{
+				Timestamp: metav1.Now(),
+				Replicas:  replicas,
+				SeenTimes: 1,
+			},
+		)
+	}
+
 	// Maintain the history
-	evaluation.Status.History = append(evaluation.Status.History,
-		autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{
-			Timestamp: metav1.Now(),
-			Replicas:  replicas,
-		})
 	cleanHistory := []autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
 	for _, record := range evaluation.Status.History {
 		if record.Timestamp.Add(evaluation.Spec.StabilizationPeriod.Duration).After(time.Now()) {
 			cleanHistory = append(cleanHistory, record)
 		}
 	}
-	log.V(1).Info("Trim the history", "from", len(evaluation.Status.History), "to", len(cleanHistory))
-	evaluation.Status.History = cleanHistory
-	if len(evaluation.Status.History) < int(evaluation.Spec.MinimumSampleSize) {
-		err := fmt.Errorf("Minimum sample size not reached")
-		log.Info(err.Error())
-		meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
-			Type:    StatusTypeReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "MinimumSampleSizeNotReached",
-			Message: err.Error(),
-		})
-		if err := r.Status().Update(ctx, evaluation); err != nil {
-			log.V(1).Info("Failed to update resource status", "err", err)
-			return ctrl.Result{}, err
-		}
-		// We need to re-queue it for the next poll, but this is NOT an error
-		return ctrl.Result{RequeueAfter: evaluation.Spec.PollingPeriod.Duration}, nil
+	historyWasTrimmed := len(cleanHistory) < len(evaluation.Status.History)
+	if historyWasTrimmed {
+		log.V(1).Info("Trim the history", "from", len(evaluation.Status.History), "to", len(cleanHistory))
+		evaluation.Status.History = cleanHistory
 	}
-	log.V(2).Info("Minimum sample size reached, proceeding to evaluate",
-		"minimumSampleSize", evaluation.Spec.MinimumSampleSize,
-		"currentSampleSize", len(evaluation.Status.History))
 
 	historyRecords := map[string]autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
 	historyRecordsLastSeen := map[string]metav1.Time{}
-	historyRecorsSeenTimes := map[string]int{}
+	historyRecorsSeenTimes := map[string]int32{}
 	for _, record := range evaluation.Status.History {
 		serializedRecord := record.Replicas.SerializeToString()
 		log.V(2).Info("Noticing record", "record", serializedRecord)
-		if _, ok := historyRecordsLastSeen[serializedRecord]; !ok ||
-			record.Timestamp.After(historyRecordsLastSeen[serializedRecord].Time) {
+		if _, ok := historyRecordsLastSeen[serializedRecord]; !ok {
 			historyRecords[serializedRecord] = record
 			historyRecordsLastSeen[serializedRecord] = record.Timestamp
-			historyRecorsSeenTimes[serializedRecord] = 0
+			historyRecorsSeenTimes[serializedRecord] = record.SeenTimes
+		} else if record.Timestamp.After(historyRecordsLastSeen[serializedRecord].Time) {
+			historyRecordsLastSeen[serializedRecord] = record.Timestamp
+			historyRecorsSeenTimes[serializedRecord] += record.SeenTimes
+		} else {
+			historyRecorsSeenTimes[serializedRecord] += record.SeenTimes
 		}
-		historyRecorsSeenTimes[serializedRecord]++
 	}
+
 	topSeenRecord := autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
-	maxSeenCount := 0
+	maxSeenCount := int32(0)
 	for serializedRecord, seenTimes := range historyRecorsSeenTimes {
 		log.V(2).Info("Evaluating records", "record", serializedRecord, "seenTimes", seenTimes)
 		if seenTimes > maxSeenCount {

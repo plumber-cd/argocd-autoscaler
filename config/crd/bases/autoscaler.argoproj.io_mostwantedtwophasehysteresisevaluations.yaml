@@ -54,11 +54,6 @@ spec:
             description: MostWantedTwoPhaseHysteresisEvaluationSpec defines the desired
               state of MostWantedTwoPhaseHysteresisEvaluation.
             properties:
-              minimumSampleSize:
-                description: MinimumSampleSize is the minimum number of samples to
-                  consider before first evaluating.
-                format: int32
-                type: integer
               partitionProviderRef:
                 description: PartitionProviderRef is the reference to the partition
                   provider.
@@ -89,7 +84,6 @@ spec:
                   Older historical records are always pruned.
                 type: string
             required:
-            - minimumSampleSize
             - partitionProviderRef
             - pollingPeriod
             - stabilizationPeriod
@@ -257,16 +251,25 @@ spec:
                         - totalLoadDisplayValue
                         type: object
                       type: array
+                    seenTimes:
+                      description: SeenTimes is the counter of how many times have
+                        this record been seen.
+                      format: int32
+                      type: integer
                     timestamp:
-                      description: Timestamp is the time at which the record was created.
+                      description: Timestamp is the time at which the record was last
+                        seen.
                       format: date-time
                       type: string
                   required:
                   - replicas
+                  - seenTimes
                   - timestamp
                   type: object
                 type: array
               lastEvaluationTimestamp:
+                description: LastEvaluationTimestamp is the time at which the last
+                  evaluation was performed.
                 format: date-time
                 type: string
               projection:
