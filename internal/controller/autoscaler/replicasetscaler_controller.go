@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -66,6 +67,7 @@ type ReplicaSetScalerReconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
 	APIReader client.Reader
+	Recorder  record.EventRecorder
 
 	lastReconciled sync.Map
 }
@@ -97,6 +99,7 @@ func init() {
 // +kubebuilder:rbac:namespace=argocd-autoscaler,groups=autoscaler.argoproj.io,resources=replicasetscalers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:namespace=argocd-autoscaler,groups=autoscaler.argoproj.io,resources=replicasetscalers/status,verbs=get;update;patch
 // +kubebuilder:rbac:namespace=argocd-autoscaler,groups=autoscaler.argoproj.io,resources=replicasetscalers/finalizers,verbs=update
+// +kubebuilder:rbac:namespace=argocd-autoscaler,groups=core,resources=events,verbs=create;patch
 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.0/pkg/reconcile
@@ -342,6 +345,13 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 			log.Info("RS scaled to 0",
 				"ref", scaler.Spec.ReplicaSetControllerRef)
+			if r.Recorder != nil {
+				r.Recorder.Event(
+					r.GetRSObject(&replicaSetController),
+					corev1.EventTypeNormal,
+					"ScaledToZero", "Scaled to 0 replicas",
+				)
+			}
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 
@@ -448,6 +458,13 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				"desiredReplicas", desiredReplicas,
 				"actualReplicas", actualReplicas,
 				"restart", restart)
+			if r.Recorder != nil {
+				r.Recorder.Event(
+					r.GetRSObject(&replicaSetController),
+					corev1.EventTypeNormal,
+					"Scaled", fmt.Sprintf("Scaled from %d to %d replicas", actualReplicas, desiredReplicas),
+				)
+			}
 			replicaSetScalerChangesTotalCounter.WithLabelValues(
 				req.NamespacedName.String(),
 				scaler.Spec.ReplicaSetControllerRef.Kind,
