@@ -6,6 +6,6 @@ kind: Issuer
 metadata:
   labels:
     app.kubernetes.io/name: kubebuilder
-  name: argocd-autoscaler-selfsigned-issuer
+  name: argocd-autoscaler-selfsigned
 spec:
   selfSigned: {}

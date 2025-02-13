@@ -1,5 +1,5 @@
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+IMG ?= ghcr.io/plumber-cd/argocd-autoscaler:v0.0.0
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -131,7 +131,7 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 .PHONY: build-installer
 build-installer: kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	cd config/manager && $(KUSTOMIZE) edit set image ghcr.io/plumber-cd/argocd-autoscaler=${IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 
 ##@ Deployment
@@ -150,7 +150,7 @@ uninstall: kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube
 
 .PHONY: deploy
 deploy: kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/base && $(KUSTOMIZE) edit set image controller=${IMG}
+	cd config/base && $(KUSTOMIZE) edit set image ghcr.io/plumber-cd/argocd-autoscaler=${IMG}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply --server-side=true -f -
 
 .PHONY: undeploy
@@ -159,7 +159,7 @@ undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.
 
 .PHONY: deploy-e2e
 deploy-e2e: kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/e2e/default && $(KUSTOMIZE) edit set image controller=${IMG}
+	cd config/e2e/default && $(KUSTOMIZE) edit set image ghcr.io/plumber-cd/argocd-autoscaler=${IMG}
 	$(KUSTOMIZE) build config/e2e/default | $(KUBECTL) apply --server-side=true -f -
 
 .PHONY: undeploy-e2e

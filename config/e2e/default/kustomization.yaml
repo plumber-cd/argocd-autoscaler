@@ -1,5 +1,8 @@
+namespace: argocd-autoscaler
+
 resources:
 - ../../default-secured
+- service_account.yaml
 - role_metrics_auth.yaml
 - role_metrics_auth_binding.yaml
 

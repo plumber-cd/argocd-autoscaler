@@ -3,9 +3,8 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   labels:
-    prometheus: argocd-autoscaler
     app.kubernetes.io/name: argocd-autoscaler
-  name: controller-manager-metrics-monitor
+  name: argocd-autoscaler
 spec:
   endpoints:
   - path: /metrics
@@ -14,3 +13,4 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: argocd-autoscaler
+      metrics: enabled

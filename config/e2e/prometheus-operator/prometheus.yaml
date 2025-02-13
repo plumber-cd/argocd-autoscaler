@@ -9,7 +9,7 @@ spec:
   prometheusExternalLabelName: prometheus
   serviceMonitorNamespaceSelector:
     matchLabels:
-      prometheus: argocd-autoscaler
+      app.kubernetes.io/name: argocd-autoscaler
   serviceMonitorSelector:
     matchLabels:
-      prometheus: argocd-autoscaler
+      app.kubernetes.io/name: argocd-autoscaler

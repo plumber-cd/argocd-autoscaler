@@ -3,11 +3,11 @@ kind: ClusterRoleBinding
 metadata:
   labels:
     app.kubernetes.io/name: argocd-autoscaler
-  name: manager-metrics-auth-rolebinding
+  name: curl-auth
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: manager-metrics-auth-role
+  name: curl-auth
 subjects:
 - kind: ServiceAccount
-  name: controller-manager
+  name: curl

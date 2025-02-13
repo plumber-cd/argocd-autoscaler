@@ -3,20 +3,20 @@ kind: ReplicaSetScaler
 metadata:
   labels:
     app.kubernetes.io/name: argocd-autoscaler
-  name: replicasetscaler-sample
+  name: sample
 spec:
   partitionProviderRef:
     apiGroup: autoscaler.argoproj.io
     kind: MostWantedTwoPhaseHysteresisEvaluation
-    name: argocd-autoscaler-mostwantedtwophasehysteresisevaluation-sample
+    name: sample
   shardManagerRef:
     apiGroup: autoscaler.argoproj.io
     kind: SecretTypeClusterShardManager
-    name: argocd-autoscaler-secrettypeclustershardmanager-sample
+    name: sample
   replicaSetControllerRef:
     apiGroup: apps
     kind: StatefulSet
-    name: argocd-autoscaler-argocd-application-controller
+    name: argocd-application-controller
   mode: {}
     # default:
     #   rolloutRestart: true

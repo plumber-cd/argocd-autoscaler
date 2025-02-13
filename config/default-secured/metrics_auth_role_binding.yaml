@@ -8,5 +8,5 @@ roleRef:
   name: system:auth-delegator
 subjects:
 - kind: ServiceAccount
-  name: controller-manager
+  name: argocd-autoscaler
   namespace: argocd-autoscaler

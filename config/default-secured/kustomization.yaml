@@ -5,25 +5,22 @@ resources:
 - certificate-metrics.yaml
 - metrics_auth_role_binding.yaml
 
-configurations:
-- kustomizeconfig.yaml
-
 patches:
 - path: network-policy-tls-patch.yaml
   target:
     kind: NetworkPolicy
-    name: allow-metrics-traffic
+    name: argocd-autoscaler-allow-metrics-traffic
 - path: cert_metrics_manager_patch.yaml
   target:
     kind: Deployment
 - path: service_tls_patch.yaml
   target:
     kind: Service
-    name: controller-manager-metrics-service
+    name: argocd-autoscaler-metrics
 - path: monitor_tls_patch.yaml
   target:
     kind: ServiceMonitor
-    name: controller-manager-metrics-monitor
+    name: argocd-autoscaler
 
 # [CERTMANAGER] To enable cert-manager, uncomment all sections with 'CERTMANAGER' prefix.
 # Uncomment the following replacements to add the cert-manager CA injection annotations

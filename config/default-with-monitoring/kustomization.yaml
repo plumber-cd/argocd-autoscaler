@@ -1,5 +1,4 @@
 namespace: argocd-autoscaler
-namePrefix: argocd-autoscaler-
 resources:
 - ../base
 - allow-metrics-traffic.yaml

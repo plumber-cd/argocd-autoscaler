@@ -6,7 +6,7 @@ kind: NetworkPolicy
 metadata:
   labels:
     app.kubernetes.io/name: argocd-autoscaler
-  name: allow-metrics-traffic
+  name: argocd-autoscaler-allow-metrics-traffic
 spec:
   podSelector:
     matchLabels:
@@ -18,7 +18,7 @@ spec:
     - from:
       - namespaceSelector:
           matchLabels:
-            metrics: enabled  # Only from namespaces with this label
+            prometheus.io/scraper: "true"
       ports:
         - port: 8080
           protocol: TCP

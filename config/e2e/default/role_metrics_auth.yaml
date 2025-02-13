@@ -2,7 +2,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: manager-metrics-auth-role
+  name: curl-auth
 rules:
 - nonResourceURLs: ["/metrics"]
   verbs: ["get"]

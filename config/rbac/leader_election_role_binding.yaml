@@ -3,11 +3,11 @@ kind: RoleBinding
 metadata:
   labels:
     app.kubernetes.io/name: argocd-autoscaler
-  name: leader-election-rolebinding
+  name: argocd-autoscaler-leader-election
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: leader-election-role
+  name: argocd-autoscaler-leader-election
 subjects:
 - kind: ServiceAccount
-  name: controller-manager
+  name: argocd-autoscaler

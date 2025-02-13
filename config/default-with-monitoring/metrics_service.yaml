@@ -3,7 +3,8 @@ kind: Service
 metadata:
   labels:
     app.kubernetes.io/name: argocd-autoscaler
-  name: controller-manager-metrics-service
+    metrics: enabled
+  name: argocd-autoscaler-metrics
 spec:
   ports:
   - name: metrics

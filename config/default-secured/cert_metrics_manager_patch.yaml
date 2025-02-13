@@ -24,7 +24,7 @@
   value:
     name: metrics-certs
     secret:
-      secretName: argocd-autoscaler-metrics-server-cert
+      secretName: argocd-autoscaler-metrics-certs
       optional: false
       items:
         - key: ca.crt

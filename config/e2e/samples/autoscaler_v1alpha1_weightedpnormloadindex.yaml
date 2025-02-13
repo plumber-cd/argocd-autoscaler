@@ -3,12 +3,12 @@ kind: WeightedPNormLoadIndex
 metadata:
   labels:
     app.kubernetes.io/name: argocd-autoscaler
-  name: weightedpnormloadindex-sample
+  name: sample
 spec:
   metricValuesProviderRef:
     apiGroup: autoscaler.argoproj.io
     kind: RobustScalingNormalizer
-    name: argocd-autoscaler-robustscalingnormalizer-sample
+    name: sample
   p: 2
   weights:
   - id: up

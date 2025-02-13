@@ -1,5 +1,4 @@
 namespace: argocd-autoscaler
-namePrefix: argocd-autoscaler-
 ## Append samples of your project ##
 resources:
 - argocd_application_controller.yaml

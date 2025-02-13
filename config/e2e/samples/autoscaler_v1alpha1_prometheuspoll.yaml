@@ -3,12 +3,12 @@ kind: PrometheusPoll
 metadata:
   labels:
     app.kubernetes.io/name: argocd-autoscaler
-  name: prometheuspoll-sample
+  name: sample
 spec:
   shardManagerRef:
     apiGroup: autoscaler.argoproj.io
     kind: SecretTypeClusterShardManager
-    name: argocd-autoscaler-secrettypeclustershardmanager-sample
+    name: sample
   period: 5s
   address: http://prometheus-operated.prometheus.svc.cluster.local:9090
   metrics:

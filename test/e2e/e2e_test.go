@@ -30,21 +30,12 @@ import (
 // namespace where the project is deployed in
 const namespace = "argocd-autoscaler"
 
-// serviceAccountName created for the project
-const serviceAccountName = "argocd-autoscaler-controller-manager"
-
 // metricsServiceName is the name of the metrics service of the project
-const metricsServiceName = "argocd-autoscaler-controller-manager-metrics-service"
+const metricsServiceName = "argocd-autoscaler-metrics"
 
-const shardName = "argocd-autoscaler-sample-cluster"
-const shardManagerName = "argocd-autoscaler-secrettypeclustershardmanager-sample"
-const pollerName = "argocd-autoscaler-prometheuspoll-sample"
-const normalizerName = "argocd-autoscaler-robustscalingnormalizer-sample"
-const loadIndexerName = "argocd-autoscaler-weightedpnormloadindex-sample"
-const partitionName = "argocd-autoscaler-longestprocessingtimepartition-sample"
-const evaluationName = "argocd-autoscaler-mostwantedtwophasehysteresisevaluation-sample"
-const scalingName = "argocd-autoscaler-replicasetscaler-sample"
-const stsName = "argocd-autoscaler-argocd-application-controller"
+const shardName = "sample-cluster"
+const strategyName = "sample"
+const stsName = "argocd-application-controller"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
@@ -65,17 +56,23 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
 
-		By("labeling the namespace for prometheus")
+		By("labeling the namespace for local curl network policy")
 		cmd = exec.Command("kubectl", "label", "--overwrite", "ns", namespace,
-			"prometheus=argocd-autoscaler")
+			"prometheus.io/scraper=true")
 		_, err = Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
+		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with scraper network policy")
 
-		By("labeling the namespace for metrics")
+		By("labeling the namespace for prometheus service monitor discovery")
 		cmd = exec.Command("kubectl", "label", "--overwrite", "ns", namespace,
-			"metrics=enabled")
+			"app.kubernetes.io/name=argocd-autoscaler")
 		_, err = Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
+		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with sm discovery")
+
+		By("labeling the namespace for prometheus network policy")
+		cmd = exec.Command("kubectl", "label", "--overwrite", "ns", "prometheus",
+			"prometheus.io/scraper=true")
+		_, err = Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with prometheus network policy")
 
 		By("installing CRDs")
 		cmd = exec.Command("make", "install")
@@ -87,12 +84,12 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create sample resources")
 
-		By("deploying the controller-manager")
+		By("deploying the argocd-autoscaler")
 		// This actually has to do with cert manager struggling to inject CAs into CRDs
 		Eventually(func(g Gomega) {
 			cmd = exec.Command("make", "deploy-e2e", fmt.Sprintf("IMG=%s", projectImage))
 			deployLogs, err = Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
+			g.Expect(err).NotTo(HaveOccurred(), "Failed to deploy the argocd-autoscaler")
 		}, "60s").Should(Succeed())
 	})
 
@@ -103,7 +100,7 @@ var _ = Describe("Manager", Ordered, func() {
 		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
 		_, _ = Run(cmd)
 
-		By("undeploying the controller-manager")
+		By("undeploying the argocd-autoscaler")
 		cmd = exec.Command("make", "undeploy-e2e")
 		_, _ = Run(cmd)
 
@@ -171,9 +168,9 @@ var _ = Describe("Manager", Ordered, func() {
 
 	Context("Manager", func() {
 		It("should run successfully", func() {
-			By("validating that the controller-manager pod is running as expected")
+			By("validating that the argocd-autoscaler pod is running as expected")
 			verifyControllerUp := func(g Gomega) {
-				// Get the name of the controller-manager pod
+				// Get the name of the argocd-autoscaler pod
 				cmd := exec.Command("kubectl", "get",
 					"pods", "-l", "app.kubernetes.io/name=argocd-autoscaler",
 					"-o", "go-template={{ range .items }}"+
@@ -184,11 +181,11 @@ var _ = Describe("Manager", Ordered, func() {
 				)
 
 				podOutput, err := Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve controller-manager pod information")
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve argocd-autoscaler pod information")
 				podNames := GetNonEmptyLines(podOutput)
 				g.Expect(podNames).To(HaveLen(1), "expected 1 controller pod running")
 				controllerPodName = podNames[0]
-				g.Expect(controllerPodName).To(ContainSubstring("controller-manager"))
+				g.Expect(controllerPodName).To(ContainSubstring("argocd-autoscaler"))
 
 				// Validate the pod's status
 				cmd = exec.Command("kubectl", "get",
@@ -197,7 +194,7 @@ var _ = Describe("Manager", Ordered, func() {
 				)
 				output, err := Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Running"), "Incorrect controller-manager pod status")
+				g.Expect(output).To(Equal("Running"), "Incorrect argocd-autoscaler pod status")
 			}
 			Eventually(verifyControllerUp).Should(Succeed())
 		})
@@ -252,7 +249,7 @@ var _ = Describe("Manager", Ordered, func() {
 				cmd = exec.Command("kubectl", "get",
 					"-n", namespace,
 					"secrettypeclustershardmanagers.autoscaler.argoproj.io",
-					shardManagerName,
+					strategyName,
 					"-o", "go-template={{ range .status.shards }}"+
 						"{{ .uid }}"+
 						"{{ end }}",
@@ -269,7 +266,7 @@ var _ = Describe("Manager", Ordered, func() {
 				cmd := exec.Command("kubectl", "get",
 					"-n", namespace,
 					"prometheuspolls.autoscaler.argoproj.io",
-					pollerName,
+					strategyName,
 					"-o", "go-template={{ len .status.values }}",
 				)
 				discoveredMetrics, err := Run(cmd)
@@ -283,7 +280,7 @@ var _ = Describe("Manager", Ordered, func() {
 				cmd := exec.Command("kubectl", "get",
 					"-n", namespace,
 					"robustscalingnormalizers.autoscaler.argoproj.io",
-					normalizerName,
+					strategyName,
 					"-o", "go-template={{ len .status.values }}",
 				)
 				normalizedMetrics, err := Run(cmd)
@@ -297,7 +294,7 @@ var _ = Describe("Manager", Ordered, func() {
 				cmd := exec.Command("kubectl", "get",
 					"-n", namespace,
 					"weightedpnormloadindexes.autoscaler.argoproj.io",
-					loadIndexerName,
+					strategyName,
 					"-o", "go-template={{ len .status.values }}",
 				)
 				loadIndexes, err := Run(cmd)
@@ -311,7 +308,7 @@ var _ = Describe("Manager", Ordered, func() {
 				cmd := exec.Command("kubectl", "get",
 					"-n", namespace,
 					"longestprocessingtimepartitions.autoscaler.argoproj.io",
-					partitionName,
+					strategyName,
 					"-o", "go-template={{ len .status.replicas }}",
 				)
 				partitions, err := Run(cmd)
@@ -325,7 +322,7 @@ var _ = Describe("Manager", Ordered, func() {
 				cmd := exec.Command("kubectl", "get",
 					"-n", namespace,
 					"mostwantedtwophasehysteresisevaluations.autoscaler.argoproj.io",
-					evaluationName,
+					strategyName,
 					"-o", "go-template={{ len .status.replicas }}",
 				)
 				partitions, err := Run(cmd)
@@ -339,7 +336,7 @@ var _ = Describe("Manager", Ordered, func() {
 				cmd := exec.Command("kubectl", "get",
 					"-n", namespace,
 					"replicasetscalers.autoscaler.argoproj.io",
-					scalingName,
+					strategyName,
 					"-o", "go-template="+
 						"{{ range .status.replicas }}"+
 						"{{ $id := .id }}"+
@@ -405,7 +402,7 @@ var _ = Describe("Manager", Ordered, func() {
 					fmt.Sprintf(`{
                     "metadata": {
                         "labels": {
-                            "metrics": "enabled"
+                            "app.kubernetes.io/name": "argocd-autoscaler-metrics"
                         }
                     },
 					"spec": {
@@ -437,9 +434,9 @@ var _ = Describe("Manager", Ordered, func() {
 								}
 							}
 						}],
-						"serviceAccount": "%s"
+						"serviceAccount": "curl"
 					}
-				}`, metricsServiceName, namespace, serviceAccountName))
+				}`, metricsServiceName, namespace))
 				_, err := Run(cmd)
 				Expect(err).NotTo(HaveOccurred(), "Failed to create curl-metrics pod")
 			}
@@ -473,7 +470,7 @@ var _ = Describe("Manager", Ordered, func() {
 					CreatePrometheusMetric("argocd_autoscaler_shard_manager_discovered_shards",
 						map[string]string{
 							"shard_manager_type": "secret_type_cluster",
-							"shard_manager_ref":  fmt.Sprintf("%s/%s", namespace, shardManagerName),
+							"shard_manager_ref":  fmt.Sprintf("%s/%s", namespace, strategyName),
 							"shard_uid":          "*",
 							"shard_id":           shardName,
 							"shard_namespace":    namespace,
@@ -485,7 +482,7 @@ var _ = Describe("Manager", Ordered, func() {
 					CreatePrometheusMetric("argocd_autoscaler_poll_values",
 						map[string]string{
 							"poll_type":       "prometheus",
-							"poll_ref":        fmt.Sprintf("%s/%s", namespace, pollerName),
+							"poll_ref":        fmt.Sprintf("%s/%s", namespace, strategyName),
 							"shard_uid":       "*",
 							"shard_id":        shardName,
 							"shard_namespace": namespace,
@@ -497,7 +494,7 @@ var _ = Describe("Manager", Ordered, func() {
 					CreatePrometheusMetric("argocd_autoscaler_normalizer_values",
 						map[string]string{
 							"normalizer_type": "robust_scaling",
-							"normalizer_ref":  fmt.Sprintf("%s/%s", namespace, normalizerName),
+							"normalizer_ref":  fmt.Sprintf("%s/%s", namespace, strategyName),
 							"shard_uid":       "*",
 							"shard_id":        shardName,
 							"shard_namespace": namespace,
@@ -509,7 +506,7 @@ var _ = Describe("Manager", Ordered, func() {
 					CreatePrometheusMetric("argocd_autoscaler_load_index_values",
 						map[string]string{
 							"load_index_type": "weighted_p_norm",
-							"load_index_ref":  fmt.Sprintf("%s/%s", namespace, loadIndexerName),
+							"load_index_ref":  fmt.Sprintf("%s/%s", namespace, strategyName),
 							"shard_uid":       "*",
 							"shard_id":        shardName,
 							"shard_namespace": namespace,
@@ -520,7 +517,7 @@ var _ = Describe("Manager", Ordered, func() {
 					CreatePrometheusMetric("argocd_autoscaler_partition_shards",
 						map[string]string{
 							"partition_type":  "longest_processing_time",
-							"partition_ref":   fmt.Sprintf("%s/%s", namespace, partitionName),
+							"partition_ref":   fmt.Sprintf("%s/%s", namespace, strategyName),
 							"shard_uid":       "*",
 							"shard_id":        shardName,
 							"shard_namespace": namespace,
@@ -532,14 +529,14 @@ var _ = Describe("Manager", Ordered, func() {
 					CreatePrometheusMetric("argocd_autoscaler_partition_replicas_total_load",
 						map[string]string{
 							"partition_type": "longest_processing_time",
-							"partition_ref":  fmt.Sprintf("%s/%s", namespace, partitionName),
+							"partition_ref":  fmt.Sprintf("%s/%s", namespace, strategyName),
 							"replica_id":     "0",
 						}, 1),
 
 					CreatePrometheusMetric("argocd_autoscaler_evaluation_projected_shards",
 						map[string]string{
 							"evaluation_type": "most_wanted_two_phase_hysteresis",
-							"evaluation_ref":  fmt.Sprintf("%s/%s", namespace, evaluationName),
+							"evaluation_ref":  fmt.Sprintf("%s/%s", namespace, strategyName),
 							"shard_uid":       "*",
 							"shard_id":        shardName,
 							"shard_namespace": namespace,
@@ -551,14 +548,14 @@ var _ = Describe("Manager", Ordered, func() {
 					CreatePrometheusMetric("argocd_autoscaler_evaluation_projected_replicas_total_load",
 						map[string]string{
 							"evaluation_type": "most_wanted_two_phase_hysteresis",
-							"evaluation_ref":  fmt.Sprintf("%s/%s", namespace, evaluationName),
+							"evaluation_ref":  fmt.Sprintf("%s/%s", namespace, strategyName),
 							"replica_id":      "0",
 						}, 1),
 
 					CreatePrometheusMetric("argocd_autoscaler_evaluation_shards",
 						map[string]string{
 							"evaluation_type": "most_wanted_two_phase_hysteresis",
-							"evaluation_ref":  fmt.Sprintf("%s/%s", namespace, evaluationName),
+							"evaluation_ref":  fmt.Sprintf("%s/%s", namespace, strategyName),
 							"shard_uid":       "*",
 							"shard_id":        shardName,
 							"shard_namespace": namespace,
@@ -570,14 +567,14 @@ var _ = Describe("Manager", Ordered, func() {
 					CreatePrometheusMetric("argocd_autoscaler_evaluation_replicas_total_load",
 						map[string]string{
 							"evaluation_type": "most_wanted_two_phase_hysteresis",
-							"evaluation_ref":  fmt.Sprintf("%s/%s", namespace, evaluationName),
+							"evaluation_ref":  fmt.Sprintf("%s/%s", namespace, strategyName),
 							"replica_id":      "0",
 						}, 1),
 
 					CreatePrometheusMetric("argocd_autoscaler_scaler_replica_set_changes_total",
 						map[string]string{
 							"scaler_type":                 "replica_set",
-							"scaler_ref":                  fmt.Sprintf("%s/%s", namespace, scalingName),
+							"scaler_ref":                  fmt.Sprintf("%s/%s", namespace, strategyName),
 							"replica_set_controller_kind": "StatefulSet",
 							"replica_set_controller_ref":  fmt.Sprintf("%s/%s", namespace, stsName),
 						}, 1),

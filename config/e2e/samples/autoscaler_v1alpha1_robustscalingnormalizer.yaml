@@ -3,9 +3,9 @@ kind: RobustScalingNormalizer
 metadata:
   labels:
     app.kubernetes.io/name: argocd-autoscaler
-  name: robustscalingnormalizer-sample
+  name: sample
 spec:
   metricValuesProviderRef:
     apiGroup: autoscaler.argoproj.io
     kind: PrometheusPoll
-    name: argocd-autoscaler-prometheuspoll-sample
+    name: sample

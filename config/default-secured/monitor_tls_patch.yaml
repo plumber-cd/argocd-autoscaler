@@ -11,12 +11,12 @@
     insecureSkipVerify: false
     ca:
       secret:
-        name: argocd-autoscaler-metrics-server-cert
+        name: argocd-autoscaler-metrics-certs
         key: ca.crt
     cert:
       secret:
-        name: argocd-autoscaler-metrics-server-cert
+        name: argocd-autoscaler-metrics-certs
         key: tls.crt
     keySecret:
-      name: argocd-autoscaler-metrics-server-cert
+      name: argocd-autoscaler-metrics-certs
       key: tls.key

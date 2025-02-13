@@ -4,12 +4,12 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   labels:
-    app.kubernetes.io/name: kubebuilder
-  name: argocd-autoscaler-metrics-certs  # this name should match the one appeared in kustomizeconfig.yaml
+    app.kubernetes.io/name: argocd-autoscaler
+  name: argocd-autoscaler-metrics
 spec:
   dnsNames:
   - metrics
   issuerRef:
     kind: Issuer
-    name: argocd-autoscaler-selfsigned-issuer
-  secretName: argocd-autoscaler-metrics-server-cert
+    name: argocd-autoscaler-selfsigned
+  secretName: argocd-autoscaler-metrics-certs

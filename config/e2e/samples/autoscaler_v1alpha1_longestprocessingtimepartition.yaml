@@ -3,9 +3,9 @@ kind: LongestProcessingTimePartition
 metadata:
   labels:
     app.kubernetes.io/name: argocd-autoscaler
-  name: longestprocessingtimepartition-sample
+  name: sample
 spec:
   loadIndexProviderRef:
     apiGroup: autoscaler.argoproj.io
     kind: WeightedPNormLoadIndex
-    name: argocd-autoscaler-weightedpnormloadindex-sample
+    name: sample
