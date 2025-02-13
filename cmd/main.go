@@ -263,6 +263,7 @@ func main() {
 		Client:    mgr.GetClient(),
 		Scheme:    mgr.GetScheme(),
 		APIReader: mgr.GetAPIReader(),
+		Recorder:  mgr.GetEventRecorderFor("argocd-autoscaler"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ReplicaSetScaler")
 		os.Exit(1)
