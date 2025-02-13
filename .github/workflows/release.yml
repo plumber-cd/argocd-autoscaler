@@ -159,6 +159,8 @@ jobs:
           generateReleaseNotes: true
           commit: ${{ github.sha }}
           tag: ${{ github.event.inputs.releaseVersion }}
+          allowUpdates: true
+          updateOnlyUnreleased: true
           draft: ${{ github.event.inputs.releaseType == 'draft' || github.event.inputs.releaseType == 'draft-prerelease' }}
           prerelease: ${{ github.event.inputs.releaseType == 'prerelease' || github.event.inputs.releaseType == 'draft-prerelease' }}
           makeLatest: ${{ github.event.inputs.releaseType == 'release' }}
