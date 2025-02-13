@@ -71,6 +71,15 @@ spec:
                 - name
                 type: object
                 x-kubernetes-map-type: atomic
+              positiveOffsetE:
+                anyOf:
+                - type: integer
+                - type: string
+                description: |-
+                  PositiveOffsetE is an epsilon for the offset to eliminate negative values.
+                  If not set (default value) - no offset will be applied, and normalized result will end up with negative values.
+                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                x-kubernetes-int-or-string: true
             required:
             - metricValuesProviderRef
             type: object

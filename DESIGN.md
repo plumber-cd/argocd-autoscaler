@@ -205,6 +205,16 @@ It uses robust statistics (median and interquartile range, often denoted IQR) ra
    - Less sensitive to extreme outliers than other methods (like min-max).
    - Keeps each metric’s range more comparable.
 
+4. **Positive Offset:**
+   - Output from this normalizer will be a set of values centered around 0, with negative values
+     representing metrics below the median.
+     Some implementations of the load index do not work well with negative values.
+   - Additional option exists to make sure that there are no negative values by using offset to the right:
+     `offset = -(min_value) + ε * (max_value - min_value))`
+    A good value for `ε` based on my practical tests seem to be `0.01`.
+    A value of `0` will just upscale smallest replica to be `0`, which is also an option.
+    I just wanted any non zero metric to have non zero weight.
+
 ## Load Indexer
 
 Load Indexer can either use the Poller directly or the Normalizer to source the metrics from `.spec.metricValuesProviderRef`.
@@ -245,12 +255,6 @@ We use positive variation as that would be easier to represent and use for chart
      `x_1(S), x_2(S), ..., x_k(S)`.
    - Each metric `i` has an importance weight `w_i`.
    - Choose a `p` value (commonly 2 or 3) that controls how much large values stand out.
-   - Input metrics cannot be negative, as that might result in negative load index.
-     Which is fine as per the algorithm, but does not makes sense for how we are using it.
-     A shard cannot have negative load and subtract from the replica.
-     Our implementation will make sure that there are no negative values by using offset to the right:
-     `offset = -(min_value) + ε * (max_value - min_value))`
-    A good value for `ε` based on my experiments on Robust Scaling normalizer output would be `0.01`.
 
 2. **Formula (p-Norm):**
    `LoadIndex(S) = ( Σ[i=1..k] [ w_i * ( x_i(S) )^p ] )^(1/p)`
@@ -259,8 +263,7 @@ We use positive variation as that would be easier to represent and use for chart
    - If `p = 1`, this reduces to a simple weighted sum.
    - If `p = 2`, it behaves like a weighted Euclidean norm (moderate emphasis on larger values).
    - Larger `p` values increase the influence of the largest metric but still combine the rest.
-   - Tip: with Robust Scaling normalization, the values will already be centered around 0, and offset formula above
-     takes care of the negative values. You may want to use `p = 1` in that case,
+   - Tip: with Robust Scaling normalization with positive offset you may want to use `p = 1`,
      otherwise your index for largest replica will get so big that other replicas will be packed together too tight.
 
 ## Partitioner

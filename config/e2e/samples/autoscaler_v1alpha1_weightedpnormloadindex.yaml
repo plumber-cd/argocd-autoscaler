@@ -10,7 +10,6 @@ spec:
     kind: RobustScalingNormalizer
     name: sample
   p: 1
-  offsetE: "0.01"
   weights:
   - id: up
     weight: "1"

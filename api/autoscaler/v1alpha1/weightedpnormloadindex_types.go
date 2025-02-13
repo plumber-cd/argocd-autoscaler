@@ -42,10 +42,6 @@ type WeightedPNormLoadIndexSpec struct {
 	// +kubebuilder:validation:Required
 	P int32 `json:"p,omitempty"`
 
-	// OffsetE is an epsilon for the offset to eliminate negative values.
-	// +kubebuilder:validation:Required
-	OffsetE resource.Quantity `json:"offsetE,omitempty"`
-
 	// Weights is the list of metrics and their weights to use in this load index.
 	// +kubebuilder:validation:Required
 	Weights []WeightedPNormLoadIndexWeight `json:"weights,omitempty"`
