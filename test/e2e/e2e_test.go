@@ -90,7 +90,7 @@ var _ = Describe("Manager", Ordered, func() {
 		By("deploying the controller-manager")
 		// This actually has to do with cert manager struggling to inject CAs into CRDs
 		Eventually(func(g Gomega) {
-			cmd = exec.Command("make", "deploy-e2e")
+			cmd = exec.Command("make", "deploy-e2e", fmt.Sprintf("IMG=%s", projectImage))
 			deployLogs, err = Run(cmd)
 			g.Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 		}, "60s").Should(Succeed())
