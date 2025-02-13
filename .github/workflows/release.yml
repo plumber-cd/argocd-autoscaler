@@ -4,6 +4,13 @@ run-name: "${{ inputs.releaseVersion }}"
 on:
   workflow_dispatch:
     inputs:
+      releaseType:
+        type: choice
+        description: What kind of release?
+        options:
+        - draft
+        - prerelease
+        - release
       releaseVersion:
         type: string
         description: Version
@@ -151,6 +158,8 @@ jobs:
           generateReleaseNotes: true
           commit: ${{ github.sha }}
           tag: ${{ github.event.inputs.releaseVersion }}
-          makeLatest: true
+          draft: ${{ github.event.inputs.releaseType == 'draft' }}
+          prerelease: ${{ github.event.inputs.releaseType == 'prerelease' }}
+          makeLatest: ${{ github.event.inputs.releaseType == 'release' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
