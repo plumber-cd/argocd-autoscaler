@@ -90,10 +90,10 @@ func init() {
 	)
 }
 
-// +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=replicasetscalers,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=replicasetscalers/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=replicasetscalers/finalizers,verbs=update
+// +kubebuilder:rbac:namespace=argocd-autoscaler,groups=apps,resources=statefulsets,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:namespace=argocd-autoscaler,groups=autoscaler.argoproj.io,resources=replicasetscalers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:namespace=argocd-autoscaler,groups=autoscaler.argoproj.io,resources=replicasetscalers/status,verbs=get;update;patch
+// +kubebuilder:rbac:namespace=argocd-autoscaler,groups=autoscaler.argoproj.io,resources=replicasetscalers/finalizers,verbs=update
 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.0/pkg/reconcile

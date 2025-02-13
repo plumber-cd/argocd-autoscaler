@@ -1,0 +1,14 @@
+namespace: argocd-autoscaler
+namePrefix: argocd-autoscaler-
+## Append samples of your project ##
+resources:
+- argocd_application_controller.yaml
+- secret_type_cluster.yaml
+- autoscaler_v1alpha1_secrettypeclustershardmanager.yaml
+- autoscaler_v1alpha1_prometheuspoll.yaml
+- autoscaler_v1alpha1_robustscalingnormalizer.yaml
+- autoscaler_v1alpha1_weightedpnormloadindex.yaml
+- autoscaler_v1alpha1_longestprocessingtimepartition.yaml
+- autoscaler_v1alpha1_mostwantedtwophasehysteresisevaluation.yaml
+- autoscaler_v1alpha1_replicasetscaler.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

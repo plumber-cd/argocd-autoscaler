@@ -1,0 +1,11 @@
+apiVersion: autoscaler.argoproj.io/v1alpha1
+kind: RobustScalingNormalizer
+metadata:
+  labels:
+    app.kubernetes.io/name: argocd-autoscaler
+  name: default
+spec:
+  metricValuesProviderRef:
+    apiGroup: autoscaler.argoproj.io
+    kind: PrometheusPoll
+    name: default

@@ -1,0 +1,11 @@
+apiVersion: autoscaler.argoproj.io/v1alpha1
+kind: LongestProcessingTimePartition
+metadata:
+  labels:
+    app.kubernetes.io/name: argocd-autoscaler
+  name: default
+spec:
+  loadIndexProviderRef:
+    apiGroup: autoscaler.argoproj.io
+    kind: WeightedPNormLoadIndex
+    name: default

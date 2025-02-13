@@ -28,7 +28,7 @@ import (
 )
 
 // namespace where the project is deployed in
-const namespace = "argocd-autoscaler-system"
+const namespace = "argocd-autoscaler"
 
 // serviceAccountName created for the project
 const serviceAccountName = "argocd-autoscaler-controller-manager"
@@ -68,20 +68,32 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
 
+		By("labeling the namespace for prometheus")
+		cmd = exec.Command("kubectl", "label", "--overwrite", "ns", namespace,
+			"prometheus=argocd-autoscaler")
+		_, err = Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
+
+		By("labeling the namespace for metrics")
+		cmd = exec.Command("kubectl", "label", "--overwrite", "ns", namespace,
+			"metrics=enabled")
+		_, err = Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
+
 		By("installing CRDs")
 		cmd = exec.Command("make", "install")
 		_, err = Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
 		By("creating sample resources")
-		cmd = exec.Command("kubectl", "apply", "-k", "config/e2e")
+		cmd = exec.Command("kubectl", "apply", "-k", "config/e2e/samples")
 		_, err = Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create sample resources")
 
 		By("deploying the controller-manager")
 		// This actually has to do with cert manager struggling to inject CAs into CRDs
 		Eventually(func(g Gomega) {
-			cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
+			cmd = exec.Command("make", "deploy-e2e")
 			deployLogs, err = Run(cmd)
 			g.Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 		}, "60s").Should(Succeed())
@@ -94,16 +106,12 @@ var _ = Describe("Manager", Ordered, func() {
 		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
 		_, _ = Run(cmd)
 
-		By("cleaning up the ClusterRoleBinding for the service account to allow access to metrics")
-		cmd = exec.Command("kubectl", "delete", "clusterrolebinding", metricsRoleBindingName)
-		_, _ = Run(cmd)
-
 		By("undeploying the controller-manager")
-		cmd = exec.Command("make", "undeploy")
+		cmd = exec.Command("make", "undeploy-e2e")
 		_, _ = Run(cmd)
 
 		By("undeploying sample resources")
-		cmd = exec.Command("kubectl", "delete", "--ignore-not-found=true", "-k", "config/e2e")
+		cmd = exec.Command("kubectl", "delete", "--ignore-not-found=true", "-k", "config/e2e/samples")
 		_, _ = Run(cmd)
 
 		By("uninstalling CRDs")
@@ -170,7 +178,7 @@ var _ = Describe("Manager", Ordered, func() {
 			verifyControllerUp := func(g Gomega) {
 				// Get the name of the controller-manager pod
 				cmd := exec.Command("kubectl", "get",
-					"pods", "-l", "control-plane=controller-manager",
+					"pods", "-l", "app.kubernetes.io/name=argocd-autoscaler",
 					"-o", "go-template={{ range .items }}"+
 						"{{ if not .metadata.deletionTimestamp }}"+
 						"{{ .metadata.name }}"+
@@ -198,17 +206,9 @@ var _ = Describe("Manager", Ordered, func() {
 		})
 
 		It("should ensure the metrics endpoint is serving metrics", func() {
-			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
-			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
-				"--clusterrole=argocd-autoscaler-metrics-reader",
-				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
-			)
-			_, err := Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterRoleBinding")
-
 			By("validating that the metrics service is available")
-			cmd = exec.Command("kubectl", "get", "service", metricsServiceName, "-n", namespace)
-			_, err = Run(cmd)
+			cmd := exec.Command("kubectl", "get", "service", metricsServiceName, "-n", namespace)
+			_, err := Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Metrics service should exist")
 
 			By("validating that the ServiceMonitor for Prometheus is applied in the namespace")

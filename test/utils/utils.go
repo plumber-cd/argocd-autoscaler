@@ -53,7 +53,7 @@ func Run(cmd *exec.Cmd) (string, error) {
 
 // InstallPrometheusOperator installs the prometheus Operator to be used to export the enabled metrics.
 func InstallPrometheusOperator() error {
-	cmd := exec.Command("kubectl", "apply", "--server-side=true", "--validate=false", "-k", "config/prometheus-operator")
+	cmd := exec.Command("kubectl", "apply", "--server-side=true", "--validate=false", "-k", "config/e2e/prometheus-operator")
 	_, err := Run(cmd)
 	if err != nil {
 		return err
@@ -82,7 +82,7 @@ func InstallPrometheusOperator() error {
 
 // UninstallPrometheusOperator uninstalls the prometheus
 func UninstallPrometheusOperator() {
-	cmd := exec.Command("kubectl", "delete", "--ignore-not-found=true", "-k", "config/prometheus-operator")
+	cmd := exec.Command("kubectl", "delete", "--ignore-not-found=true", "-k", "config/e2e/prometheus-operator")
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
 	}
@@ -117,7 +117,7 @@ func IsPrometheusCRDsInstalled() bool {
 
 // UninstallCertManager uninstalls the cert manager
 func UninstallCertManager() {
-	cmd := exec.Command("kubectl", "delete", "--ignore-not-found=true", "-k", "config/cert-manager")
+	cmd := exec.Command("kubectl", "delete", "--ignore-not-found=true", "-k", "config/e2e/cert-manager")
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
 	}
@@ -125,7 +125,7 @@ func UninstallCertManager() {
 
 // InstallCertManager installs the cert manager bundle.
 func InstallCertManager() error {
-	cmd := exec.Command("kubectl", "apply", "--server-side=true", "--validate=false", "-k", "config/cert-manager")
+	cmd := exec.Command("kubectl", "apply", "--server-side=true", "--validate=false", "-k", "config/e2e/cert-manager")
 	_, err := Run(cmd)
 	if err != nil {
 		return err

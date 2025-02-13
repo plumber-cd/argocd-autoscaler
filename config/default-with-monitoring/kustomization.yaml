@@ -1,0 +1,12 @@
+namespace: argocd-autoscaler
+namePrefix: argocd-autoscaler-
+resources:
+- ../base
+- allow-metrics-traffic.yaml
+- metrics_service.yaml
+- monitor.yaml
+
+patches:
+ - path: metrics_manager_patch.yaml
+   target:
+     kind: Deployment

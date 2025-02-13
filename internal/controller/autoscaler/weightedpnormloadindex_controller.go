@@ -74,9 +74,9 @@ func init() {
 	metrics.Registry.MustRegister(weightedPNormLoadIndexValuesGauge)
 }
 
-// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=weightedpnormloadindexes,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=weightedpnormloadindexes/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=autoscaler.argoproj.io,resources=weightedpnormloadindexes/finalizers,verbs=update
+// +kubebuilder:rbac:namespace=argocd-autoscaler,groups=autoscaler.argoproj.io,resources=weightedpnormloadindexes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:namespace=argocd-autoscaler,groups=autoscaler.argoproj.io,resources=weightedpnormloadindexes/status,verbs=get;update;patch
+// +kubebuilder:rbac:namespace=argocd-autoscaler,groups=autoscaler.argoproj.io,resources=weightedpnormloadindexes/finalizers,verbs=update
 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.4/pkg/reconcile

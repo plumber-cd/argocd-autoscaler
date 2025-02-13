@@ -1,0 +1,16 @@
+# Prometheus Monitor Service (Metrics)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    prometheus: argocd-autoscaler
+    app.kubernetes.io/name: argocd-autoscaler
+  name: controller-manager-metrics-monitor
+spec:
+  endpoints:
+  - path: /metrics
+    port: metrics
+    scheme: http
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-autoscaler

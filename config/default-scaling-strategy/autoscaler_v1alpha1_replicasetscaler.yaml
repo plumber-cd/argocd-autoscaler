@@ -1,0 +1,19 @@
+apiVersion: autoscaler.argoproj.io/v1alpha1
+kind: ReplicaSetScaler
+metadata:
+  labels:
+    app.kubernetes.io/name: argocd-autoscaler
+  name: default
+spec:
+  partitionProviderRef:
+    apiGroup: autoscaler.argoproj.io
+    kind: MostWantedTwoPhaseHysteresisEvaluation
+    name: default
+  shardManagerRef:
+    apiGroup: autoscaler.argoproj.io
+    kind: SecretTypeClusterShardManager
+    name: default
+  replicaSetControllerRef:
+    apiGroup: apps
+    kind: StatefulSet
+    name: default
