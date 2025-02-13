@@ -114,6 +114,7 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
 		}
 	}
+	r.lastReconciled.Store(req.NamespacedName.String(), time.Now())
 
 	scaler := &autoscaler.ReplicaSetScaler{}
 	if err := r.Get(ctx, req.NamespacedName, scaler); err != nil {

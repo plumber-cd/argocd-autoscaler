@@ -96,6 +96,7 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
 		}
 	}
+	r.lastReconciled.Store(req.NamespacedName.String(), time.Now())
 
 	loadIndex := &autoscaler.WeightedPNormLoadIndex{}
 	if err := r.Get(ctx, req.NamespacedName, loadIndex); err != nil {

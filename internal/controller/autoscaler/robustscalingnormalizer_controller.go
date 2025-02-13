@@ -100,6 +100,7 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
 		}
 	}
+	r.lastReconciled.Store(req.NamespacedName.String(), time.Now())
 
 	normalizer := &autoscaler.RobustScalingNormalizer{}
 	if err := r.Get(ctx, req.NamespacedName, normalizer); err != nil {

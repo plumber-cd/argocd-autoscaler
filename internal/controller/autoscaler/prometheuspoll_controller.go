@@ -97,6 +97,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
 		}
 	}
+	r.lastReconciled.Store(req.NamespacedName.String(), time.Now())
 
 	poll := &autoscaler.PrometheusPoll{}
 	if err := r.Get(ctx, req.NamespacedName, poll); err != nil {
