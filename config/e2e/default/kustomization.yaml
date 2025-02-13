@@ -3,6 +3,11 @@ resources:
 - role_metrics_auth.yaml
 - role_metrics_auth_binding.yaml
 
+images:
+- name: controller
+  newName: controller
+  newTag: latest
+
 patches:
 - path: manager_zap_devel.yaml
   target:

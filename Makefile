@@ -159,7 +159,7 @@ undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.
 
 .PHONY: deploy-e2e
 deploy-e2e: kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/base && $(KUSTOMIZE) edit set image controller=${IMG}
+	cd config/e2e/default && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/e2e/default | $(KUBECTL) apply --server-side=true -f -
 
 .PHONY: undeploy-e2e
