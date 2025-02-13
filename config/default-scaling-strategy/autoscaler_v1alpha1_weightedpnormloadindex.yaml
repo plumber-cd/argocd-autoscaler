@@ -10,7 +10,7 @@ spec:
     kind: RobustScalingNormalizer
     name: default
   p: 1
-  e: "0.01"
+  offsetE: "0.01"
   weights:
   - id: argocd_app_info
     weight: "0.05"
