@@ -17,13 +17,12 @@ permissions:
 
 jobs:
   docker:
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - amd64
-          - arm64
-    runs-on: ubuntu-latest
+        os: [linux]
+        arch: [amd64, arm64]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
