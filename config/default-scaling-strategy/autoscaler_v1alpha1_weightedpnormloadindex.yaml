@@ -9,7 +9,8 @@ spec:
     apiGroup: autoscaler.argoproj.io
     kind: RobustScalingNormalizer
     name: default
-  p: 3
+  p: 1
+  offsetE: "0.01"
   weights:
   - id: argocd_app_info
     weight: "0.05"
@@ -23,6 +24,5 @@ spec:
     weight: "0.2"
   - id: argocd_app_k8s_request_total
     weight: "0.2"
-    negative: false
   - id: rest_client_requests_total
     weight: "0.2"

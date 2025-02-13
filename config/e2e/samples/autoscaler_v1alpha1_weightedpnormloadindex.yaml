@@ -9,7 +9,8 @@ spec:
     apiGroup: autoscaler.argoproj.io
     kind: RobustScalingNormalizer
     name: sample
-  p: 2
+  p: 1
+  offsetE: "0.01"
   weights:
   - id: up
     weight: "1"

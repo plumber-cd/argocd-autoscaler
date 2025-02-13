@@ -31,17 +31,6 @@ type WeightedPNormLoadIndexWeight struct {
 	// Weight of this metric.
 	// +kubebuilder:validation:Required
 	Weight resource.Quantity `json:"weight,omitempty"`
-
-	// Negative by default is true,
-	// meaning that if there are negative input values (based on previous normalization),
-	// they will be reducing the load index accordingly to their weight.
-	// For example - Robust Scaling normalization results in 0 representing a median.
-	// Depending on the original source of normalized values, this may or may not be desirable.
-	// Set to false to assume replace all negative values with 0.
-	// That will prevent load index reductions and it will only go up from positive values.
-	// For Robust Scaling normalization, for example,
-	// that would mean that only values bigger than the median would have any effect on the load index.
-	Negative *bool `json:"negative,omitempty"`
 }
 
 // WeightedPNormLoadIndexSpec defines the desired state of WeightedPNormLoadIndex.
@@ -52,6 +41,10 @@ type WeightedPNormLoadIndexSpec struct {
 	// I.e. 1 for linear, 2 for euclidean, 3 for cubic etc.
 	// +kubebuilder:validation:Required
 	P int32 `json:"p,omitempty"`
+
+	// OffsetE is an epsilon for the offset to eliminate negative values.
+	// +kubebuilder:validation:Required
+	OffsetE resource.Quantity `json:"offsetE,omitempty"`
 
 	// Weights is the list of metrics and their weights to use in this load index.
 	// +kubebuilder:validation:Required

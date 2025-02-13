@@ -70,6 +70,14 @@ spec:
                 - name
                 type: object
                 x-kubernetes-map-type: atomic
+              offsetE:
+                anyOf:
+                - type: integer
+                - type: string
+                description: OffsetE is an epsilon for the offset to eliminate negative
+                  values.
+                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                x-kubernetes-int-or-string: true
               p:
                 description: |-
                   P is the vaue of p in the p-norm
@@ -85,18 +93,6 @@ spec:
                     id:
                       description: ID of the metric.
                       type: string
-                    negative:
-                      description: |-
-                        Negative by default is true,
-                        meaning that if there are negative input values (based on previous normalization),
-                        they will be reducing the load index accordingly to their weight.
-                        For example - Robust Scaling normalization results in 0 representing a median.
-                        Depending on the original source of normalized values, this may or may not be desirable.
-                        Set to false to assume replace all negative values with 0.
-                        That will prevent load index reductions and it will only go up from positive values.
-                        For Robust Scaling normalization, for example,
-                        that would mean that only values bigger than the median would have any effect on the load index.
-                      type: boolean
                     weight:
                       anyOf:
                       - type: integer
@@ -111,6 +107,7 @@ spec:
                 type: array
             required:
             - metricValuesProviderRef
+            - offsetE
             - p
             - weights
             type: object

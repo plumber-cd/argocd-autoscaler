@@ -144,12 +144,12 @@ var _ = Describe("LongestProcessingTimePartition Controller", func() {
 									Name: "N/A",
 								},
 							},
-							P: 2,
+							P:       1,
+							OffsetE: resource.MustParse("0.01"),
 							Weights: []autoscalerv1alpha1.WeightedPNormLoadIndexWeight{
 								{
-									ID:       "fake-metric",
-									Weight:   resource.MustParse("1"),
-									Negative: ptr.To(true),
+									ID:     "fake-metric",
+									Weight: resource.MustParse("1"),
 								},
 							},
 						},
