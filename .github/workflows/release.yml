@@ -18,6 +18,7 @@ permissions:
 jobs:
   docker:
     runs-on: ubuntu-latest
+    name: Docker Build on ${{ matrix.os }} ${{ matrix.arch }}
     strategy:
       fail-fast: false
       matrix:
@@ -80,6 +81,7 @@ jobs:
 
   merge:
     runs-on: ubuntu-latest
+    name: Docker Merge and Push
     needs:
       - docker
     steps:
@@ -126,6 +128,7 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
+    name: Create Release
     needs:
       - merge
     steps:
