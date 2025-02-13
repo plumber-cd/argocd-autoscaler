@@ -181,6 +181,7 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 	values := metricValuesProvider.GetMetricValuesProviderStatus().Values
 	loadIndexes, err := r.LoadIndexer.Calculate(
 		loadIndex.Spec.P,
+		loadIndex.Spec.OffsetE.AsApproximateFloat64(),
 		weightsByID,
 		values,
 	)

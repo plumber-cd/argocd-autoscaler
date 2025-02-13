@@ -37,14 +37,14 @@ import (
 )
 
 type fakeLoadIndexer struct {
-	fn      func(int32, map[string]autoscalerv1alpha1.WeightedPNormLoadIndexWeight, []common.MetricValue) ([]common.LoadIndex, error)
+	fn      func(int32, float64, map[string]autoscalerv1alpha1.WeightedPNormLoadIndexWeight, []common.MetricValue) ([]common.LoadIndex, error)
 	indexed bool
 }
 
-func (f *fakeLoadIndexer) Calculate(p int32, weights map[string]autoscalerv1alpha1.WeightedPNormLoadIndexWeight, values []common.MetricValue) ([]common.LoadIndex, error) {
+func (f *fakeLoadIndexer) Calculate(p int32, e float64, weights map[string]autoscalerv1alpha1.WeightedPNormLoadIndexWeight, values []common.MetricValue) ([]common.LoadIndex, error) {
 	f.indexed = true
 	if f.fn != nil {
-		return f.fn(p, weights, values)
+		return f.fn(p, e, weights, values)
 	}
 	return nil, errors.New("fake error in fakeLoadIndexer")
 }
@@ -265,6 +265,7 @@ var _ = Describe("WeightedPNormLoadIndex Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.WeightedPNormLoadIndex]) {
 				indexer.fn = func(
 					p int32,
+					e float64,
 					weights map[string]autoscalerv1alpha1.WeightedPNormLoadIndexWeight,
 					values []common.MetricValue,
 				) ([]common.LoadIndex, error) {
@@ -334,6 +335,7 @@ var _ = Describe("WeightedPNormLoadIndex Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.WeightedPNormLoadIndex]) {
 				indexer.fn = func(
 					p int32,
+					e float64,
 					weights map[string]autoscalerv1alpha1.WeightedPNormLoadIndexWeight,
 					values []common.MetricValue,
 				) ([]common.LoadIndex, error) {

@@ -245,6 +245,12 @@ We use positive variation as that would be easier to represent and use for chart
      `x_1(S), x_2(S), ..., x_k(S)`.
    - Each metric `i` has an importance weight `w_i`.
    - Choose a `p` value (commonly 2 or 3) that controls how much large values stand out.
+   - Input metrics cannot be negative, as that might result in negative load index.
+     Which is fine as per the algorithm, but does not makes sense for how we are using it.
+     A shard cannot have negative load and subtract from the replica.
+     Our implementation will make sure that there are no negative values by using offset to the right:
+     `offset = -(min_value) + ε * (max_value - min_value))`
+    A good value for `ε` based on my experiments on Robust Scaling normalizer output would be `0.01`.
 
 2. **Formula (p-Norm):**
    `LoadIndex(S) = ( Σ[i=1..k] [ w_i * ( x_i(S) )^p ] )^(1/p)`
@@ -253,6 +259,9 @@ We use positive variation as that would be easier to represent and use for chart
    - If `p = 1`, this reduces to a simple weighted sum.
    - If `p = 2`, it behaves like a weighted Euclidean norm (moderate emphasis on larger values).
    - Larger `p` values increase the influence of the largest metric but still combine the rest.
+   - Tip: with Robust Scaling normalization, the values will already be centered around 0, and offset formula above
+     takes care of the negative values. You may want to use `p = 1` in that case,
+     otherwise your index for largest replica will get so big that other replicas will be packed together too tight.
 
 ## Partitioner
 
