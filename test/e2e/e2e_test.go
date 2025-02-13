@@ -36,9 +36,6 @@ const serviceAccountName = "argocd-autoscaler-controller-manager"
 // metricsServiceName is the name of the metrics service of the project
 const metricsServiceName = "argocd-autoscaler-controller-manager-metrics-service"
 
-// metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
-const metricsRoleBindingName = "argocd-autoscaler-metrics-binding"
-
 const shardName = "argocd-autoscaler-sample-cluster"
 const shardManagerName = "argocd-autoscaler-secrettypeclustershardmanager-sample"
 const pollerName = "argocd-autoscaler-prometheuspoll-sample"

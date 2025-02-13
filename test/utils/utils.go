@@ -53,7 +53,8 @@ func Run(cmd *exec.Cmd) (string, error) {
 
 // InstallPrometheusOperator installs the prometheus Operator to be used to export the enabled metrics.
 func InstallPrometheusOperator() error {
-	cmd := exec.Command("kubectl", "apply", "--server-side=true", "--validate=false", "-k", "config/e2e/prometheus-operator")
+	cmd := exec.Command(
+		"kubectl", "apply", "--server-side=true", "--validate=false", "-k", "config/e2e/prometheus-operator")
 	_, err := Run(cmd)
 	if err != nil {
 		return err
