@@ -17,16 +17,27 @@ permissions:
 
 jobs:
   docker:
-    runs-on: ubuntu-latest
-    name: Docker Build on ${{ matrix.os }} ${{ matrix.arch }}
+    name: Docker Build on ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        os: [linux]
-        arch: [amd64, arm64]
+        runner:
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Set arch to amd64
+        if: matrix.runner == 'ubuntu-24.04'
+        run: |
+          echo "RUNNER_ARCH=amd64" >> $GITHUB_ENV
+
+      - name: Set arch to arm64
+        if: matrix.runner == 'ubuntu-24.04-arm'
+        run: |
+          echo "RUNNER_ARCH=arm64" >> $GITHUB_ENV
 
       - name: Set release tag name
         run: |
@@ -57,7 +68,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/${{ matrix.platform }}
+          platforms: linux/${{ env.RUNNER_ARCH }}
           build-args: |
             VERSION=${{ env.TAG_NAME }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -74,7 +85,7 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ matrix.platform }}
+          name: digests-${{ env.RUNNER_ARCH }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
