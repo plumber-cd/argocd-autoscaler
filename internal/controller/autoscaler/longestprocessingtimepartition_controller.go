@@ -19,6 +19,8 @@ package autoscaler
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -48,6 +50,8 @@ type LongestProcessingTimePartitionReconciler struct {
 	Scheme *runtime.Scheme
 
 	Partitioner longestprocessingtime.Partitioner
+
+	lastReconciled sync.Map
 }
 
 var (
@@ -101,6 +105,14 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 	log := log.FromContext(ctx)
 	log.V(2).Info("Received reconcile request")
 	defer log.V(2).Info("Reconcile request completed")
+
+	if lastTimeRaw, exists := r.lastReconciled.Load(req.NamespacedName.String()); exists {
+		lastTime := lastTimeRaw.(time.Time)
+		if time.Since(lastTime) < GlobalRateLimit {
+			log.V(2).Info("Rate limiting", "since", time.Since(lastTime))
+			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
+		}
+	}
 
 	partition := &autoscaler.LongestProcessingTimePartition{}
 	if err := r.Get(ctx, req.NamespacedName, partition); err != nil {

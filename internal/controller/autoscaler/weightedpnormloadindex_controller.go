@@ -19,6 +19,8 @@ package autoscaler
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -48,6 +50,8 @@ type WeightedPNormLoadIndexReconciler struct {
 	Scheme *runtime.Scheme
 
 	LoadIndexer weightedpnorm.LoadIndexer
+
+	lastReconciled sync.Map
 }
 
 var (
@@ -84,6 +88,14 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 	log := log.FromContext(ctx)
 	log.V(2).Info("Received reconcile request")
 	defer log.V(2).Info("Reconcile request completed")
+
+	if lastTimeRaw, exists := r.lastReconciled.Load(req.NamespacedName.String()); exists {
+		lastTime := lastTimeRaw.(time.Time)
+		if time.Since(lastTime) < GlobalRateLimit {
+			log.V(2).Info("Rate limiting", "since", time.Since(lastTime))
+			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
+		}
+	}
 
 	loadIndex := &autoscaler.WeightedPNormLoadIndex{}
 	if err := r.Get(ctx, req.NamespacedName, loadIndex); err != nil {

@@ -19,6 +19,8 @@ package autoscaler
 import (
 	"context"
 	"errors"
+	"sync"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
@@ -48,6 +50,8 @@ import (
 type SecretTypeClusterShardManagerReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	lastReconciled sync.Map
 }
 
 var (
@@ -86,6 +90,14 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 	log := log.FromContext(ctx)
 	log.V(2).Info("Received reconcile request")
 	defer log.V(2).Info("Reconcile request completed")
+
+	if lastTimeRaw, exists := r.lastReconciled.Load(req.NamespacedName.String()); exists {
+		lastTime := lastTimeRaw.(time.Time)
+		if time.Since(lastTime) < GlobalRateLimit {
+			log.V(2).Info("Rate limiting", "since", time.Since(lastTime))
+			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
+		}
+	}
 
 	manager := &autoscaler.SecretTypeClusterShardManager{}
 	if err := r.Get(ctx, req.NamespacedName, manager); err != nil {
