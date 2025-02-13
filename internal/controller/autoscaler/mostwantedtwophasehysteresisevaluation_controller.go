@@ -19,6 +19,7 @@ package autoscaler
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -47,6 +48,8 @@ import (
 type MostWantedTwoPhaseHysteresisEvaluationReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	lastReconciled sync.Map
 }
 
 var (
@@ -133,6 +136,14 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 	log := log.FromContext(ctx)
 	log.V(2).Info("Received reconcile request")
 	defer log.V(2).Info("Reconcile request completed")
+
+	if lastTimeRaw, exists := r.lastReconciled.Load(req.NamespacedName.String()); exists {
+		lastTime := lastTimeRaw.(time.Time)
+		if time.Since(lastTime) < GlobalRateLimit {
+			log.V(2).Info("Rate limiting", "since", time.Since(lastTime))
+			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
+		}
+	}
 
 	evaluation := &autoscaler.MostWantedTwoPhaseHysteresisEvaluation{}
 	if err := r.Get(ctx, req.NamespacedName, evaluation); err != nil {

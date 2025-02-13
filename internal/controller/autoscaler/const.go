@@ -14,7 +14,10 @@
 
 package autoscaler
 
+import "time"
+
 const (
 	// StatusTypeReady represents the status of the resource
 	StatusTypeReady = "Ready"
+	GlobalRateLimit = 5 * time.Second
 )

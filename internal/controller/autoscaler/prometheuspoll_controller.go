@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -49,6 +50,8 @@ type PrometheusPollReconciler struct {
 	Scheme *runtime.Scheme
 
 	Poller poller.Poller
+
+	lastReconciled sync.Map
 }
 
 var (
@@ -86,6 +89,14 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	log := log.FromContext(ctx)
 	log.V(2).Info("Received reconcile request")
 	defer log.V(2).Info("Reconcile request completed")
+
+	if lastTimeRaw, exists := r.lastReconciled.Load(req.NamespacedName.String()); exists {
+		lastTime := lastTimeRaw.(time.Time)
+		if time.Since(lastTime) < GlobalRateLimit {
+			log.V(2).Info("Rate limiting", "since", time.Since(lastTime))
+			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
+		}
+	}
 
 	poll := &autoscaler.PrometheusPoll{}
 	if err := r.Get(ctx, req.NamespacedName, poll); err != nil {
