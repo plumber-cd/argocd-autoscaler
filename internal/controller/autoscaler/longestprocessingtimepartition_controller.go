@@ -113,6 +113,7 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
 		}
 	}
+	r.lastReconciled.Store(req.NamespacedName.String(), time.Now())
 
 	partition := &autoscaler.LongestProcessingTimePartition{}
 	if err := r.Get(ctx, req.NamespacedName, partition); err != nil {

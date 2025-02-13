@@ -144,6 +144,7 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
 		}
 	}
+	r.lastReconciled.Store(req.NamespacedName.String(), time.Now())
 
 	evaluation := &autoscaler.MostWantedTwoPhaseHysteresisEvaluation{}
 	if err := r.Get(ctx, req.NamespacedName, evaluation); err != nil {

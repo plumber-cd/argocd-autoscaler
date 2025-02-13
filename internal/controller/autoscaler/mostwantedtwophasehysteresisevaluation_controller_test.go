@@ -242,6 +242,7 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 					Expect(record.Replicas).To(Equal(samplePartition.Object().Status.Replicas))
 
 					By("Reconciling resource sample #" + fmt.Sprintf("%d", i+2))
+					time.Sleep(5 * time.Second)
 					run.Reconcile()
 				}
 
@@ -283,6 +284,7 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 
 				for i := 0; i < int(run.Container().Object().Spec.MinimumSampleSize-1); i++ {
 					By("Reconciling resource sample #" + fmt.Sprintf("%d", i+1))
+					time.Sleep(5 * time.Second)
 					run.Reconcile()
 
 					Expect(run.ReconcileError()).ToNot(HaveOccurred())
@@ -309,6 +311,7 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 				}
 
 				By("Reconciling resource sample #" + fmt.Sprintf("%d", run.Container().Object().Spec.MinimumSampleSize))
+				time.Sleep(5 * time.Second)
 				run.Reconcile()
 
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
