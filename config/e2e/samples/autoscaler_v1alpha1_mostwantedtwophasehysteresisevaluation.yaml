@@ -11,4 +11,3 @@ spec:
     name: sample
   pollingPeriod: 5s
   stabilizationPeriod: 1m
-  minimumSampleSize: 3

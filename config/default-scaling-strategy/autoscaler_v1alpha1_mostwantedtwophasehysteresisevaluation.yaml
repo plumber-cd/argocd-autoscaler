@@ -11,4 +11,3 @@ spec:
     name: default
   pollingPeriod: 1h
   stabilizationPeriod: 24h
-  minimumSampleSize: 5
