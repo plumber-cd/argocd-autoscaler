@@ -9,3 +9,4 @@ spec:
     apiGroup: autoscaler.argoproj.io
     kind: PrometheusPoll
     name: sample
+  positiveOffsetE: "0.01"

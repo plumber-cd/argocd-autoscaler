@@ -27,7 +27,7 @@ import (
 )
 
 type LoadIndexer interface {
-	Calculate(int32, float64,
+	Calculate(int32,
 		map[string]autoscaler.WeightedPNormLoadIndexWeight, []common.MetricValue) ([]common.LoadIndex, error)
 }
 
@@ -35,7 +35,6 @@ type LoadIndexerImpl struct{}
 
 func (li *LoadIndexerImpl) Calculate(
 	p int32,
-	e float64,
 	weights map[string]autoscaler.WeightedPNormLoadIndexWeight,
 	values []common.MetricValue,
 ) ([]common.LoadIndex, error) {
@@ -63,27 +62,6 @@ func (li *LoadIndexerImpl) Calculate(
 			if values, exists := shardMetricsByID[metricID]; !exists || len(values) != 1 {
 				return nil, fmt.Errorf("metric ID '%s' should exist exactly one time in shard %s", metricID, shardUID)
 			}
-		}
-	}
-
-	minValue := math.MaxFloat64
-	maxValue := math.MaxFloat64 * -1
-	for _, values := range metricsByShard {
-		for _, m := range values {
-			if m.Value.AsApproximateFloat64() < minValue {
-				minValue = m.Value.AsApproximateFloat64()
-			}
-			if m.Value.AsApproximateFloat64() > maxValue {
-				maxValue = m.Value.AsApproximateFloat64()
-			}
-		}
-	}
-	offset := -(minValue) + e*(maxValue-minValue)
-	for shardUID, values := range metricsByShard {
-		for i, m := range values {
-			scaled := m.Value.AsApproximateFloat64() + offset
-			metricValueAsString := strconv.FormatFloat(scaled, 'f', -1, 64)
-			metricsByShard[shardUID][i].Value = resource.MustParse(metricValueAsString)
 		}
 	}
 

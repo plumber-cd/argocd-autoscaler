@@ -16,6 +16,7 @@ package robustscaling
 
 import (
 	"context"
+	"math"
 	"sort"
 	"strconv"
 
@@ -25,12 +26,13 @@ import (
 )
 
 type Normalizer interface {
-	Normalize(ctx context.Context, allMetrics []common.MetricValue) ([]common.MetricValue, error)
+	Normalize(context.Context, *float64, []common.MetricValue) ([]common.MetricValue, error)
 }
 
 type NormalizerImpl struct{}
 
 func (r *NormalizerImpl) Normalize(ctx context.Context,
+	e *float64,
 	allMetrics []common.MetricValue) ([]common.MetricValue, error) {
 
 	log := log.FromContext(ctx)
@@ -96,6 +98,26 @@ func (r *NormalizerImpl) Normalize(ctx context.Context,
 				Value:        normalizedAsResource,
 				DisplayValue: normalizedAsString,
 			})
+		}
+	}
+
+	if e != nil {
+		minValue := math.MaxFloat64
+		maxValue := math.MaxFloat64 * -1
+		for _, metric := range normalizedMetrics {
+			if metric.Value.AsApproximateFloat64() < minValue {
+				minValue = metric.Value.AsApproximateFloat64()
+			}
+			if metric.Value.AsApproximateFloat64() > maxValue {
+				maxValue = metric.Value.AsApproximateFloat64()
+			}
+		}
+		_e := *e
+		offset := -(minValue) + _e*(maxValue-minValue)
+		for i, metric := range normalizedMetrics {
+			scaled := metric.Value.AsApproximateFloat64() + offset
+			metricValueAsString := strconv.FormatFloat(scaled, 'f', -1, 64)
+			normalizedMetrics[i].Value = resource.MustParse(metricValueAsString)
 		}
 	}
 

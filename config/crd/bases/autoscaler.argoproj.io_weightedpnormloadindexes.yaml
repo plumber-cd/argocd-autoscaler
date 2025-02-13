@@ -70,14 +70,6 @@ spec:
                 - name
                 type: object
                 x-kubernetes-map-type: atomic
-              offsetE:
-                anyOf:
-                - type: integer
-                - type: string
-                description: OffsetE is an epsilon for the offset to eliminate negative
-                  values.
-                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                x-kubernetes-int-or-string: true
               p:
                 description: |-
                   P is the vaue of p in the p-norm
@@ -107,7 +99,6 @@ spec:
                 type: array
             required:
             - metricValuesProviderRef
-            - offsetE
             - p
             - weights
             type: object

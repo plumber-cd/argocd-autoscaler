@@ -18,12 +18,17 @@ package v1alpha1
 
 import (
 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // RobustScalingNormalizerSpec defines the desired state of RobustScalingNormalizer.
 type RobustScalingNormalizerSpec struct {
 	common.NormalizerSpec `json:",inline"`
+
+	// PositiveOffsetE is an epsilon for the offset to eliminate negative values.
+	// If not set (default value) - no offset will be applied, and normalized result will end up with negative values.
+	PositiveOffsetE *resource.Quantity `json:"positiveOffsetE,omitempty"`
 }
 
 // RobustScalingNormalizerStatus defines the observed state of RobustScalingNormalizer.

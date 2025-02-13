@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -158,8 +159,12 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 		return ctrl.Result{}, nil
 	}
 
+	var e *float64
+	if normalizer.Spec.PositiveOffsetE != nil {
+		e = ptr.To(normalizer.Spec.PositiveOffsetE.AsApproximateFloat64())
+	}
 	values := metricValuesProvider.GetMetricValuesProviderStatus().Values
-	normalizedValues, err := r.Normalizer.Normalize(ctx, values)
+	normalizedValues, err := r.Normalizer.Normalize(ctx, e, values)
 	if err != nil {
 		log.Error(err, "Error during normalization")
 		meta.SetStatusCondition(&normalizer.Status.Conditions, metav1.Condition{

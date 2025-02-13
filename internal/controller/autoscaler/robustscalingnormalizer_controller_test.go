@@ -38,14 +38,14 @@ import (
 )
 
 type fakeNormalizer struct {
-	fn         func(ctx context.Context, allMetrics []common.MetricValue) ([]common.MetricValue, error)
+	fn         func(context.Context, *float64, []common.MetricValue) ([]common.MetricValue, error)
 	normalized bool
 }
 
-func (f *fakeNormalizer) Normalize(ctx context.Context, allMetrics []common.MetricValue) ([]common.MetricValue, error) {
+func (f *fakeNormalizer) Normalize(ctx context.Context, e *float64, allMetrics []common.MetricValue) ([]common.MetricValue, error) {
 	f.normalized = true
 	if f.fn != nil {
-		return f.fn(ctx, allMetrics)
+		return f.fn(ctx, e, allMetrics)
 	}
 	return nil, errors.New("fake normalizer not implemented")
 }
@@ -230,6 +230,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.RobustScalingNormalizer]) {
 				normalizer.fn = func(
 					ctx context.Context,
+					e *float64,
 					values []common.MetricValue,
 				) ([]common.MetricValue, error) {
 					normalizedValues := []common.MetricValue{}
@@ -308,6 +309,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.RobustScalingNormalizer]) {
 				normalizer.fn = func(
 					ctx context.Context,
+					e *float64,
 					values []common.MetricValue,
 				) ([]common.MetricValue, error) {
 					return nil, errors.New("fake error")
