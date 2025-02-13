@@ -8,8 +8,9 @@ on:
         type: choice
         description: What kind of release?
         options:
-        - draft
+        - draft-prerelease
         - prerelease
+        - draft
         - release
       releaseVersion:
         type: string
@@ -158,8 +159,8 @@ jobs:
           generateReleaseNotes: true
           commit: ${{ github.sha }}
           tag: ${{ github.event.inputs.releaseVersion }}
-          draft: ${{ github.event.inputs.releaseType == 'draft' }}
-          prerelease: ${{ github.event.inputs.releaseType == 'prerelease' }}
+          draft: ${{ github.event.inputs.releaseType == 'draft' || github.event.inputs.releaseType == 'draft-prerelease' }}
+          prerelease: ${{ github.event.inputs.releaseType == 'prerelease' || github.event.inputs.releaseType == 'draft-prerelease' }}
           makeLatest: ${{ github.event.inputs.releaseType == 'release' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
