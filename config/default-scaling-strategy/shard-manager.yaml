@@ -3,5 +3,5 @@ kind: SecretTypeClusterShardManager
 metadata:
   labels:
     app.kubernetes.io/name: argocd-autoscaler
-  name: secrettypeclustershardmanager-sample
+  name: default
 spec: {}

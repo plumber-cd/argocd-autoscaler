@@ -16,4 +16,4 @@ spec:
   replicaSetControllerRef:
     apiGroup: apps
     kind: StatefulSet
-    name: default
+    name: argocd-application-controller
