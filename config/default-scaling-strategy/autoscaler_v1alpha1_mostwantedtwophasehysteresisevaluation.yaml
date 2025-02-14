@@ -9,5 +9,4 @@ spec:
     apiGroup: autoscaler.argoproj.io
     kind: LongestProcessingTimePartition
     name: default
-  pollingPeriod: 1h
   stabilizationPeriod: 24h

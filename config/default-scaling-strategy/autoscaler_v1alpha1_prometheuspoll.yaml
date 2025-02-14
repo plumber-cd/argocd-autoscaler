@@ -9,48 +9,48 @@ spec:
     apiGroup: autoscaler.argoproj.io
     kind: SecretTypeClusterShardManager
     name: default
-  period: 1h
+  period: 1m
   address: http://prometheus.prometheus.svc.cluster.local:9090
   metrics:
   - id: argocd_app_info
     query: |-
       quantile_over_time(
-        0.50,
+        0.95,
         (
           sum(argocd_app_info{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .server }}"})
-        )[24h:1m]
+        )[1h:1m]
       )
   - id: argocd_cluster_api_resource_objects
     query: |-
       quantile_over_time(
-        0.50,
+        0.95,
         (
           sum(argocd_cluster_api_resource_objects{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .server }}"})
-        )[24h:1m]
+        )[1h:1m]
       )
   - id: argocd_cluster_api_resources
     query: |-
       quantile_over_time(
-        0.50,
+        0.95,
         (
           sum(argocd_cluster_api_resources{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .server }}"})
-        )[24h:1m]
+        )[1h:1m]
       )
   - id: argocd_app_reconcile_count
     query: |-
       quantile_over_time(
-        0.50,
+        0.95,
         (
           sum(increase(argocd_app_reconcile_count{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .server }}"}[1m]))
-        )[24h:1m]
+        )[1h:1m]
       )
   - id: argocd_cluster_events_total
     query: |-
       quantile_over_time(
-        0.50,
+        0.95,
         (
           sum(increase(argocd_cluster_events_total{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .server }}"}[1m]))
-        )[24h:1m]
+        )[1h:1m]
       )
   - id: argocd_app_k8s_request_total
     noData: "0"
@@ -61,10 +61,10 @@ spec:
         {{- $server = "https://100.64.0.1:443" -}}
       {{- end -}}
       quantile_over_time(
-        0.50,
+        0.95,
         (
           sum(increase(argocd_app_k8s_request_total{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ $server }}"}[1m]))
-        )[24h:1m]
+        )[1h:1m]
       )
   - id: rest_client_requests_total
     query: |-
@@ -75,8 +75,8 @@ spec:
         {{- $host = "100.64.0.1:443" -}}
       {{- end -}}
       quantile_over_time(
-        0.50,
+        0.95,
         (
           sum(increase(rest_client_requests_total{job="argocd-metrics",namespace="{{ .namespace }}",host="{{ $host }}"}[1m]))
-        )[24h:1m]
+        )[1h:1m]
       )

@@ -180,7 +180,6 @@ func (in *MostWantedTwoPhaseHysteresisEvaluationList) DeepCopyObject() runtime.O
 func (in *MostWantedTwoPhaseHysteresisEvaluationSpec) DeepCopyInto(out *MostWantedTwoPhaseHysteresisEvaluationSpec) {
 	*out = *in
 	in.EvaluatorSpec.DeepCopyInto(&out.EvaluatorSpec)
-	out.PollingPeriod = in.PollingPeriod
 	out.StabilizationPeriod = in.StabilizationPeriod
 }
 

@@ -25,10 +25,6 @@ import (
 type MostWantedTwoPhaseHysteresisEvaluationSpec struct {
 	common.EvaluatorSpec `json:",inline"`
 
-	// PollingPeriod is the period for polling the partitioning.
-	// +kubebuilder:validation:Required
-	PollingPeriod metav1.Duration `json:"pollingPeriod,omitempty"`
-
 	// StabilizationPeriod is the amount of time to wait before evaluating historical records.
 	// Older historical records are always pruned.
 	// +kubebuilder:validation:Required

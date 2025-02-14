@@ -82,7 +82,6 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 								Name: "N/A",
 							},
 						},
-						PollingPeriod:       metav1.Duration{Duration: time.Second},
 						StabilizationPeriod: metav1.Duration{Duration: 5 * time.Minute},
 					},
 				},
@@ -209,7 +208,7 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).
-					To(Equal(run.Container().Object().Spec.PollingPeriod.Duration))
+					To(Equal(time.Duration(0)))
 				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
@@ -248,7 +247,7 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).
-					To(Equal(run.Container().Object().Spec.PollingPeriod.Duration))
+					To(Equal(time.Duration(0)))
 				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")

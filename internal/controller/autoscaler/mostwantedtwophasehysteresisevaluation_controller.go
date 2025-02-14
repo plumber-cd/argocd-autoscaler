@@ -336,8 +336,8 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 	}
 	log.Info("Resource status updated", "projection", len(evaluation.Status.Projection))
 
-	// Re-queue for the next poll
-	return ctrl.Result{RequeueAfter: evaluation.Spec.PollingPeriod.Duration}, nil
+	// We should get a reconciliation request when poller is changed
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
