@@ -219,7 +219,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 
 				samplePartition.Object().Status.Replicas = common.ReplicaList{
 					{
-						ID: "0",
+						ID: int32(0),
 						LoadIndexes: []common.LoadIndex{
 							{
 								Shard: common.Shard{
@@ -237,7 +237,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						TotalLoadDisplayValue: "1",
 					},
 					{
-						ID: "1",
+						ID: int32(1),
 						LoadIndexes: []common.LoadIndex{
 							{
 								Shard: common.Shard{
@@ -255,7 +255,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						TotalLoadDisplayValue: "1",
 					},
 					{
-						ID: "2",
+						ID: int32(2),
 						LoadIndexes: []common.LoadIndex{
 							{
 								Shard: common.Shard{

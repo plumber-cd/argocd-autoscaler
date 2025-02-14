@@ -220,7 +220,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 					run.Container().Object().Spec.ShardManagerSpec.Replicas = append(
 						run.Container().Object().Spec.ShardManagerSpec.Replicas,
 						common.Replica{
-							ID: fmt.Sprintf("%d", i),
+							ID: int32(i),
 							LoadIndexes: []common.LoadIndex{
 								{
 									Shard: common.Shard{
@@ -349,7 +349,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 				for _, replica := range run.Container().Object().Spec.ShardManagerSpec.Replicas {
 					secret, ok := shardSecretsByUID[replica.LoadIndexes[0].Shard.UID]
 					Expect(ok).To(BeTrue())
-					Expect(secret.Data["shard"]).To(Equal([]byte(replica.ID)))
+					Expect(secret.Data["shard"]).To(Equal([]byte(fmt.Sprintf("%d", replica.ID))))
 				}
 			},
 		).

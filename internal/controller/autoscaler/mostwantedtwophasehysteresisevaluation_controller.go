@@ -19,6 +19,7 @@ package autoscaler
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -283,12 +284,12 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 				li.Shard.Namespace,
 				li.Shard.Name,
 				li.Shard.Server,
-				replica.ID,
+				strconv.Itoa(int(replica.ID)),
 			).Set(1)
 		}
 		mostWantedTwoPhaseHysteresisEvaluationProjectedReplicasTotalLoadGauge.WithLabelValues(
 			req.NamespacedName.String(),
-			replica.ID,
+			strconv.Itoa(int(replica.ID)),
 		).Set(replica.TotalLoad.AsApproximateFloat64())
 	}
 
@@ -314,12 +315,12 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 					li.Shard.Namespace,
 					li.Shard.Name,
 					li.Shard.Server,
-					replica.ID,
+					strconv.Itoa(int(replica.ID)),
 				).Set(1)
 			}
 			mostWantedTwoPhaseHysteresisEvaluationReplicasTotalLoadGauge.WithLabelValues(
 				req.NamespacedName.String(),
-				replica.ID,
+				strconv.Itoa(int(replica.ID)),
 			).Set(replica.TotalLoad.AsApproximateFloat64())
 		}
 	}

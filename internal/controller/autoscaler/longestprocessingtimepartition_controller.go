@@ -19,6 +19,7 @@ package autoscaler
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -203,12 +204,12 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 				li.Shard.Namespace,
 				li.Shard.Name,
 				li.Shard.Server,
-				replica.ID,
+				strconv.Itoa(int(replica.ID)),
 			).Set(1)
 		}
 		longestProcessingTimePartitionReplicasTotalLoadGauge.WithLabelValues(
 			req.NamespacedName.String(),
-			replica.ID,
+			strconv.Itoa(int(replica.ID)),
 		).Set(replica.TotalLoad.AsApproximateFloat64())
 	}
 

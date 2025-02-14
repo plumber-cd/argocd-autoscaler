@@ -19,6 +19,8 @@ package autoscaler
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -194,18 +196,34 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 		shards = append(shards, shard)
 
 		actualReplicaBytes, actualReplicaSet := secret.Data["shard"]
-		var actualReplica string
+		var actualReplica int
 		if actualReplicaSet {
-			actualReplica = string(actualReplicaBytes)
-			log.V(2).Info("Shard had prior assignment", "shard", shard.ID, "replica", actualReplica)
+			_actualReplica, err := strconv.Atoi(string(actualReplicaBytes))
+			if err != nil {
+				log.Error(err, "Failed to read actual shard from the secret",
+					"shard", string(actualReplicaBytes), "secret", secret.Name)
+				meta.SetStatusCondition(&manager.Status.Conditions, metav1.Condition{
+					Type:    StatusTypeReady,
+					Status:  metav1.ConditionFalse,
+					Reason:  "FailedToReadShardFromSecret",
+					Message: err.Error(),
+				})
+				if err := r.Status().Update(ctx, manager); err != nil {
+					log.V(1).Info("Failed to update resource status", "err", err)
+					return ctrl.Result{}, err
+				}
+				// Resource is malformed, no point in retrying
+				return ctrl.Result{}, nil
+			}
+			actualReplica = _actualReplica
 		}
 		desiredReplica, desiredReplicaSet := replicasByUID[secret.GetUID()]
 		if !desiredReplicaSet {
 			log.V(2).Info("Shard had desired replica", "shard", shard.ID, "desired", desiredReplica.ID)
 		}
-		if desiredReplicaSet && (!actualReplicaSet || desiredReplica.ID != actualReplica) {
+		if desiredReplicaSet && (!actualReplicaSet || desiredReplica.ID != int32(actualReplica)) {
 			log.V(1).Info("Secret is outdated", "secret", secret.Name, "actual", actualReplica, "desired", desiredReplica.ID)
-			secret.Data["shard"] = []byte(desiredReplica.ID)
+			secret.Data["shard"] = []byte(fmt.Sprintf("%d", desiredReplica.ID))
 			secretsToUpdate = append(secretsToUpdate, secret)
 		}
 	}

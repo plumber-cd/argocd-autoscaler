@@ -142,7 +142,8 @@ spec:
                   properties:
                     id:
                       description: ID of the replica, starting from 0 and onward.
-                      type: string
+                      format: int32
+                      type: integer
                     loadIndexes:
                       description: LoadIndexes shards assigned to this replica wrapped
                         into their load index.
