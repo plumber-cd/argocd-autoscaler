@@ -16,11 +16,6 @@ customMetrics:
   expr: sum(argocd_autoscaler_poll_values) by (poll_type,poll_ref,shard_name,metric_id)
   unit: number
 
-- metric: argocd_autoscaler_poll_values
-  type: gauge
-  expr: sum(argocd_autoscaler_poll_values) by (poll_type,poll_ref,shard_name,metric_id)
-  unit: number
-
 - metric: argocd_autoscaler_normalizer_values
   type: gauge
   expr: sum(argocd_autoscaler_normalizer_values) by (normalizer_type,normalizer_ref,shard_name,metric_id)
