@@ -3,13 +3,13 @@
 # Problem
 
 The focus of this project is - Application Controller.
-Other projects like KEDA already exists that should enable anyone to scale other ArgoCD components.
-Application Controller pose unique challenges that require a bespoke solution:
+Other tools from HPA to things like KEDA already exists that should enable anyone to scale other ArgoCD components.
+Application Controller pose somewhat unique challenges that require a bespoke solution:
 
-1. Controller "busyness" is not linearly reflected in its CPU/memory consumption.
-1. A variety of directly incomparable metrics needs to be used, creating the need for normalization.
-1. Scaling is not linear process of adding/removing replicas - partitioning needs to be calculated for shards distribution.
-1. Process to execute scaling intent and assign sharding is unique to Application Controller.
+1. Controller "busyness" is not directly correlate to its CPU/memory consumption. There are queues and rate throttling involved.
+1. A variety of directly incomparable metrics needs to be used (like - reconciliation rate and object count), creating the need for normalization.
+1. Scaling is not linear process of adding/removing replicas - partitioning needs to be calculated and shards needs to be assigned to replicas.
+1. Process to execute scaling intent and assign sharding is unique to Application Controller (modifying secrets and env vars on the App Controller).
 
 ArgoCD Application Controller is only capable to shard based on destination clusters,
 i.e. - all the apps destined to a particular cluster will always be reconciled by the same replica.
@@ -17,24 +17,24 @@ ArgoCD Application Controller has three sharding algorithms (at the moment of cr
 The first two `legacy` and `round-robin` -
 effectively are different ways to assign destination clusters to replicas without looking at any data.
 The new (and still beta) `consistent-hashing` algorithm is trying to use data,
-but it makes a wrongful assumption that all Applications do generate equal amount of reconciliation work,
+but it makes a (wrongful) assumption that all Applications do generate equal amount of work,
 as it only tries to keep in balance the total amount of Applications per replica.
 
-We need something better. And also configurable, because everyone's scaling challenges are unique.
+We need something better. And - also configurable, because everyone's scaling challenges are unique.
 
 # Solution
 
 Autoscaler will be operating in multiple phases, for each phase there could be multiple configurable implementations,
-each implemented is its own API and a controller.
+each implemented as its own API and a controller.
 
 1. Shard Manager - finds shards aka clusters and manage shard assignments.
-1. Poller - uses Shard Manager to find shards and gathers metrics for them.
+1. Poller - uses Shard Manager to find shards and poll metrics for them.
 1. Normalizer - uses a Poller to make metrics from it comparable.
    Not required if polling a single metric or metrics are already normalized at the source.
 1. Load Indexer - users either a Poller or a Normalizer to combine metrics from each shard into a single per-shard index.
 1. Partitioner - uses a Load Indexer and calculates shards distribution balanced accordingly to their Load Indexes.
 1. Evaluator - observes a Partitioner over time and makes decisions to apply when appropriate.
-1. Scaler - monitors either Evaluator or a Partitioner, sends signals to the Shard Manager, and manages replicas.
+1. Scaler - monitors either Evaluator or a Partitioner, applies shard assignments to the Shard Manager, and scale replicas.
 
 For initial implementation, we will pick one particular algorithm for each phase/controller.
 The goal of the initial implementation is not to provide a best solution, but to provide a framework,
@@ -46,8 +46,8 @@ and they suggests to avoid them.
 They, in fact, are preventing you from using them in `kubebuilder`, unless you enable use of "dangerous" types.
 We use a lot of floats here in this project.
 We'll follow their educated advice, and use `resource.Quantity` type to store floats.
-It will be stored as a `string` as a result,
-and you may recognize it, as it is the same thing they are using for resource requests/limits.
+It will be stored as a `string`,
+and you may recognize those strings, as it is the same format that they are using for resource requests/limits.
 Despite visual similarity (it would be saying `500m` to represent `0.5`, for example),
 these values **DO NOT** have anything to do with CPU or memory.
 It is just a string representation of a float with precision rules replicated among all languages.
@@ -58,11 +58,11 @@ It is just a string representation of a float with precision rules replicated am
 
 Shard represents a cluster managed by ArgoCD Application Controller.
 
-- `.uid` - unique identifier of the shard.
-- `.id` - identifier of the shard, not guaranteed to be unique and mostly used for human readability in logs and metrics.
-- `.namespace` - a namespace where this shard was found in
-- `.name` - a name of the shard as seen in the ArgoCD i.e. name of destination cluster
-- `.server` - a url of the destination server as seen in the ArgoCD for this shard
+- `.uid` - unique identifier of the shard (i.e. UID of the secret).
+- `.id` - identifier of the shard (i.e. name of the secret), not guaranteed to be unique and mostly used for human readability in logs and metrics.
+- `.namespace` - a namespace where this shard was found in.
+- `.name` - a name of the shard as seen in the ArgoCD i.e. name of the destination cluster.
+- `.server` - a URL of the destination server as seen in the ArgoCD for this shard.
 
 ### Metric Value
 
@@ -89,7 +89,7 @@ Shard represents a cluster managed by ArgoCD Application Controller.
 
 Manager finds shards (clusters), and exports findings in the `.status.shards` field.
 
-If the `.spec.replicas` is defined, the manager will ensure that actual shards are assigned to replicas as specified.
+If the `.spec.replicas` is defined, the manager will ensure that actual shards are assigned to replicas as desired.
 
 ### Secret Type Cluster
 
@@ -105,14 +105,14 @@ To assign shards to replicas, the manager will be updating `.data.shard` on the 
 ## Poller
 
 Poller is responsible for gathering metrics from each shard.
-It uses Shard Manager reference from `.spec.shardManagerRef` to discover the shards, and it can use data from the shard
+It uses Shard Manager referenced in `.spec.shardManagerRef` to discover the shards, and it can use data from the shard
 to construct appropriate queries.
 
-Poller exports the list of metrics it fetched into the `.status.values` as a list of Metric Value objects.
+Poller exports resulting metrics into the `.status.values` as a list of Metric Value objects.
 
 ### Prometheus
 
-An obvious choice is to just look at the metrics ArgoCD already export for Prometheus.
+An obvious choice is to just look at the metrics ArgoCD already exports for Prometheus.
 There is a good set that we can pull from Prometheus that would represent actual cluster load.
 Here's few examples:
 
@@ -147,7 +147,7 @@ quantile_over_time(
     0.95,
     (
         sum(argocd_app_info{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .shardServer }}"})
-    )[24h:1m]
+    )[1h:1m]
 )
 ```
 
@@ -158,7 +158,7 @@ quantile_over_time(
     0.95,
     (
         sum(increase(argocd_app_reconcile_count{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .shardServer }}"}[1m]))
-    )[24h:1m]
+    )[1h:1m]
 )
 ```
 
@@ -170,16 +170,16 @@ YMMW.
 You may need to customize these queries for your setup.
 For that purpose, Prometheus Poller uses Go Templates to receive queries from user as templates.
 Go Templates are bound with Sprig set of functions: https://masterminds.github.io/sprig/.
-See some examples in the [./config/samples/autoscaler_v1alpha1_prometheuspoll.yaml](./config/samples/autoscaler_v1alpha1_prometheuspoll.yaml).
+See some examples in the [./config/default-scaling-strategy/poll.yaml](./config/default-scaling-strategy/poll.yaml).
 
 Combined, these metrics should give a good idea of how busy each cluster is, therefore - how much load it generates.
 
 ## Normalizer
 
-We need to normalize Metric Values from the Poller so they can be comparable to each other later.
+We need to normalize Metric Values from the Poller so they can be comparable to each other.
 Various normalization algorithms exists that can scale metrics to comparable numbers.
 For example, Robust Scaling algorithm will get a representation of each metric as a
-float number relative to median value of all metrics within that group from all shards which will be represented by 0,
+float number relative to median value of all metrics within its group from all shards which will be represented by 0,
 where positive numbers would mean "above median" and negative numbers will mean "below median".
 Other algorithms can represent values in certain ranges, for example Min-Max algorithm would result in float values
 ranging from 0 to 1.
@@ -209,21 +209,23 @@ It uses robust statistics (median and interquartile range, often denoted IQR) ra
    - Output from this normalizer will be a set of values centered around 0, with negative values
      representing metrics below the median.
      Some implementations of the load index do not work well with negative values.
+     Particularly, the only one that's currently implemented - Weighted Positive "p-Norm".
    - Additional option exists to make sure that there are no negative values by using offset to the right:
-     `offset = -(min_value) + ε * (max_value - min_value))`
+     `offset = -(min_value) + ε * (max_value - min_value))`.
     A good value for `ε` based on my practical tests seem to be `0.01`.
-    A value of `0` will just upscale smallest replica to be `0`, which is also an option.
-    I just wanted any non zero metric to have non zero weight.
+    A value of `0` will just upscale metrics so that the smallest one is at `0`, which is also an option,
+    assuming there always would be other non-zero metrics from that same shard.
+    I just wanted all non zero metrics to have non zero weights after normalization.
 
 ## Load Indexer
 
-Load Indexer can either use the Poller directly or the Normalizer to source the metrics from `.spec.metricValuesProviderRef`.
-Using Poller directly without normalization will produce bogus results with metric with higher absolute values
+Load Indexer can either use Normalizer (or - directly the Poller) to source the metrics from `.spec.metricValuesProviderRef`.
+Using Poller directly without normalization will produce bogus results where metrics with higher absolute values
 completely overshadowing all other metrics.
-Only do that if you either using only one metric, or your metrics has already been normalized at the source.
+Only do that if you either polling only one metric, or your metrics has already been normalized at the source.
 
 Resulting Load Index may vary depending on the implementation, but the point is - it will be a single float value,
-which can be used to compare shards between each other in terms of volume of load they generate.
+which can be used to compare shards between each other in terms of volume of load they each generate.
 Resulting Load Index will be exported in the `.status.values` field as a list of Load Index objects.
 
 Additionally, we need to take into account that the source metrics are not equally important among each other.
@@ -265,6 +267,7 @@ We use positive variation as that would be easier to represent and use for chart
    - Larger `p` values increase the influence of the largest metric but still combine the rest.
    - Tip: with Robust Scaling normalization with positive offset you may want to use `p = 1`,
      otherwise your index for largest replica will get so big that other replicas will be packed together too tight.
+     Unless, again - that's exactly what you wanted.
 
 ## Partitioner
 
@@ -326,11 +329,6 @@ This will guarantee that we will use an up to date configuration once every pred
 It may not be the most efficient accordingly to the latest data, but it's reflecting well the most recent history,
 without risking to fall behind too much.
 
-In combination with this evaluation implementation,
-we should probably increase frequency of sampling in the polling phase.
-I would probably use `p(0.5)` instead of `p(0.95)`, and do it over 30 minutes range instead of 24h.
-But you do you.
-
 ## Scaler
 
 Using input from `.spec.partitionProviderRef` - Scaler can ensure that intention becomes reality.
@@ -362,15 +360,20 @@ If `.spec.mode.default.rolloutRestart` is set to `true` - additional annotation 
 RS template, equivalent of what `kubectl` does on `rollout restart` command.
 It will trigger all pods to recycle even if `ARGOCD_CONTROLLER_REPLICAS` did not change.
 
-This mode is implemented "just-in-case", and if my assumptions are correct, it is not going to work.
-I am suspecting that it may cause problems, because at some points in time,
-there would be replicas with different value in `ARGOCD_CONTROLLER_REPLICAS`,
-thus possibly making two or more replicas think they own the same shard.
+This mode is exactly what would happen if you manually adjust number of replicas yourself.
+So, that's why it's default. However, if my assumptions are correct, it is not going to work.
+Or, not going to work well?
+See, I am suspecting that it may cause problems, because at some points in time,
+there would be replicas with different values in `ARGOCD_CONTROLLER_REPLICAS`,
+thus - possibly making two or more replicas to think that they own the same shard.
 I don't really know how it works or what would happen.
-You can check my comment for more details on kinds of issues I personally faced here:
-https://github.com/argoproj/argo-cd/issues/15464#issuecomment-2587501293
-So, I am personally adopting a more reliable (in my opinion) mechanism below that I call X-0-Y scaling.
-As things change in ArgoCD, maybe default mode would become more useful.
+You can check my comments for more details on kinds of issues that I personally faced here:
+https://github.com/argoproj/argo-cd/issues/15464#issuecomment-2587501293.
+Also, it may very well be only the case with `consistent-hashing` algorithm that I was trying to use at a time.
+Input from community is welcome on this subject.
+I'm not even sure `ARGOCD_CONTROLLER_REPLICAS` is even in use with `legacy` sharding mode at Application Controller.
+So, maybe I was overthinking it all?
+In the meantime I personally am going to adopt a more reliable (in my opinion) mechanism below that I call X-0-Y scaling.
 
 #### X-0-Y
 
