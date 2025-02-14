@@ -89,6 +89,8 @@ You can deploy everything but `scaler.yaml`, which will essentially make it a dr
 You'll see in Grafana what it would want to do under current scaling strategy without it actually doing anything.
 For that, of course, you'd need to deploy a `ServiceMonitor` (see below).
 
+Lastly, you may want to customize `scaler.yaml` to adjust how it applies changes to the STS.
+For that - refer to [this section of the design document](./DESIGN.md#replica-set-default) for more information.
 
 ### Monitor Autoscaler with Prometheus
 
