@@ -1,0 +1,75 @@
+---
+customMetrics:
+
+#  - metric: # Raw custom metric (required)
+#    type:   # Metric type: counter/gauge/histogram (required)
+#    expr:   # Prom_ql for the metric (optional)
+#    unit:   # Unit of measurement, examples: s,none,bytes,percent,etc. (optional)
+
+- metric: argocd_autoscaler_shard_manager_discovered_shards
+  type: gauge
+  expr: sum(argocd_autoscaler_shard_manager_discovered_shards) by (shard_manager_type,shard_manager_ref)
+  unit: number
+
+- metric: argocd_autoscaler_poll_values
+  type: gauge
+  expr: sum(argocd_autoscaler_poll_values) by (poll_type,poll_ref,shard_name,metric_id)
+  unit: number
+
+- metric: argocd_autoscaler_poll_values
+  type: gauge
+  expr: sum(argocd_autoscaler_poll_values) by (poll_type,poll_ref,shard_name,metric_id)
+  unit: number
+
+- metric: argocd_autoscaler_normalizer_values
+  type: gauge
+  expr: sum(argocd_autoscaler_normalizer_values) by (normalizer_type,normalizer_ref,shard_name,metric_id)
+  unit: number
+
+- metric: argocd_autoscaler_load_index_values
+  type: gauge
+  expr: sum(argocd_autoscaler_load_index_values) by (load_index_type,load_index_ref,shard_name)
+  unit: number
+
+- metric: argocd_autoscaler_partition_shards
+  type: gauge
+  expr: sum(argocd_autoscaler_partition_shards) by (partition_type,partition_ref,replica_id)
+  unit: number
+
+- metric: argocd_autoscaler_partition_replicas_total_load
+  type: gauge
+  expr: sum(argocd_autoscaler_partition_replicas_total_load) by (partition_type,partition_ref,replica_id)
+  unit: number
+
+- metric: argocd_autoscaler_evaluation_projected_shards
+  type: gauge
+  expr: sum(argocd_autoscaler_evaluation_projected_shards) by (evaluation_type,evaluation_ref,replica_id)
+  unit: number
+
+- metric: argocd_autoscaler_evaluation_projected_replicas_total_load
+  type: gauge
+  expr: sum(argocd_autoscaler_evaluation_projected_replicas_total_load) by (evaluation_type,evaluation_ref,replica_id)
+  unit: number
+
+- metric: argocd_autoscaler_evaluation_shards
+  type: gauge
+  expr: sum(argocd_autoscaler_evaluation_shards) by (evaluation_type,evaluation_ref,replica_id)
+  unit: number
+
+- metric: argocd_autoscaler_evaluation_replicas_total_load
+  type: gauge
+  expr: sum(argocd_autoscaler_evaluation_replicas_total_load) by (evaluation_type,evaluation_ref,replica_id)
+  unit: number
+
+- metric: argocd_autoscaler_scaler_replica_set_changes_total
+  type: counter
+  expr: sum(argocd_autoscaler_scaler_replica_set_changes_total) by (scaler_type,scaler_ref,replica_set_controller_kind,replica_set_controller_ref)
+  unit: number
+
+# Example:
+# ---
+# customMetrics:
+#   - metric: foo_bar
+#     unit: none
+#     type: histogram
+#   	expr: histogram_quantile(0.90, sum by(instance, le) (rate(foo_bar{job=\"$job\", namespace=\"$namespace\"}[5m])))

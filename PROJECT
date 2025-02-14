@@ -6,6 +6,8 @@ domain: argoproj.io
 layout:
 - go.kubebuilder.io/v4
 multigroup: true
+plugins:
+  grafana.kubebuilder.io/v1-alpha: {}
 projectName: argocd-autoscaler
 repo: github.com/plumber-cd/argocd-autoscaler
 resources:
