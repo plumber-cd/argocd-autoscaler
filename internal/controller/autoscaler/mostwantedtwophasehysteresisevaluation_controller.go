@@ -300,29 +300,29 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		evaluation.Status.LastEvaluationTimestamp = ptr.To(metav1.Now())
 		log.Info("New partitioning has won",
 			"replicas", len(evaluation.Status.Replicas), "lastEvaluationTimestamp", evaluation.Status.LastEvaluationTimestamp)
-		mostWantedTwoPhaseHysteresisEvaluationShardsGauge.DeletePartialMatch(prometheus.Labels{
-			"evaluation_ref": req.NamespacedName.String(),
-		})
-		mostWantedTwoPhaseHysteresisEvaluationReplicasTotalLoadGauge.DeletePartialMatch(prometheus.Labels{
-			"evaluation_ref": req.NamespacedName.String(),
-		})
-		for _, replica := range topSeenRecord.Replicas {
-			for _, li := range replica.LoadIndexes {
-				mostWantedTwoPhaseHysteresisEvaluationShardsGauge.WithLabelValues(
-					req.NamespacedName.String(),
-					string(li.Shard.UID),
-					li.Shard.ID,
-					li.Shard.Namespace,
-					li.Shard.Name,
-					li.Shard.Server,
-					strconv.Itoa(int(replica.ID)),
-				).Set(1)
-			}
-			mostWantedTwoPhaseHysteresisEvaluationReplicasTotalLoadGauge.WithLabelValues(
+	}
+	mostWantedTwoPhaseHysteresisEvaluationShardsGauge.DeletePartialMatch(prometheus.Labels{
+		"evaluation_ref": req.NamespacedName.String(),
+	})
+	mostWantedTwoPhaseHysteresisEvaluationReplicasTotalLoadGauge.DeletePartialMatch(prometheus.Labels{
+		"evaluation_ref": req.NamespacedName.String(),
+	})
+	for _, replica := range evaluation.Status.Replicas {
+		for _, li := range replica.LoadIndexes {
+			mostWantedTwoPhaseHysteresisEvaluationShardsGauge.WithLabelValues(
 				req.NamespacedName.String(),
+				string(li.Shard.UID),
+				li.Shard.ID,
+				li.Shard.Namespace,
+				li.Shard.Name,
+				li.Shard.Server,
 				strconv.Itoa(int(replica.ID)),
-			).Set(replica.TotalLoad.AsApproximateFloat64())
+			).Set(1)
 		}
+		mostWantedTwoPhaseHysteresisEvaluationReplicasTotalLoadGauge.WithLabelValues(
+			req.NamespacedName.String(),
+			strconv.Itoa(int(replica.ID)),
+		).Set(replica.TotalLoad.AsApproximateFloat64())
 	}
 
 	meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
