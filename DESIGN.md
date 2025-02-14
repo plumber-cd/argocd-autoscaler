@@ -170,7 +170,7 @@ YMMW.
 You may need to customize these queries for your setup.
 For that purpose, Prometheus Poller uses Go Templates to receive queries from user as templates.
 Go Templates are bound with Sprig set of functions: https://masterminds.github.io/sprig/.
-See some examples in the [./config/default-scaling-strategy/poll.yaml](./config/default-scaling-strategy/poll.yaml).
+See some examples in the [./config/default-scaling-strategy/poll.yaml](./config/02-default-scaling-strategy/02-poll.yaml).
 
 Combined, these metrics should give a good idea of how busy each cluster is, therefore - how much load it generates.
 

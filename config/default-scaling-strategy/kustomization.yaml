@@ -1,9 +1,9 @@
 resources:
-- shard-manager.yaml
-- poll.yaml
-- normalizer.yaml
-- load-index.yaml
-- partition.yaml
-- evaluation.yaml
-- scaler.yaml
+- 01-shard-manager.yaml
+- 02-poll.yaml
+- 03-normalizer.yaml
+- 04-load-index.yaml
+- 05-partition.yaml
+- 06-evaluation.yaml
+- 07-scaler.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

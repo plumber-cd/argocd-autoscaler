@@ -14,7 +14,7 @@ And, scale the App Controllers accordingly, too. You can install it using kustom
 
 1. Grab CRDs from [./config/crd](./config/crd)
 1. Grab autoscaler from [./config/default](./config/default)
-1. Grab our default opinionated scaling strategy from [./config/default-scaling-strategy](./default-scaling-strategy)
+1. Grab our default opinionated scaling strategy from [./config/default-scaling-strategy](./config/default-scaling-strategy)
 
 Sample `kustomization.yaml` that you may want to use:
 
