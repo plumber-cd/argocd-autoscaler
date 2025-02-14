@@ -174,7 +174,7 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 
 				samplePartition.Object().Status.Replicas = common.ReplicaList{
 					{
-						ID: "0",
+						ID: int32(0),
 						LoadIndexes: []common.LoadIndex{
 							{
 								Shard: common.Shard{

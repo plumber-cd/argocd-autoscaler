@@ -64,7 +64,7 @@ func (r *PartitionerImpl) Partition(ctx context.Context,
 			// Create a new replica for this shard.
 			replicaCount++
 			newReplica := common.Replica{
-				ID:                    strconv.FormatInt(int64(replicaCount-1), 10),
+				ID:                    replicaCount - 1,
 				LoadIndexes:           []common.LoadIndex{shard},
 				TotalLoad:             shard.Value,
 				TotalLoadDisplayValue: strconv.FormatFloat(shard.Value.AsApproximateFloat64(), 'f', -1, 64),

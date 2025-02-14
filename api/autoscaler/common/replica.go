@@ -25,7 +25,7 @@ import (
 // Replica is a representation of the replica for sharding
 type Replica struct {
 	// ID of the replica, starting from 0 and onward.
-	ID string `json:"id,omitempty"`
+	ID int32 `json:"id,omitempty"`
 	// LoadIndexes shards assigned to this replica wrapped into their load index.
 	// +kubebuilder:validation:Required
 	LoadIndexes []LoadIndex `json:"loadIndexes,omitempty"`
@@ -47,7 +47,7 @@ type ReplicaList []Replica
 // Regardless of the order of the replicas, the serialized string will be the same.
 func (list ReplicaList) SerializeToString() string {
 
-	m := map[string]string{}
+	m := map[string]int32{}
 	for _, replica := range list {
 		for _, loadIndex := range replica.LoadIndexes {
 			m[string(loadIndex.Shard.UID)] = replica.ID

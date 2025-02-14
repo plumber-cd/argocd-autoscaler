@@ -19,7 +19,6 @@ package autoscaler
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -230,7 +229,7 @@ var _ = Describe("LongestProcessingTimePartition Controller", func() {
 					replicas := common.ReplicaList{}
 					for i, shard := range shards {
 						replicas = append(replicas, common.Replica{
-							ID:                    fmt.Sprintf("%d", i),
+							ID:                    int32(i),
 							LoadIndexes:           []common.LoadIndex{shard},
 							TotalLoad:             shard.Value,
 							TotalLoadDisplayValue: shard.DisplayValue,
