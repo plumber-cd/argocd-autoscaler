@@ -336,7 +336,7 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 	}
 	log.Info("Resource status updated", "projection", len(evaluation.Status.Projection))
 
-	// We should get a reconciliation request when poller is changed
+	// We should get a reconciliation request on poller changes
 	return ctrl.Result{}, nil
 }
 
