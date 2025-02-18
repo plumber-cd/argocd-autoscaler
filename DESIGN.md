@@ -329,6 +329,16 @@ This will guarantee that we will use an up to date configuration once every pred
 It may not be the most efficient accordingly to the latest data, but it's reflecting well the most recent history,
 without risking to fall behind too much.
 
+There is an edge case that needs to be explained in a little more details.
+The `MostWantedTwoPhaseHysteresisEvaluation` CRD only stores hashes of the recent history for repeated evaluation.
+It cannot store full distribution plans as it would quickly get out of etcd object size limits.
+Therefore, there could be a scenario when the most-wanted but old record is about to be erased,
+while the new projected winner is not the current partitioner output.
+Thus - the current projection is effectively unknown (only its hash and last seen time and total seen count is known).
+When that happens - evaluator will enter a not-ready state.
+Eventually, either another partitioning plan will surpass this currently unknown projection, or -
+partitioner will give us another sample with the current projection details that evaluator will be able to remember.
+
 ## Scaler
 
 Using input from `.spec.partitionProviderRef` - Scaler can ensure that intention becomes reality.
