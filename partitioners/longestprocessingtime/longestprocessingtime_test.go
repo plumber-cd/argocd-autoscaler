@@ -18,6 +18,7 @@ func TestControllers(t *testing.T) {
 
 var _ = Describe("LongestProcessingTimePartitioner", func() {
 	Context("when unsorted list of shards", func() {
+		// nolint:dupl
 		It("should sort", func() {
 			shards := []common.LoadIndex{
 				{Shard: common.Shard{Name: "shard1"}, Value: resource.MustParse("5")},
@@ -29,7 +30,7 @@ var _ = Describe("LongestProcessingTimePartitioner", func() {
 			partitioner := PartitionerImpl{}
 			sortedShards, bucketSize := partitioner.Sort(shards)
 			Expect(bucketSize).To(Equal(float64(8)))
-			Expect(len(sortedShards)).To(Equal(len(shards)))
+			Expect(sortedShards).To(HaveLen(len(shards)))
 			Expect(sortedShards[0].Shard.Name).To(Equal("shard3"))
 			Expect(sortedShards[1].Shard.Name).To(Equal("shard5"))
 			Expect(sortedShards[2].Shard.Name).To(Equal("shard4"))
@@ -37,6 +38,7 @@ var _ = Describe("LongestProcessingTimePartitioner", func() {
 			Expect(sortedShards[4].Shard.Name).To(Equal("shard2"))
 		})
 
+		// nolint:dupl
 		It("should put in-cluster first", func() {
 			shards := []common.LoadIndex{
 				{Shard: common.Shard{Name: "shard1"}, Value: resource.MustParse("5")},
@@ -48,7 +50,7 @@ var _ = Describe("LongestProcessingTimePartitioner", func() {
 			partitioner := PartitionerImpl{}
 			sortedShards, bucketSize := partitioner.Sort(shards)
 			Expect(bucketSize).To(Equal(float64(8)))
-			Expect(len(sortedShards)).To(Equal(len(shards)))
+			Expect(sortedShards).To(HaveLen(len(shards)))
 			Expect(sortedShards[0].Shard.Name).To(Equal("in-cluster"))
 			Expect(sortedShards[1].Shard.Name).To(Equal("shard3"))
 			Expect(sortedShards[2].Shard.Name).To(Equal("shard5"))
