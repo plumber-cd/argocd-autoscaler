@@ -36,9 +36,9 @@ type MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord struct {
 	// +kubebuilder:validation:Required
 	Timestamp metav1.Time `json:"timestamp,omitempty"`
 
-	// Replicas is the partition as it was seen at this moment in time.
+	// ReplicasHash is the hash of serialized replicas string.
 	// +kubebuilder:validation:Required
-	Replicas common.ReplicaList `json:"replicas,omitempty"`
+	ReplicasHash string `json:"replicasHash,omitempty"`
 
 	// SeenTimes is the counter of how many times have this record been seen.
 	// +kubebuilder:validation:Required

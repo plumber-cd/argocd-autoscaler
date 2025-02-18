@@ -133,6 +133,8 @@ func init() {
 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.4/pkg/reconcile
+//
+//nolint:gocyclo
 func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 	log.V(2).Info("Received reconcile request")
@@ -202,12 +204,12 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		return ctrl.Result{}, nil
 	}
 
-	replicas := partitionProvider.GetPartitionProviderStatus().Replicas
-	log.V(2).Info("Currently reported replicas by partition provider", "count", len(replicas))
+	currentReplicas := partitionProvider.GetPartitionProviderStatus().Replicas
+	log.V(2).Info("Currently reported replicas by partition provider", "count", len(currentReplicas))
 
 	seenBefore := false
 	for i, record := range evaluation.Status.History {
-		if record.Replicas.SerializeToString() == replicas.SerializeToString() {
+		if record.ReplicasHash == Sha256(currentReplicas.SerializeToString()) {
 			seenBefore = true
 			evaluation.Status.History[i].SeenTimes++
 			evaluation.Status.History[i].Timestamp = metav1.Now()
@@ -217,9 +219,9 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 	if !seenBefore {
 		evaluation.Status.History = append(evaluation.Status.History,
 			autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{
-				Timestamp: metav1.Now(),
-				Replicas:  replicas,
-				SeenTimes: 1,
+				Timestamp:    metav1.Now(),
+				ReplicasHash: Sha256(currentReplicas.SerializeToString()),
+				SeenTimes:    1,
 			},
 		)
 	}
@@ -237,45 +239,65 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		evaluation.Status.History = cleanHistory
 	}
 
-	historyRecords := map[string]autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
-	historyRecordsLastSeen := map[string]metav1.Time{}
-	historyRecorsSeenTimes := map[string]int32{}
+	historyRecordsByHash := map[string]autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
+	historyRecordsByHashLastSeen := map[string]metav1.Time{}
+	historyRecorsByHashSeenTimes := map[string]int32{}
 	for _, record := range evaluation.Status.History {
-		serializedRecord := record.Replicas.SerializeToString()
-		log.V(2).Info("Noticing record", "record", serializedRecord)
-		if _, ok := historyRecordsLastSeen[serializedRecord]; !ok {
-			historyRecords[serializedRecord] = record
-			historyRecordsLastSeen[serializedRecord] = record.Timestamp
-			historyRecorsSeenTimes[serializedRecord] = record.SeenTimes
-		} else if record.Timestamp.After(historyRecordsLastSeen[serializedRecord].Time) {
-			historyRecordsLastSeen[serializedRecord] = record.Timestamp
-			historyRecorsSeenTimes[serializedRecord] += record.SeenTimes
+		hash := record.ReplicasHash
+		log.V(2).Info("Noticing record", "record", hash)
+		if _, ok := historyRecordsByHashLastSeen[hash]; !ok {
+			historyRecordsByHash[hash] = record
+			historyRecordsByHashLastSeen[hash] = record.Timestamp
+			historyRecorsByHashSeenTimes[hash] = record.SeenTimes
+		} else if record.Timestamp.After(historyRecordsByHashLastSeen[hash].Time) {
+			historyRecordsByHashLastSeen[hash] = record.Timestamp
+			historyRecorsByHashSeenTimes[hash] += record.SeenTimes
 		} else {
-			historyRecorsSeenTimes[serializedRecord] += record.SeenTimes
+			historyRecorsByHashSeenTimes[hash] += record.SeenTimes
 		}
 	}
 
 	topSeenRecord := autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
 	maxSeenCount := int32(0)
-	for serializedRecord, seenTimes := range historyRecorsSeenTimes {
-		log.V(2).Info("Evaluating records", "record", serializedRecord, "seenTimes", seenTimes)
+	for hash, seenTimes := range historyRecorsByHashSeenTimes {
+		log.V(2).Info("Evaluating records", "record", hash, "seenTimes", seenTimes)
 		if seenTimes > maxSeenCount {
 			maxSeenCount = seenTimes
-			topSeenRecord = historyRecords[serializedRecord]
+			topSeenRecord = historyRecordsByHash[hash]
 		} else if seenTimes == maxSeenCount &&
-			historyRecords[serializedRecord].Timestamp.After(topSeenRecord.Timestamp.Time) {
-			log.V(2).Info("Tie breaker", "left", topSeenRecord, "right", serializedRecord)
-			topSeenRecord = historyRecords[serializedRecord]
+			historyRecordsByHash[hash].Timestamp.After(topSeenRecord.Timestamp.Time) {
+			log.V(2).Info("Tie breaker", "left", topSeenRecord.ReplicasHash, "right", hash)
+			topSeenRecord = historyRecordsByHash[hash]
 		}
 	}
-	log.V(2).Info("Top seen record", "record", topSeenRecord.Replicas.SerializeToString())
+	log.V(2).Info("Top seen record", "record", topSeenRecord.ReplicasHash)
+	if topSeenRecord.ReplicasHash == Sha256(currentReplicas.SerializeToString()) {
+		log.V(1).Info("A new election projection updated", "record", topSeenRecord.ReplicasHash)
+		evaluation.Status.Projection = currentReplicas
+	}
+	if topSeenRecord.ReplicasHash != Sha256(evaluation.Status.Projection.SerializeToString()) {
+		err := fmt.Errorf("something went wrong, top seen record is neither current nor previous projection")
+		log.Error(err, "Failed to evaluate")
+		meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
+			Type:    StatusTypeReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "EvaluationError",
+			Message: err.Error(),
+		})
+		if err := r.Status().Update(ctx, evaluation); err != nil {
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
+		}
+		// In this case re-queuing will change nothing
+		return ctrl.Result{}, nil
+	}
 	mostWantedTwoPhaseHysteresisEvaluationProjectedShardsGauge.DeletePartialMatch(prometheus.Labels{
 		"evaluation_ref": req.NamespacedName.String(),
 	})
 	mostWantedTwoPhaseHysteresisEvaluationProjectedReplicasTotalLoadGauge.DeletePartialMatch(prometheus.Labels{
 		"evaluation_ref": req.NamespacedName.String(),
 	})
-	for _, replica := range topSeenRecord.Replicas {
+	for _, replica := range evaluation.Status.Projection {
 		for _, li := range replica.LoadIndexes {
 			mostWantedTwoPhaseHysteresisEvaluationProjectedShardsGauge.WithLabelValues(
 				req.NamespacedName.String(),
@@ -293,10 +315,9 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		).Set(replica.TotalLoad.AsApproximateFloat64())
 	}
 
-	evaluation.Status.Projection = topSeenRecord.Replicas
 	if evaluation.Status.LastEvaluationTimestamp == nil ||
 		time.Since(evaluation.Status.LastEvaluationTimestamp.Time) >= evaluation.Spec.StabilizationPeriod.Duration {
-		evaluation.Status.Replicas = topSeenRecord.Replicas
+		evaluation.Status.Replicas = evaluation.Status.Projection
 		evaluation.Status.LastEvaluationTimestamp = ptr.To(metav1.Now())
 		log.Info("New partitioning has won",
 			"replicas", len(evaluation.Status.Replicas), "lastEvaluationTimestamp", evaluation.Status.LastEvaluationTimestamp)
