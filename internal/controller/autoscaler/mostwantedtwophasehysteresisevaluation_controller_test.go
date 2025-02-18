@@ -17,6 +17,7 @@ limitations under the License.
 package autoscaler
 
 import (
+	"math"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -279,6 +280,118 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 				Expect(run.Container().Object().Status.Projection).To(Equal(samplePartition.Object().Status.Replicas))
 				Expect(run.Container().Object().Status.LastEvaluationTimestamp.Time).
 					To(Equal(firstReconcileTime))
+			},
+		).
+		Commit(collector.Collect).
+		Hydrate(
+			"old projected evaluation is about to be erased",
+			func(run *ScenarioRun[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
+				samplePartition := NewObjectContainer(
+					run,
+					&autoscalerv1alpha1.LongestProcessingTimePartition{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
+							Namespace: run.Namespace().ObjectKey().Name,
+						},
+					},
+				).Get()
+				run.Container().Get().Object().Status.Projection = samplePartition.Get().Object().Status.Replicas
+				run.Container().Object().Status.History = []autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{
+					// This represents an old record that used to lead the projection but haven't been seen in a long time
+					{
+						Timestamp:    metav1.Time{Time: time.Now().Add(-1 * time.Hour)},
+						ReplicasHash: "doesn't matter",
+						SeenTimes:    math.MaxInt32,
+					},
+					// This represents a new projection after above leader is erased, which distribution at the moment is unknown
+					{
+						Timestamp:    metav1.Now(),
+						ReplicasHash: "new but currently unknown projection",
+						SeenTimes:    3,
+					},
+				}
+				run.Container().StatusUpdate()
+			},
+		).
+		BranchFailureToUpdateStatusCheck(collector.Collect).
+		WithCheck(
+			"should handle unknown new projection",
+			func(run *ScenarioRun[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
+				Expect(run.ReconcileError()).ToNot(HaveOccurred())
+				Expect(run.ReconcileResult().RequeueAfter).
+					To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+				By("Checking conditions")
+				readyCondition := meta.FindStatusCondition(
+					run.Container().Get().Object().Status.Conditions,
+					StatusTypeReady,
+				)
+				Expect(readyCondition).NotTo(BeNil())
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+				Expect(readyCondition.Reason).To(Equal("AwaitingNewProjection"))
+				Expect(readyCondition.Message).
+					To(ContainSubstring("top seen record is neither current projection nor current partition"))
+
+				By("Checking seconds reconciliation")
+				time.Sleep(6 * time.Second)
+				run.Reconcile()
+
+				Expect(run.ReconcileError()).ToNot(HaveOccurred())
+				Expect(run.ReconcileResult().RequeueAfter).
+					To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+				By("Checking conditions")
+				readyCondition = meta.FindStatusCondition(
+					run.Container().Get().Object().Status.Conditions,
+					StatusTypeReady,
+				)
+				Expect(readyCondition).NotTo(BeNil())
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+				Expect(readyCondition.Reason).To(Equal("AwaitingNewProjection"))
+				Expect(readyCondition.Message).
+					To(ContainSubstring("top seen record is neither current projection nor current partition"))
+
+				By("Checking seconds reconciliation")
+				time.Sleep(6 * time.Second)
+				run.Reconcile()
+
+				Expect(run.ReconcileError()).ToNot(HaveOccurred())
+				Expect(run.ReconcileResult().RequeueAfter).
+					To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+				By("Checking conditions")
+				readyCondition = meta.FindStatusCondition(
+					run.Container().Get().Object().Status.Conditions,
+					StatusTypeReady,
+				)
+				Expect(readyCondition).NotTo(BeNil())
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
+				Expect(readyCondition.Reason).To(Equal(StatusTypeReady))
+
+				By("Checking history records")
+				samplePartition := NewObjectContainer(
+					run,
+					&autoscalerv1alpha1.LongestProcessingTimePartition{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
+							Namespace: run.Namespace().ObjectKey().Name,
+						},
+					},
+				)
+				samplePartition.Get()
+				history := run.Container().Object().Status.History
+				Expect(history).To(HaveLen(2))
+				Expect(history[0].SeenTimes).To(Equal(int32(3)))
+				Expect(history[1].SeenTimes).To(Equal(int32(3)))
+
+				By("Checking evaluation results")
+				Expect(run.Container().Object().Status.Replicas).To(Equal(samplePartition.Object().Status.Replicas))
+				Expect(run.Container().Object().Status.Projection).To(Equal(samplePartition.Object().Status.Replicas))
+				Expect(run.Container().Object().Status.LastEvaluationTimestamp.Time).
+					To(BeTemporally("~", time.Now(), time.Second))
 			},
 		).
 		Commit(collector.Collect)

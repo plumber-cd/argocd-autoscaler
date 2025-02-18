@@ -276,12 +276,12 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		evaluation.Status.Projection = currentReplicas
 	}
 	if topSeenRecord.ReplicasHash != Sha256(evaluation.Status.Projection.SerializeToString()) {
-		err := fmt.Errorf("something went wrong, top seen record is neither current nor previous projection")
+		err := fmt.Errorf("top seen record is neither current projection nor current partition")
 		log.Error(err, "Failed to evaluate")
 		meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
 			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "EvaluationError",
+			Reason:  "AwaitingNewProjection",
 			Message: err.Error(),
 		})
 		if err := r.Status().Update(ctx, evaluation); err != nil {
