@@ -42,11 +42,10 @@ func (r *PartitionerImpl) Partition(ctx context.Context,
 		return replicas, nil
 	}
 
-	sort.Sort(common.LoadIndexesDesc(shards))
-	bucketSize := shards[0].Value.AsApproximateFloat64()
+	sortedShards, bucketSize := r.Sort(shards)
 
 	replicaCount := int32(0)
-	for _, shard := range shards {
+	for _, shard := range sortedShards {
 		// Find the replica with the least current load.
 		minLoad := float64(0)
 		selectedReplicaIndex := -1
@@ -88,4 +87,28 @@ func (r *PartitionerImpl) Partition(ctx context.Context,
 	}
 
 	return replicas, nil
+}
+
+func (r *PartitionerImpl) Sort(shards []common.LoadIndex) ([]common.LoadIndex, float64) {
+	if len(shards) == 0 {
+		return shards, 0
+	}
+
+	sortedShards := common.LoadIndexesDesc(shards)
+	sort.Sort(sortedShards)
+	biggestLoad := float64(sortedShards[0].Value.AsApproximateFloat64())
+
+	inClusterCondition := func(loadIndex common.LoadIndex) bool {
+		return loadIndex.Shard.Name == "in-cluster"
+	}
+	inClusterIndex := sort.Search(len(sortedShards), func(i int) bool {
+		return inClusterCondition(sortedShards[i])
+	})
+	if inClusterIndex < len(sortedShards) && inClusterCondition(sortedShards[inClusterIndex]) {
+		inClusterShard := sortedShards[inClusterIndex]
+		copy(sortedShards[inClusterIndex:], sortedShards[inClusterIndex+1:])
+		sortedShards = sortedShards[:len(sortedShards)-1]
+		return append(common.LoadIndexesDesc{inClusterShard}, sortedShards...), biggestLoad
+	}
+	return sortedShards, biggestLoad
 }

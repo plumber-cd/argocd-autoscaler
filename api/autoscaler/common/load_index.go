@@ -43,6 +43,8 @@ func (s LoadIndexesDesc) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 
+// Less returns true if the value of the LoadIndex at index i is greater than the value of the LoadIndex at index j.
+// Note that this is reversed because this is a descending sort implementation.
 func (s LoadIndexesDesc) Less(i, j int) bool {
 	return s[i].Value.AsApproximateFloat64() > s[j].Value.AsApproximateFloat64()
 }
