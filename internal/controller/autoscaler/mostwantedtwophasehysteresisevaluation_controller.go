@@ -204,41 +204,51 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		return ctrl.Result{}, nil
 	}
 
-	currentReplicas := partitionProvider.GetPartitionProviderStatus().Replicas
-	log.V(2).Info("Currently reported replicas by partition provider", "count", len(currentReplicas))
+	currentDesiredPartition := partitionProvider.GetPartitionProviderStatus().Replicas
+	log.V(2).Info("Currently reported replicas by partition provider", "count", len(currentDesiredPartition))
 
-	seenBefore := false
-	for i, record := range evaluation.Status.History {
-		if record.ReplicasHash == Sha256(currentReplicas.SerializeToString()) {
-			seenBefore = true
-			evaluation.Status.History[i].SeenTimes++
-			evaluation.Status.History[i].Timestamp = metav1.Now()
-			break
+	// First, we check if current desired partition was ever seen before.
+	// If we find a record of it - we bump the counter and refresh last seen timestamp.
+	{
+		seenBefore := false
+		for i, record := range evaluation.Status.History {
+			if record.ReplicasHash == Sha256(currentDesiredPartition.SerializeToString()) {
+				seenBefore = true
+				evaluation.Status.History[i].SeenTimes++
+				evaluation.Status.History[i].Timestamp = metav1.Now()
+				break
+			}
+		}
+
+		// If currently desired partition was never seen before, we create a new history record for it.
+		if !seenBefore {
+			evaluation.Status.History = append(evaluation.Status.History,
+				autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{
+					Timestamp:    metav1.Now(),
+					ReplicasHash: Sha256(currentDesiredPartition.SerializeToString()),
+					SeenTimes:    1,
+				},
+			)
 		}
 	}
-	if !seenBefore {
-		evaluation.Status.History = append(evaluation.Status.History,
-			autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{
-				Timestamp:    metav1.Now(),
-				ReplicasHash: Sha256(currentReplicas.SerializeToString()),
-				SeenTimes:    1,
-			},
-		)
-	}
 
-	// Maintain the history
-	cleanHistory := []autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
-	for _, record := range evaluation.Status.History {
-		if record.Timestamp.Add(evaluation.Spec.StabilizationPeriod.Duration).After(time.Now()) {
-			cleanHistory = append(cleanHistory, record)
+	// Maintaining the history records:
+	// Remove all records that last seen outside of the stabilization period.
+	{
+		cleanHistory := []autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
+		for _, record := range evaluation.Status.History {
+			if record.Timestamp.Add(evaluation.Spec.StabilizationPeriod.Duration).After(time.Now()) {
+				cleanHistory = append(cleanHistory, record)
+			}
+		}
+		historyWasTrimmed := len(cleanHistory) != len(evaluation.Status.History)
+		if historyWasTrimmed {
+			log.V(1).Info("Trim the history", "from", len(evaluation.Status.History), "to", len(cleanHistory))
+			evaluation.Status.History = cleanHistory
 		}
 	}
-	historyWasTrimmed := len(cleanHistory) < len(evaluation.Status.History)
-	if historyWasTrimmed {
-		log.V(1).Info("Trim the history", "from", len(evaluation.Status.History), "to", len(cleanHistory))
-		evaluation.Status.History = cleanHistory
-	}
 
+	// Noticing each history record
 	historyRecordsByHash := map[string]autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
 	historyRecordsByHashLastSeen := map[string]metav1.Time{}
 	historyRecorsByHashSeenTimes := map[string]int32{}
@@ -257,6 +267,8 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		}
 	}
 
+	// Determining the top seen record
+	// Tie breaker is the last seen record
 	topSeenRecord := autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
 	maxSeenCount := int32(0)
 	for hash, seenTimes := range historyRecorsByHashSeenTimes {
@@ -270,11 +282,21 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 			topSeenRecord = historyRecordsByHash[hash]
 		}
 	}
+
+	// If current desired partition is determined to be top seen partition, update current projection to reflect that.
+	// Current projection is used to track what the partition is on the off chance it wins the election later.
 	log.V(2).Info("Top seen record", "record", topSeenRecord.ReplicasHash)
-	if topSeenRecord.ReplicasHash == Sha256(currentReplicas.SerializeToString()) {
+	if topSeenRecord.ReplicasHash == Sha256(currentDesiredPartition.SerializeToString()) {
 		log.V(1).Info("A new election projection updated", "record", topSeenRecord.ReplicasHash)
-		evaluation.Status.Projection = currentReplicas
+		evaluation.Status.Projection = currentDesiredPartition
 	}
+
+	// At any moment we only know what is the currently applied partition and projected winner.
+	// We do not store every partition details, because that blows up etcd limits.
+	// This should be all we need - currently elected partition is the top seen one by the status quote,
+	// until some other variant becomes the new projected leader.
+	// If current top seen record somehow is neither, this is a bug. We can't do anything about it.
+	// In which case - we bail out until some other partition wins the race and become known as projected leader.
 	if topSeenRecord.ReplicasHash != Sha256(evaluation.Status.Projection.SerializeToString()) {
 		err := fmt.Errorf("top seen record is neither current projection nor current partition")
 		log.Error(err, "Failed to evaluate")
@@ -291,59 +313,70 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		// In this case re-queuing will change nothing
 		return ctrl.Result{}, nil
 	}
-	mostWantedTwoPhaseHysteresisEvaluationProjectedShardsGauge.DeletePartialMatch(prometheus.Labels{
-		"evaluation_ref": req.NamespacedName.String(),
-	})
-	mostWantedTwoPhaseHysteresisEvaluationProjectedReplicasTotalLoadGauge.DeletePartialMatch(prometheus.Labels{
-		"evaluation_ref": req.NamespacedName.String(),
-	})
-	for _, replica := range evaluation.Status.Projection {
-		for _, li := range replica.LoadIndexes {
-			mostWantedTwoPhaseHysteresisEvaluationProjectedShardsGauge.WithLabelValues(
+
+	// Prometheus records
+	{
+		mostWantedTwoPhaseHysteresisEvaluationProjectedShardsGauge.DeletePartialMatch(prometheus.Labels{
+			"evaluation_ref": req.NamespacedName.String(),
+		})
+		mostWantedTwoPhaseHysteresisEvaluationProjectedReplicasTotalLoadGauge.DeletePartialMatch(prometheus.Labels{
+			"evaluation_ref": req.NamespacedName.String(),
+		})
+		for _, replica := range evaluation.Status.Projection {
+			for _, li := range replica.LoadIndexes {
+				mostWantedTwoPhaseHysteresisEvaluationProjectedShardsGauge.WithLabelValues(
+					req.NamespacedName.String(),
+					string(li.Shard.UID),
+					li.Shard.ID,
+					li.Shard.Namespace,
+					li.Shard.Name,
+					li.Shard.Server,
+					strconv.Itoa(int(replica.ID)),
+				).Set(1)
+			}
+			mostWantedTwoPhaseHysteresisEvaluationProjectedReplicasTotalLoadGauge.WithLabelValues(
 				req.NamespacedName.String(),
-				string(li.Shard.UID),
-				li.Shard.ID,
-				li.Shard.Namespace,
-				li.Shard.Name,
-				li.Shard.Server,
 				strconv.Itoa(int(replica.ID)),
-			).Set(1)
+			).Set(replica.TotalLoad.AsApproximateFloat64())
 		}
-		mostWantedTwoPhaseHysteresisEvaluationProjectedReplicasTotalLoadGauge.WithLabelValues(
-			req.NamespacedName.String(),
-			strconv.Itoa(int(replica.ID)),
-		).Set(replica.TotalLoad.AsApproximateFloat64())
 	}
 
+	// If last evaluation already expired (or this is a first evaluation) - apply current projection as the new leader.
+	// Also - wipe the history to prevent past counters from influencing future elections.
 	if evaluation.Status.LastEvaluationTimestamp == nil ||
 		time.Since(evaluation.Status.LastEvaluationTimestamp.Time) >= evaluation.Spec.StabilizationPeriod.Duration {
 		evaluation.Status.Replicas = evaluation.Status.Projection
 		evaluation.Status.LastEvaluationTimestamp = ptr.To(metav1.Now())
+		evaluation.Status.History = []autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
 		log.Info("New partitioning has won",
 			"replicas", len(evaluation.Status.Replicas), "lastEvaluationTimestamp", evaluation.Status.LastEvaluationTimestamp)
 	}
-	mostWantedTwoPhaseHysteresisEvaluationShardsGauge.DeletePartialMatch(prometheus.Labels{
-		"evaluation_ref": req.NamespacedName.String(),
-	})
-	mostWantedTwoPhaseHysteresisEvaluationReplicasTotalLoadGauge.DeletePartialMatch(prometheus.Labels{
-		"evaluation_ref": req.NamespacedName.String(),
-	})
-	for _, replica := range evaluation.Status.Replicas {
-		for _, li := range replica.LoadIndexes {
-			mostWantedTwoPhaseHysteresisEvaluationShardsGauge.WithLabelValues(
+
+	// Prometheus records
+	{
+		mostWantedTwoPhaseHysteresisEvaluationShardsGauge.DeletePartialMatch(prometheus.Labels{
+			"evaluation_ref": req.NamespacedName.String(),
+		})
+		mostWantedTwoPhaseHysteresisEvaluationReplicasTotalLoadGauge.DeletePartialMatch(prometheus.Labels{
+			"evaluation_ref": req.NamespacedName.String(),
+		})
+		for _, replica := range evaluation.Status.Replicas {
+			for _, li := range replica.LoadIndexes {
+				mostWantedTwoPhaseHysteresisEvaluationShardsGauge.WithLabelValues(
+					req.NamespacedName.String(),
+					string(li.Shard.UID),
+					li.Shard.ID,
+					li.Shard.Namespace,
+					li.Shard.Name,
+					li.Shard.Server,
+					strconv.Itoa(int(replica.ID)),
+				).Set(1)
+			}
+			mostWantedTwoPhaseHysteresisEvaluationReplicasTotalLoadGauge.WithLabelValues(
 				req.NamespacedName.String(),
-				string(li.Shard.UID),
-				li.Shard.ID,
-				li.Shard.Namespace,
-				li.Shard.Name,
-				li.Shard.Server,
 				strconv.Itoa(int(replica.ID)),
-			).Set(1)
+			).Set(replica.TotalLoad.AsApproximateFloat64())
 		}
-		mostWantedTwoPhaseHysteresisEvaluationReplicasTotalLoadGauge.WithLabelValues(
-			req.NamespacedName.String(),
-			strconv.Itoa(int(replica.ID)),
-		).Set(replica.TotalLoad.AsApproximateFloat64())
 	}
 
 	meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
