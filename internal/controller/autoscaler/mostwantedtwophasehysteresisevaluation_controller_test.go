@@ -383,9 +383,11 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 				)
 				samplePartition.Get()
 				history := run.Container().Object().Status.History
-				Expect(history).To(HaveLen(2))
-				Expect(history[0].SeenTimes).To(Equal(int32(3)))
-				Expect(history[1].SeenTimes).To(Equal(int32(3)))
+				Expect(history).To(HaveLen(1))
+				Expect(history[0].ReplicasHash).To(Equal(
+					Sha256(samplePartition.Object().Status.Replicas.SerializeToString())))
+				Expect(history[0].SeenTimes).To(Equal(int32(1)))
+				Expect(history[0].Timestamp.Time).To(BeTemporally("~", time.Now(), time.Second))
 
 				By("Checking evaluation results")
 				Expect(run.Container().Object().Status.Replicas).To(Equal(samplePartition.Object().Status.Replicas))
