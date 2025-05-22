@@ -347,7 +347,13 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		time.Since(evaluation.Status.LastEvaluationTimestamp.Time) >= evaluation.Spec.StabilizationPeriod.Duration {
 		evaluation.Status.Replicas = evaluation.Status.Projection
 		evaluation.Status.LastEvaluationTimestamp = ptr.To(metav1.Now())
-		evaluation.Status.History = []autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
+		evaluation.Status.History = []autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{
+			{
+				Timestamp:    metav1.Now(),
+				ReplicasHash: Sha256(evaluation.Status.Replicas.SerializeToString()),
+				SeenTimes:    1,
+			},
+		}
 		log.Info("New partitioning has won",
 			"replicas", len(evaluation.Status.Replicas), "lastEvaluationTimestamp", evaluation.Status.LastEvaluationTimestamp)
 	}
