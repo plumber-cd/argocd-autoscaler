@@ -69,7 +69,7 @@ var _ = Describe("LongestProcessingTimePartitioner", func() {
 				{Shard: common.Shard{Name: "shard5"}, Value: resource.MustParse("7")},
 			}
 			partitioner := PartitionerImpl{}
-			replicas, err := partitioner.Partition(context.TODO(), shards)
+			replicas, err := partitioner.Partition(context.TODO(), shards, -1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(replicas).To(HaveLen(4))
 
@@ -97,6 +97,49 @@ var _ = Describe("LongestProcessingTimePartitioner", func() {
 			Expect(replicas[3].LoadIndexes[1].Shard.Name).To(Equal("shard2"))
 			Expect(replicas[3].TotalLoad.AsApproximateFloat64()).To(Equal(float64(8)))
 			Expect(replicas[3].TotalLoadDisplayValue).To(Equal("8"))
+		})
+	})
+
+	Context("when partitioning", func() {
+		It("should respect positive maxShardsPerReplica", func() {
+			shards := []common.LoadIndex{
+				{Shard: common.Shard{Name: "in-cluster"}, Value: resource.MustParse("10")},
+				{Shard: common.Shard{Name: "shard1"}, Value: resource.MustParse("1")},
+				{Shard: common.Shard{Name: "shard2"}, Value: resource.MustParse("1")},
+				{Shard: common.Shard{Name: "shard3"}, Value: resource.MustParse("1")},
+				{Shard: common.Shard{Name: "shard4"}, Value: resource.MustParse("1")},
+				{Shard: common.Shard{Name: "shard5"}, Value: resource.MustParse("1")},
+			}
+			partitioner := PartitionerImpl{}
+			replicas, err := partitioner.Partition(context.TODO(), shards, 2)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(replicas).To(HaveLen(4))
+
+			Expect(replicas[0].ID).To(Equal(int32(0)))
+			Expect(replicas[0].LoadIndexes).To(HaveLen(1))
+			Expect(replicas[0].LoadIndexes[0].Shard.Name).To(Equal("in-cluster"))
+			Expect(replicas[0].TotalLoad.AsApproximateFloat64()).To(Equal(float64(10)))
+			Expect(replicas[0].TotalLoadDisplayValue).To(Equal("10"))
+
+			Expect(replicas[1].ID).To(Equal(int32(1)))
+			Expect(replicas[1].LoadIndexes).To(HaveLen(2))
+			Expect(replicas[1].LoadIndexes[0].Shard.Name).To(Equal("shard1"))
+			Expect(replicas[1].LoadIndexes[1].Shard.Name).To(Equal("shard2"))
+			Expect(replicas[1].TotalLoad.AsApproximateFloat64()).To(Equal(float64(2)))
+			Expect(replicas[1].TotalLoadDisplayValue).To(Equal("2"))
+
+			Expect(replicas[2].ID).To(Equal(int32(2)))
+			Expect(replicas[2].LoadIndexes).To(HaveLen(2))
+			Expect(replicas[2].LoadIndexes[0].Shard.Name).To(Equal("shard3"))
+			Expect(replicas[2].LoadIndexes[1].Shard.Name).To(Equal("shard4"))
+			Expect(replicas[2].TotalLoad.AsApproximateFloat64()).To(Equal(float64(2)))
+			Expect(replicas[2].TotalLoadDisplayValue).To(Equal("2"))
+
+			Expect(replicas[3].ID).To(Equal(int32(3)))
+			Expect(replicas[3].LoadIndexes).To(HaveLen(1))
+			Expect(replicas[3].LoadIndexes[0].Shard.Name).To(Equal("shard5"))
+			Expect(replicas[3].TotalLoad.AsApproximateFloat64()).To(Equal(float64(1)))
+			Expect(replicas[3].TotalLoadDisplayValue).To(Equal("1"))
 		})
 	})
 })

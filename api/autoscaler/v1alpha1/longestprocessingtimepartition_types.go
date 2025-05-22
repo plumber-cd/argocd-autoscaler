@@ -24,6 +24,9 @@ import (
 // LongestProcessingTimePartitionSpec defines the desired state of LongestProcessingTimePartition.
 type LongestProcessingTimePartitionSpec struct {
 	common.PartitionerSpec `json:",inline"`
+
+	// Optional: set the top ceiling of shards per replica.
+	MaxShardsPerReplica *int32 `json:"maxShardsPerReplica,omitempty"`
 }
 
 // LongestProcessingTimePartitionStatus defines the observed state of LongestProcessingTimePartition.

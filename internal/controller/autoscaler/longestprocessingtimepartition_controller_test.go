@@ -39,13 +39,13 @@ import (
 
 type fakePartitioner struct {
 	partitioned bool
-	fn          func(ctx context.Context, shards []common.LoadIndex) (common.ReplicaList, error)
+	fn          func(ctx context.Context, shards []common.LoadIndex, max int) (common.ReplicaList, error)
 }
 
-func (f *fakePartitioner) Partition(ctx context.Context, shards []common.LoadIndex) (common.ReplicaList, error) {
+func (f *fakePartitioner) Partition(ctx context.Context, shards []common.LoadIndex, max int) (common.ReplicaList, error) {
 	f.partitioned = true
 	if f.fn != nil {
-		return f.fn(ctx, shards)
+		return f.fn(ctx, shards, max)
 	}
 	return nil, errors.New("fake partitioner not implemented")
 }
@@ -225,6 +225,7 @@ var _ = Describe("LongestProcessingTimePartition Controller", func() {
 				partitioner.fn = func(
 					ctx context.Context,
 					shards []common.LoadIndex,
+					max int,
 				) (common.ReplicaList, error) {
 					replicas := common.ReplicaList{}
 					for i, shard := range shards {
@@ -294,6 +295,7 @@ var _ = Describe("LongestProcessingTimePartition Controller", func() {
 				partitioner.fn = func(
 					ctx context.Context,
 					shards []common.LoadIndex,
+					max int,
 				) (common.ReplicaList, error) {
 					return nil, errors.New("fake error")
 				}
