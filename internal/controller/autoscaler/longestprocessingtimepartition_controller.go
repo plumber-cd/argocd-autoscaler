@@ -171,8 +171,12 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 		return ctrl.Result{}, nil
 	}
 
+	var maxShardsPerReplica int
+	if partition.Spec.MaxShardsPerReplica != nil {
+		maxShardsPerReplica = int(*partition.Spec.MaxShardsPerReplica)
+	}
 	loadIndexes := loadIndexProvider.GetLoadIndexProviderStatus().Values
-	replicas, err := r.Partitioner.Partition(ctx, loadIndexes)
+	replicas, err := r.Partitioner.Partition(ctx, loadIndexes, maxShardsPerReplica)
 	if err != nil {
 		log.Error(err, "Failure during partitioning")
 		meta.SetStatusCondition(&partition.Status.Conditions, metav1.Condition{

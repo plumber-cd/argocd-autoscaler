@@ -26,13 +26,13 @@ import (
 )
 
 type Partitioner interface {
-	Partition(ctx context.Context, shards []common.LoadIndex) (common.ReplicaList, error)
+	Partition(ctx context.Context, shards []common.LoadIndex, max int) (common.ReplicaList, error)
 }
 
 type PartitionerImpl struct{}
 
 func (r *PartitionerImpl) Partition(ctx context.Context,
-	shards []common.LoadIndex) (common.ReplicaList, error) {
+	shards []common.LoadIndex, max int) (common.ReplicaList, error) {
 
 	log := log.FromContext(ctx)
 
@@ -51,6 +51,9 @@ func (r *PartitionerImpl) Partition(ctx context.Context,
 		selectedReplicaIndex := -1
 
 		for i, replica := range replicas {
+			if max > 0 && len(replica.LoadIndexes) >= max {
+				continue
+			}
 			if selectedReplicaIndex == -1 || replica.TotalLoad.AsApproximateFloat64() < minLoad {
 				if replica.TotalLoad.AsApproximateFloat64()+shard.Value.AsApproximateFloat64() < bucketSize {
 					selectedReplicaIndex = i

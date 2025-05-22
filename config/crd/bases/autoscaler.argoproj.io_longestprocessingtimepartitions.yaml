@@ -71,6 +71,10 @@ spec:
                 - name
                 type: object
                 x-kubernetes-map-type: atomic
+              maxShardsPerReplica:
+                description: 'Optional: set the top ceiling of shards per replica.'
+                format: int32
+                type: integer
             required:
             - loadIndexProviderRef
             type: object
