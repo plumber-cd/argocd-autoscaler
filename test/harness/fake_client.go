@@ -27,6 +27,9 @@ type GetFn func(ctx context.Context, key client.ObjectKey, obj client.Object, op
 // ListFn is the client.Client.List function signature
 type ListFn func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
 
+// CreateFn is the client.Client.Create function signature
+type CreateFn func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error
+
 // UpdateFn is the client.Client.Update function signature
 type UpdateFn func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error
 
@@ -48,6 +51,7 @@ type FakeClient struct {
 	client.Client
 	getFunctions          map[reflect.Type]map[string]GetFn
 	listFunctions         map[reflect.Type]ListFn
+	createFunctions       map[reflect.Type]map[string]CreateFn
 	updateFunctions       map[reflect.Type]map[string]UpdateFn
 	statusUpdateFunctions map[reflect.Type]map[string]UpdateSubResourceFn
 	deleteFn              map[reflect.Type]map[string]DeleteFn
@@ -110,6 +114,31 @@ func (f *FakeClient) List(ctx context.Context, list client.ObjectList, opts ...c
 		}
 	}
 	return f.Client.List(ctx, list, opts...)
+}
+
+// WithCreateFunction registers a custom Create function for the given object.
+func (f *FakeClient) WithCreateFunction(container GenericObjectContainer, fn CreateFn) *FakeClient {
+	if f.createFunctions == nil {
+		f.createFunctions = make(map[reflect.Type]map[string]CreateFn)
+	}
+	if f.createFunctions[reflect.TypeOf(container.ClientObject())] == nil {
+		f.createFunctions[reflect.TypeOf(container.ClientObject())] = make(map[string]CreateFn)
+	}
+	f.createFunctions[reflect.TypeOf(container.ClientObject())][container.ObjectKey().String()] = fn
+	return f
+}
+
+// Create calls the custom Create function if it was registered for the given object.
+// Otherwise, it calls the original client.Client.Create function.
+func (f *FakeClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	if f.createFunctions != nil {
+		if functions, ok := f.createFunctions[reflect.TypeOf(obj)]; ok {
+			if fn, ok := functions[client.ObjectKeyFromObject(obj).String()]; ok {
+				return fn(ctx, obj, opts...)
+			}
+		}
+	}
+	return f.Client.Create(ctx, obj, opts...)
 }
 
 // WithUpdateFunction registers a custom Update function for the given object.
