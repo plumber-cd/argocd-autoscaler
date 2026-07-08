@@ -112,7 +112,6 @@ var _ = Describe("PrometheusPoll Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.RobustScalingNormalizer]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -172,7 +171,6 @@ var _ = Describe("PrometheusPoll Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.RobustScalingNormalizer]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -233,7 +231,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 					e *float64,
 					values []common.MetricValue,
 				) ([]common.MetricValue, error) {
-					normalizedValues := []common.MetricValue{}
+					normalizedValues := make([]common.MetricValue, 0, len(values))
 					for _, value := range values {
 						normalizedValues = append(normalizedValues, common.MetricValue{
 							ID:           value.ID,
@@ -254,7 +252,6 @@ var _ = Describe("PrometheusPoll Controller", func() {
 				Expect(normalizer.normalized).To(BeTrue())
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -322,7 +319,6 @@ var _ = Describe("PrometheusPoll Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.RobustScalingNormalizer]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(

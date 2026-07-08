@@ -40,7 +40,6 @@ import (
 
 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
-	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	robustscaling "github.com/plumber-cd/argocd-autoscaler/normalizers/robustscaling"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -58,19 +57,19 @@ type RobustScalingNormalizerReconciler struct {
 var (
 	robustScalingNormalizerValuesGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace:   "argocd_autoscaler",
+			Namespace:   metricsNamespace,
 			Subsystem:   "normalizer",
-			Name:        "values",
+			Name:        metricValuesName,
 			Help:        "Metrics normalized by this normalizer",
 			ConstLabels: prometheus.Labels{"normalizer_type": "robust_scaling"},
 		},
 		[]string{
 			"normalizer_ref",
-			"shard_uid",
-			"shard_id",
-			"shard_namespace",
-			"shard_name",
-			"shard_server",
+			shardUIDLabel,
+			shardIDLabel,
+			shardNamespaceLabel,
+			shardNameLabel,
+			shardServerLabel,
 			"metric_id",
 		},
 	)
@@ -94,14 +93,14 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 	log.V(2).Info("Received reconcile request")
 	defer log.V(2).Info("Reconcile request completed")
 
-	if lastTimeRaw, exists := r.lastReconciled.Load(req.NamespacedName.String()); exists {
+	if lastTimeRaw, exists := r.lastReconciled.Load(req.String()); exists {
 		lastTime := lastTimeRaw.(time.Time)
 		if time.Since(lastTime) < GlobalRateLimit {
 			log.V(2).Info("Rate limiting", "since", time.Since(lastTime))
 			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
 		}
 	}
-	r.lastReconciled.Store(req.NamespacedName.String(), time.Now())
+	r.lastReconciled.Store(req.String(), time.Now())
 
 	normalizer := &autoscaler.RobustScalingNormalizer{}
 	if err := r.Get(ctx, req.NamespacedName, normalizer); err != nil {
@@ -182,7 +181,7 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 	}
 	log.V(1).Info("Metrics normalized", "count", len(normalizedValues))
 	robustScalingNormalizerValuesGauge.DeletePartialMatch(prometheus.Labels{
-		"normalizer_ref": req.NamespacedName.String(),
+		"normalizer_ref": req.String(),
 	})
 	for _, metric := range normalizedValues {
 		log.V(2).Info("Metric normalized", "metric", metric.ID, "value", metric.Value)
@@ -207,7 +206,7 @@ func (r *RobustScalingNormalizerReconciler) Reconcile(ctx context.Context, req c
 		log.V(1).Info("Failed to update resource status", "err", err)
 		return ctrl.Result{}, err
 	}
-	log.Info("Resource status updated", "values", len(normalizedValues))
+	log.Info("Resource status updated", metricValuesName, len(normalizedValues))
 
 	// We don't need to do anything unless poller data changes
 	return ctrl.Result{}, nil
@@ -218,7 +217,7 @@ func (r *RobustScalingNormalizerReconciler) SetupWithManager(mgr ctrl.Manager) e
 	c := ctrl.NewControllerManagedBy(mgr).
 		Named("argocd_autoscaler_rubust_scaling_normalizer").
 		For(
-			&autoscalerv1alpha1.RobustScalingNormalizer{},
+			&autoscaler.RobustScalingNormalizer{},
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		)
 

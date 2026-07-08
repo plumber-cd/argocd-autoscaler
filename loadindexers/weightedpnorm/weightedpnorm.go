@@ -87,7 +87,7 @@ func (li *LoadIndexerImpl) Calculate(
 	return loadIndexes, nil
 }
 
-func (_ *LoadIndexerImpl) loadIndex(
+func (*LoadIndexerImpl) loadIndex(
 	p int32,
 	weights map[string]autoscaler.WeightedPNormLoadIndexWeight,
 	values []common.MetricValue,

@@ -119,7 +119,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(
@@ -129,7 +128,7 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 							Expect(readyCondition).NotTo(BeNil())
 							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
 							Expect(readyCondition.Reason).To(Equal("ErrorResourceMalformedDuplicateModes"))
-							Expect(readyCondition.Message).To(ContainSubstring("Scaler spec is invalid - only one mode can be set"))
+							Expect(readyCondition.Message).To(ContainSubstring("scaler spec is invalid - only one mode can be set"))
 						},
 					).
 					Commit(collector.Collect)
@@ -141,7 +140,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -190,7 +188,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -290,7 +287,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -331,7 +327,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -375,7 +370,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -403,7 +397,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -443,7 +436,8 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 								Spec: corev1.PodSpec{
 									Containers: []corev1.Container{
 										{
-											Name: "argocd-application-controller",
+											Name:  "argocd-application-controller",
+											Image: "argocd-application-controller:test",
 											Env: []corev1.EnvVar{
 												{
 													Name:  "ARGOCD_CONTROLLER_REPLICAS",
@@ -486,7 +480,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).ToNot(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(GlobalRateLimit))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(
@@ -562,7 +555,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(
@@ -649,7 +641,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).ToNot(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(5 * time.Second))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(
@@ -719,7 +710,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).ToNot(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(5 * time.Second))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(
@@ -817,7 +807,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(
@@ -863,7 +852,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).ToNot(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(
@@ -898,7 +886,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).ToNot(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(5 * time.Second))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							readyCondition := meta.FindStatusCondition(
 								run.Container().Get().Object().Status.Conditions,
@@ -940,7 +927,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).ToNot(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(5 * time.Second))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							readyCondition := meta.FindStatusCondition(
 								run.Container().Get().Object().Status.Conditions,
@@ -1032,7 +1018,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).ToNot(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(5 * time.Second))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(
@@ -1118,7 +1103,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(
@@ -1207,7 +1191,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).ToNot(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(5 * time.Second))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(
@@ -1298,7 +1281,6 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Second))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(

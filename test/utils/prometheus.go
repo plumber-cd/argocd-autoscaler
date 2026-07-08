@@ -24,11 +24,12 @@ import (
 	"github.com/onsi/gomega"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 )
 
 // Parse Prometheus metrics into a structured map
 func ParsePrometheusMetrics(metricsText string) (map[string]*dto.MetricFamily, error) {
-	var parser expfmt.TextParser
+	parser := expfmt.NewTextParser(model.UTF8Validation)
 	return parser.TextToMetricFamilies(bytes.NewReader([]byte(metricsText)))
 }
 
@@ -135,7 +136,7 @@ func FormatPrometheusMetricComparison(expected *dto.Metric, actualMetrics []*dto
 
 // Format Prometheus labels into a readable string
 func FormatPrometheusLabels(labels map[string]string) string {
-	pairs := make([]string, len(labels))
+	pairs := make([]string, 0, len(labels))
 	for k, v := range labels {
 		pairs = append(pairs, fmt.Sprintf(`%s="%s"`, k, v))
 	}
@@ -179,7 +180,7 @@ func CreatePrometheusMetric(name string, labels map[string]string, value float64
 
 // Convert label map to Prometheus LabelPair format
 func convertPrometheusLabels(labels map[string]string) []*dto.LabelPair {
-	pairs := make([]*dto.LabelPair, len(labels))
+	pairs := make([]*dto.LabelPair, 0, len(labels))
 	for k, v := range labels {
 		labelName, labelValue := k, v
 		pairs = append(pairs, &dto.LabelPair{

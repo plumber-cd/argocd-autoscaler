@@ -31,6 +31,8 @@ type Partitioner interface {
 
 type PartitionerImpl struct{}
 
+const inClusterShardName = "in-cluster"
+
 func (r *PartitionerImpl) Partition(ctx context.Context,
 	shards []common.LoadIndex, max int) (common.ReplicaList, error) {
 
@@ -102,7 +104,7 @@ func (r *PartitionerImpl) Sort(shards []common.LoadIndex) ([]common.LoadIndex, f
 	biggestLoad := float64(sortedShards[0].Value.AsApproximateFloat64())
 
 	inClusterCondition := func(loadIndex common.LoadIndex) bool {
-		return loadIndex.Shard.Name == "in-cluster"
+		return loadIndex.Shard.Name == inClusterShardName
 	}
 	inClusterIndex := sort.Search(len(sortedShards), func(i int) bool {
 		return inClusterCondition(sortedShards[i])

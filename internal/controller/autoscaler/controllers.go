@@ -29,6 +29,25 @@ var (
 	knownReplicaSetControllers []schema.GroupVersionKind
 )
 
+const (
+	autoscalerAPIGroup                         = "autoscaler.argoproj.io"
+	evaluationRefLabel                         = "evaluation_ref"
+	evaluationSubsystem                        = "evaluation"
+	evaluationTypeLabel                        = "evaluation_type"
+	evaluationTypeMostWantedTwoPhaseHysteresis = "most_wanted_two_phase_hysteresis"
+	metricsNamespace                           = "argocd_autoscaler"
+	metricValuesName                           = "values"
+	partitionRefLabel                          = "partition_ref"
+	pausedReason                               = "Paused"
+	replicaIDLabel                             = "replica_id"
+	shardIDLabel                               = "shard_id"
+	shardNameLabel                             = "shard_name"
+	shardNamespaceLabel                        = "shard_namespace"
+	shardServerLabel                           = "shard_server"
+	shardUIDLabel                              = "shard_uid"
+	v1alpha1Version                            = "v1alpha1"
+)
+
 func RegisterShardManager(gvk schema.GroupVersionKind) {
 	knownControllersMutex.Lock()
 	defer knownControllersMutex.Unlock()
@@ -101,33 +120,33 @@ func getReplicaSetControllers() []schema.GroupVersionKind {
 
 func init() {
 	RegisterShardManager(schema.GroupVersionKind{
-		Group:   "autoscaler.argoproj.io",
-		Version: "v1alpha1",
+		Group:   autoscalerAPIGroup,
+		Version: v1alpha1Version,
 		Kind:    "SecretTypeClusterShardManager",
 	})
 	RegisterMetricValuesProvider(schema.GroupVersionKind{
-		Group:   "autoscaler.argoproj.io",
-		Version: "v1alpha1",
+		Group:   autoscalerAPIGroup,
+		Version: v1alpha1Version,
 		Kind:    "PrometheusPoll",
 	})
 	RegisterMetricValuesProvider(schema.GroupVersionKind{
-		Group:   "autoscaler.argoproj.io",
-		Version: "v1alpha1",
+		Group:   autoscalerAPIGroup,
+		Version: v1alpha1Version,
 		Kind:    "RobustScalingNormalizer",
 	})
 	RegisterLoadIndexProvider(schema.GroupVersionKind{
-		Group:   "autoscaler.argoproj.io",
-		Version: "v1alpha1",
+		Group:   autoscalerAPIGroup,
+		Version: v1alpha1Version,
 		Kind:    "WeightedPNormLoadIndex",
 	})
 	RegisterPartitionProvider(schema.GroupVersionKind{
-		Group:   "autoscaler.argoproj.io",
-		Version: "v1alpha1",
+		Group:   autoscalerAPIGroup,
+		Version: v1alpha1Version,
 		Kind:    "LongestProcessingTimePartition",
 	})
 	RegisterPartitionProvider(schema.GroupVersionKind{
-		Group:   "autoscaler.argoproj.io",
-		Version: "v1alpha1",
+		Group:   autoscalerAPIGroup,
+		Version: v1alpha1Version,
 		Kind:    "MostWantedTwoPhaseHysteresisEvaluation",
 	})
 	RegisterReplicaSetController(schema.GroupVersionKind{

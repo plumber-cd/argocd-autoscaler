@@ -39,7 +39,6 @@ import (
 
 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
-	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	"github.com/plumber-cd/argocd-autoscaler/loadindexers/weightedpnorm"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -57,19 +56,19 @@ type WeightedPNormLoadIndexReconciler struct {
 var (
 	weightedPNormLoadIndexValuesGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace:   "argocd_autoscaler",
+			Namespace:   metricsNamespace,
 			Subsystem:   "load_index",
-			Name:        "values",
+			Name:        metricValuesName,
 			Help:        "Load Index values",
 			ConstLabels: prometheus.Labels{"load_index_type": "weighted_p_norm"},
 		},
 		[]string{
 			"load_index_ref",
-			"shard_uid",
-			"shard_id",
-			"shard_namespace",
-			"shard_name",
-			"shard_server",
+			shardUIDLabel,
+			shardIDLabel,
+			shardNamespaceLabel,
+			shardNameLabel,
+			shardServerLabel,
 		},
 	)
 )
@@ -89,14 +88,14 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 	log.V(2).Info("Received reconcile request")
 	defer log.V(2).Info("Reconcile request completed")
 
-	if lastTimeRaw, exists := r.lastReconciled.Load(req.NamespacedName.String()); exists {
+	if lastTimeRaw, exists := r.lastReconciled.Load(req.String()); exists {
 		lastTime := lastTimeRaw.(time.Time)
 		if time.Since(lastTime) < GlobalRateLimit {
 			log.V(2).Info("Rate limiting", "since", time.Since(lastTime))
 			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
 		}
 	}
-	r.lastReconciled.Store(req.NamespacedName.String(), time.Now())
+	r.lastReconciled.Store(req.String(), time.Now())
 
 	loadIndex := &autoscaler.WeightedPNormLoadIndex{}
 	if err := r.Get(ctx, req.NamespacedName, loadIndex); err != nil {
@@ -203,7 +202,7 @@ func (r *WeightedPNormLoadIndexReconciler) Reconcile(ctx context.Context, req ct
 	}
 	log.Info("Load indexes calculated", "count", len(loadIndexes))
 	weightedPNormLoadIndexValuesGauge.DeletePartialMatch(prometheus.Labels{
-		"load_index_ref": req.NamespacedName.String(),
+		"load_index_ref": req.String(),
 	})
 	for _, li := range loadIndexes {
 		log.V(2).Info("Load Index", "value", li.Value)
@@ -238,7 +237,7 @@ func (r *WeightedPNormLoadIndexReconciler) SetupWithManager(mgr ctrl.Manager) er
 	c := ctrl.NewControllerManagedBy(mgr).
 		Named("argocd_autoscaler_weighted_p_norm_load_index").
 		For(
-			&autoscalerv1alpha1.WeightedPNormLoadIndex{},
+			&autoscaler.WeightedPNormLoadIndex{},
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		)
 

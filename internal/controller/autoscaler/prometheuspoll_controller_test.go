@@ -154,7 +154,6 @@ var _ = Describe("PrometheusPoll Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(
@@ -186,7 +185,6 @@ var _ = Describe("PrometheusPoll Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(
@@ -232,7 +230,6 @@ var _ = Describe("PrometheusPoll Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(
@@ -319,7 +316,6 @@ var _ = Describe("PrometheusPoll Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(BeNumerically("~", 30*time.Second, 2*time.Second))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 						},
 					).
 					Commit(collector.Collect).
@@ -395,7 +391,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 					poll autoscalerv1alpha1.PrometheusPoll,
 					shards []common.Shard,
 				) ([]common.MetricValue, error) {
-					metricValues := []common.MetricValue{}
+					metricValues := make([]common.MetricValue, 0, len(poll.Spec.Metrics)*len(shards))
 					for _, shard := range shards {
 						for _, metric := range poll.Spec.Metrics {
 							metricValues = append(

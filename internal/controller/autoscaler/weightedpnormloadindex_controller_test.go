@@ -137,7 +137,6 @@ var _ = Describe("WeightedPNormLoadIndex Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.WeightedPNormLoadIndex]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -158,7 +157,6 @@ var _ = Describe("WeightedPNormLoadIndex Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.WeightedPNormLoadIndex]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -207,7 +205,6 @@ var _ = Describe("WeightedPNormLoadIndex Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.WeightedPNormLoadIndex]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -268,7 +265,7 @@ var _ = Describe("WeightedPNormLoadIndex Controller", func() {
 					weights map[string]autoscalerv1alpha1.WeightedPNormLoadIndexWeight,
 					values []common.MetricValue,
 				) ([]common.LoadIndex, error) {
-					loadIndexes := []common.LoadIndex{}
+					loadIndexes := make([]common.LoadIndex, 0, len(values))
 					for _, value := range values {
 						loadIndexes = append(loadIndexes, common.LoadIndex{
 							Shard:        value.Shard,
@@ -287,7 +284,6 @@ var _ = Describe("WeightedPNormLoadIndex Controller", func() {
 				Expect(indexer.indexed).To(BeTrue())
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -347,7 +343,6 @@ var _ = Describe("WeightedPNormLoadIndex Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.WeightedPNormLoadIndex]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(

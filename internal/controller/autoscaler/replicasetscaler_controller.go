@@ -29,7 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -70,7 +70,7 @@ type ReplicaSetScalerReconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
 	APIReader client.Reader
-	Recorder  record.EventRecorder
+	Recorder  events.EventRecorder
 
 	lastReconciled sync.Map
 }
@@ -78,7 +78,7 @@ type ReplicaSetScalerReconciler struct {
 var (
 	replicaSetScalerChangesTotalCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace:   "argocd_autoscaler",
+			Namespace:   metricsNamespace,
 			Subsystem:   "scaler",
 			Name:        "replica_set_changes_total",
 			Help:        "Total counter of re-scaling events",
@@ -113,14 +113,14 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	log.V(2).Info("Received reconcile request")
 	defer log.V(2).Info("Reconcile request completed")
 
-	if lastTimeRaw, exists := r.lastReconciled.Load(req.NamespacedName.String()); exists {
+	if lastTimeRaw, exists := r.lastReconciled.Load(req.String()); exists {
 		lastTime := lastTimeRaw.(time.Time)
 		if time.Since(lastTime) < GlobalRateLimit {
 			log.V(2).Info("Rate limiting", "since", time.Since(lastTime))
 			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
 		}
 	}
-	r.lastReconciled.Store(req.NamespacedName.String(), time.Now())
+	r.lastReconciled.Store(req.String(), time.Now())
 
 	scaler := &autoscaler.ReplicaSetScaler{}
 	if err := r.Get(ctx, req.NamespacedName, scaler); err != nil {
@@ -141,7 +141,7 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if scaler.Spec.Mode.Default != nil {
 			log.V(2).Info("Default mode is explicitly set")
 			if mode != "" {
-				err := fmt.Errorf("Scaler spec is invalid - only one mode can be set")
+				err := fmt.Errorf("scaler spec is invalid - only one mode can be set")
 				log.Error(err, "Validation error")
 				meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
 					Type:    StatusTypeReady,
@@ -167,13 +167,13 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	if scaler.Spec.Paused != nil && *scaler.Spec.Paused {
 		readyCondition := meta.FindStatusCondition(scaler.Status.Conditions, StatusTypeReady)
-		if r.Recorder != nil && (readyCondition == nil || readyCondition.Reason != "Paused") {
-			r.Recorder.Event(scaler, corev1.EventTypeNormal, "Paused", "Paused scaling actions")
+		if r.Recorder != nil && (readyCondition == nil || readyCondition.Reason != pausedReason) {
+			r.Recorder.Eventf(scaler, nil, corev1.EventTypeNormal, pausedReason, pausedReason, "Paused scaling actions")
 		}
 		meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
 			Type:    StatusTypeReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "Paused",
+			Reason:  pausedReason,
 			Message: "Scaling actions are paused",
 		})
 		if err := r.Status().Update(ctx, scaler); err != nil {
@@ -185,8 +185,8 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	if r.Recorder != nil {
 		readyCondition := meta.FindStatusCondition(scaler.Status.Conditions, StatusTypeReady)
-		if readyCondition != nil && readyCondition.Reason == "Paused" {
-			r.Recorder.Event(scaler, corev1.EventTypeNormal, "Resumed", "Resumed scaling actions")
+		if readyCondition != nil && readyCondition.Reason == pausedReason {
+			r.Recorder.Eventf(scaler, nil, corev1.EventTypeNormal, "Resumed", "Resumed", "Resumed scaling actions")
 		}
 	}
 
@@ -286,7 +286,7 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.V(2).Info("Supported ReplicaSet Controller", "kind", scaler.Spec.ReplicaSetControllerRef.Kind)
 		replicaSetController.Kind = scaler.Spec.ReplicaSetControllerRef.Kind
 	default:
-		err := fmt.Errorf("Unsupported ReplicaSetControllerRef.Kind")
+		err := fmt.Errorf("unsupported ReplicaSetControllerRef.Kind")
 		log.Error(err, "Failed to read replica set controller", "kind", scaler.Spec.ReplicaSetControllerRef.Kind)
 		meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
 			Type:   StatusTypeReady,
@@ -377,10 +377,13 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			log.Info("RS scaled to 0",
 				"ref", scaler.Spec.ReplicaSetControllerRef)
 			if r.Recorder != nil {
-				r.Recorder.Event(
+				r.Recorder.Eventf(
 					r.GetRSObject(&replicaSetController),
+					nil,
 					corev1.EventTypeNormal,
-					"ScaledToZero", "Scaled to 0 replicas",
+					"ScaledToZero",
+					"ScaledToZero",
+					"Scaled to 0 replicas",
 				)
 			}
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
@@ -416,7 +419,7 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			"partitionProviderRef", scaler.Spec.PartitionProviderRef,
 			"shardManagerRef", scaler.Spec.ShardManagerRef)
 		shardManager.GetShardManagerSpec().Replicas = partitionProvider.GetPartitionProviderStatus().Replicas
-		if err := r.Client.Update(ctx, shardManager.GetShardManagerClientObject()); err != nil {
+		if err := r.Update(ctx, shardManager.GetShardManagerClientObject()); err != nil {
 			log.Error(err, "Failed to update shard manager desired state",
 				"shardManagerRef", scaler.Spec.ShardManagerRef)
 			meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
@@ -494,10 +497,15 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				"actualReplicas", actualReplicas,
 				"restart", restart)
 			if r.Recorder != nil {
-				r.Recorder.Event(
+				r.Recorder.Eventf(
 					r.GetRSObject(&replicaSetController),
+					nil,
 					corev1.EventTypeNormal,
-					"Scaled", fmt.Sprintf("Scaled from %d to %d replicas", actualReplicas, desiredReplicas),
+					"Scaled",
+					"Scaled",
+					"Scaled from %d to %d replicas",
+					actualReplicas,
+					desiredReplicas,
 				)
 			}
 			replicaSetScalerChangesTotalCounter.WithLabelValues(
@@ -629,11 +637,14 @@ func (r *ReplicaSetScalerReconciler) EnforceRSControllerDesiredState(
 		return ctrl.Result{}, err
 	}
 	if r.Recorder != nil {
-		r.Recorder.Event(
+		r.Recorder.Eventf(
 			r.GetRSObject(&replicaSetController),
+			nil,
 			corev1.EventTypeNormal,
 			"DesiredStateEnforced",
-			fmt.Sprintf("Enforced %d replicas", desiredReplicas),
+			"DesiredStateEnforced",
+			"Enforced %d replicas",
+			desiredReplicas,
 		)
 	}
 	replicaSetScalerChangesTotalCounter.WithLabelValues(
@@ -712,7 +723,7 @@ func (r *ReplicaSetScalerReconciler) ScaleTo(ctx context.Context, replicaSetCont
 		}
 		if !containerFound {
 			// TODO: should the container name be customizeable?
-			return fmt.Errorf("Container %s not found in StatefulSet", argocdApplicationControllerContainerName)
+			return fmt.Errorf("container %s not found in StatefulSet", argocdApplicationControllerContainerName)
 		}
 		if restart {
 			if replicaSetController.StatefulSet.Spec.Template.Annotations == nil {
@@ -734,7 +745,7 @@ func (r *ReplicaSetScalerReconciler) ScaleTo(ctx context.Context, replicaSetCont
 			_ = r.APIReader.Get(ctx, key, r.GetRSObject(&replicaSetController))
 		}
 	}()
-	return r.Client.Update(ctx, obj)
+	return r.Update(ctx, obj)
 }
 
 // SetupWithManager sets up the controller with the Manager.

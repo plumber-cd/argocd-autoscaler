@@ -164,7 +164,6 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				readyCondition := meta.FindStatusCondition(
 					run.Container().Get().Object().Status.Conditions,
@@ -262,7 +261,6 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 						func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 							Expect(run.ReconcileError()).ToNot(HaveOccurred())
 							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 							By("Checking ready condition")
 							readyCondition := meta.FindStatusCondition(
@@ -323,7 +321,6 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking ready condition")
 				readyCondition := meta.FindStatusCondition(
