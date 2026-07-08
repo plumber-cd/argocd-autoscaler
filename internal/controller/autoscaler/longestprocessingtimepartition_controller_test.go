@@ -112,6 +112,7 @@ var _ = Describe("LongestProcessingTimePartition Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.LongestProcessingTimePartition]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -167,6 +168,7 @@ var _ = Describe("LongestProcessingTimePartition Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.LongestProcessingTimePartition]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -245,6 +247,7 @@ var _ = Describe("LongestProcessingTimePartition Controller", func() {
 				Expect(partitioner.partitioned).To(BeTrue())
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -304,6 +307,7 @@ var _ = Describe("LongestProcessingTimePartition Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.LongestProcessingTimePartition]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
 				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult().Requeue).To(BeFalse())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(

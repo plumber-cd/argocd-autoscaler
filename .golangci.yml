@@ -25,6 +25,14 @@ linters:
       text: "should not use dot imports"
       linters:
         - staticcheck
+    - path: ".*_test\\.go"
+      text: "Requeue is deprecated"
+      linters:
+        - staticcheck
+    - path: "test/.*\\.go"
+      text: "Requeue is deprecated"
+      linters:
+        - staticcheck
   enable:
     - dupl
     - errcheck

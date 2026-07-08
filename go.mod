@@ -1,6 +1,8 @@
 module github.com/plumber-cd/argocd-autoscaler
 
-go 1.26.5
+go 1.26.0
+
+toolchain go1.26.5
 
 godebug default=go1.26
 
