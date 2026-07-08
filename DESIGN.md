@@ -146,7 +146,9 @@ For gauges:
 quantile_over_time(
     0.95,
     (
-        sum(argocd_app_info{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .shardServer }}"})
+        max(
+            sum by (pod) (argocd_app_info{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .shardServer }}"})
+        )
     )[1h:1m]
 )
 ```
@@ -157,10 +159,18 @@ For counters:
 quantile_over_time(
     0.95,
     (
-        sum(increase(argocd_app_reconcile_count{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .shardServer }}"}[1m]))
+        max(
+            sum by (pod) (increase(argocd_app_reconcile_count{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .shardServer }}"}[1m]))
+        )
     )[1h:1m]
 )
 ```
+
+The `max(sum by (pod) (...))` shape is intentional. If every cluster is
+reported by exactly one controller pod, it produces the same value as a plain
+`sum(...)`. If controller sharding is misconfigured and multiple pods report the
+same cluster, it uses a single pod's view instead of multiplying the load by the
+number of reporting pods.
 
 Also, note that in my installation, `server` label from `argocd_app_k8s_request_total` for some reason
 reports as `https://100.64.0.1:443` for cluster that actual `.shardServer` is set to `https://kubernetes.default.svc`.

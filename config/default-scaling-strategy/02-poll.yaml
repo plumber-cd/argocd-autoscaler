@@ -12,12 +12,17 @@ spec:
   period: 1m
   address: http://prometheus.prometheus.svc.cluster.local:9090
   metrics:
+  # Aggregate per pod first, then take the maximum pod value. When sharding is
+  # healthy this is equivalent to a single pod's report; when multiple pods
+  # report the same cluster, it avoids multiplying the load by pod count.
   - id: argocd_app_info
     query: |-
       quantile_over_time(
         0.95,
         (
-          sum(argocd_app_info{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .server }}"})
+          max(
+            sum by (pod) (argocd_app_info{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .server }}"})
+          )
         )[1h:1m]
       )
   - id: argocd_cluster_api_resource_objects
@@ -25,7 +30,9 @@ spec:
       quantile_over_time(
         0.95,
         (
-          sum(argocd_cluster_api_resource_objects{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .server }}"})
+          max(
+            sum by (pod) (argocd_cluster_api_resource_objects{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .server }}"})
+          )
         )[1h:1m]
       )
   - id: argocd_cluster_api_resources
@@ -33,7 +40,9 @@ spec:
       quantile_over_time(
         0.95,
         (
-          sum(argocd_cluster_api_resources{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .server }}"})
+          max(
+            sum by (pod) (argocd_cluster_api_resources{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .server }}"})
+          )
         )[1h:1m]
       )
   - id: argocd_app_reconcile_count
@@ -41,7 +50,9 @@ spec:
       quantile_over_time(
         0.95,
         (
-          sum(increase(argocd_app_reconcile_count{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .server }}"}[1m]))
+          max(
+            sum by (pod) (increase(argocd_app_reconcile_count{job="argocd-metrics",namespace="{{ .namespace }}",dest_server="{{ .server }}"}[1m]))
+          )
         )[1h:1m]
       )
   - id: argocd_cluster_events_total
@@ -49,7 +60,9 @@ spec:
       quantile_over_time(
         0.95,
         (
-          sum(increase(argocd_cluster_events_total{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .server }}"}[1m]))
+          max(
+            sum by (pod) (increase(argocd_cluster_events_total{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ .server }}"}[1m]))
+          )
         )[1h:1m]
       )
   - id: argocd_app_k8s_request_total
@@ -63,7 +76,9 @@ spec:
       quantile_over_time(
         0.95,
         (
-          sum(increase(argocd_app_k8s_request_total{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ $server }}"}[1m]))
+          max(
+            sum by (pod) (increase(argocd_app_k8s_request_total{job="argocd-metrics",namespace="{{ .namespace }}",server="{{ $server }}"}[1m]))
+          )
         )[1h:1m]
       )
   - id: rest_client_requests_total
@@ -77,6 +92,8 @@ spec:
       quantile_over_time(
         0.95,
         (
-          sum(increase(rest_client_requests_total{job="argocd-metrics",namespace="{{ .namespace }}",host="{{ $host }}"}[1m]))
+          max(
+            sum by (pod) (increase(rest_client_requests_total{job="argocd-metrics",namespace="{{ .namespace }}",host="{{ $host }}"}[1m]))
+          )
         )[1h:1m]
       )

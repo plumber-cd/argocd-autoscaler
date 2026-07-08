@@ -92,6 +92,10 @@ spec:
                 - name
                 type: object
                 x-kubernetes-map-type: atomic
+              paused:
+                description: Paused halts scaling actions while continuing status
+                  reconciliation.
+                type: boolean
               replicaSetControllerRef:
                 description: |-
                   ReplicaSetControllerRef is the reference to the replica set.

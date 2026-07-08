@@ -55,6 +55,9 @@ const (
 	ReplicaSetReconcilerModeX0Y            = ReplicaSetReconcilerMode("x0y")
 
 	ReplicaSetControllerKindStatefulSet = "StatefulSet"
+
+	argocdApplicationControllerContainerName = "argocd-application-controller"
+	argocdControllerReplicasEnvName          = "ARGOCD_CONTROLLER_REPLICAS"
 )
 
 type ReplicaSetController struct {
@@ -161,6 +164,31 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		mode = ReplicaSetReconcilerModeDefault
 	}
 	log.V(1).Info("Scaler operation mode", "mode", mode)
+
+	if scaler.Spec.Paused != nil && *scaler.Spec.Paused {
+		readyCondition := meta.FindStatusCondition(scaler.Status.Conditions, StatusTypeReady)
+		if r.Recorder != nil && (readyCondition == nil || readyCondition.Reason != "Paused") {
+			r.Recorder.Event(scaler, corev1.EventTypeNormal, "Paused", "Paused scaling actions")
+		}
+		meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
+			Type:    StatusTypeReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "Paused",
+			Message: "Scaling actions are paused",
+		})
+		if err := r.Status().Update(ctx, scaler); err != nil {
+			log.V(1).Info("Failed to update resource status", "err", err)
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: GlobalRateLimit}, nil
+	}
+
+	if r.Recorder != nil {
+		readyCondition := meta.FindStatusCondition(scaler.Status.Conditions, StatusTypeReady)
+		if readyCondition != nil && readyCondition.Reason == "Paused" {
+			r.Recorder.Event(scaler, corev1.EventTypeNormal, "Resumed", "Resumed scaling actions")
+		}
+	}
 
 	partitionProvider, err := findByRef[common.PartitionProvider](
 		ctx,
@@ -309,10 +337,13 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		panic("unreachable")
 	}
 
+	desiredReplicas := int32(len(partitionProvider.GetPartitionProviderStatus().Replicas))
+
 	// If mode x0y - check the RS status and re-queue, but not if we think that this phase was already completed.
 	// We check that by looking at the partition provider desired partition and our own status.
-	if mode == ReplicaSetReconcilerModeX0Y && r.GetRSControllerActualReplicas(replicaSetController) > 0 &&
-		partitionProvider.GetPartitionProviderStatus().Replicas.SerializeToString() != scaler.Status.Replicas.SerializeToString() {
+	x0yTransitionPending := mode == ReplicaSetReconcilerModeX0Y &&
+		partitionProvider.GetPartitionProviderStatus().Replicas.SerializeToString() != scaler.Status.Replicas.SerializeToString()
+	if x0yTransitionPending && r.GetRSControllerActualReplicas(replicaSetController) > 0 {
 		// Check if RS is set to zero already, and if not - scale it to zero
 		if r.GetRSControllerDesiredReplicas(replicaSetController) > 0 {
 			log.V(1).Info("X-0-Y mode is active and RS is not currently at 0, scaling to 0 now",
@@ -373,6 +404,11 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
+	if !x0yTransitionPending && desiredReplicas > 0 && r.RSControllerIsZero(replicaSetController) {
+		result, err := r.EnforceRSControllerDesiredState(ctx, req, scaler, replicaSetController, desiredReplicas)
+		return result, err
+	}
+
 	// Check if shard manager desired state meets partition provider requirements
 	if partitionProvider.GetPartitionProviderStatus().Replicas.SerializeToString() !=
 		shardManager.GetShardManagerSpec().Replicas.SerializeToString() {
@@ -420,7 +456,6 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Assume that at this point the sharding manager applied the desired state
 	// Check if RS is already scaled, and if not - apply the change
-	desiredReplicas := int32(len(partitionProvider.GetPartitionProviderStatus().Replicas))
 	actualReplicas := r.GetRSControllerActualReplicas(replicaSetController)
 	if scaler.Status.Replicas.SerializeToString() != shardManager.GetShardManagerStatus().Replicas.SerializeToString() {
 		log.V(1).Info("Shard manager applied configuration - moving into the scaling phase",
@@ -486,6 +521,11 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
+	if r.RSControllerNeedsDesiredStateEnforcement(replicaSetController, desiredReplicas) {
+		result, err := r.EnforceRSControllerDesiredState(ctx, req, scaler, replicaSetController, desiredReplicas)
+		return result, err
+	}
+
 	// Check if RS was already scaled
 	if r.GetRSControllerActualReplicas(replicaSetController) != desiredReplicas {
 		log.V(1).Info("RS is still scaling",
@@ -515,6 +555,98 @@ func (r *ReplicaSetScalerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	log.V(1).Info("Scaler is ready")
 
 	return ctrl.Result{}, nil
+}
+
+func (r *ReplicaSetScalerReconciler) RSControllerNeedsDesiredStateEnforcement(
+	replicaSetController ReplicaSetController,
+	replicas int32,
+) bool {
+	switch replicaSetController.Kind {
+	case ReplicaSetControllerKindStatefulSet:
+		statefulSet := replicaSetController.StatefulSet
+		if statefulSet.Spec.Replicas == nil || *statefulSet.Spec.Replicas != replicas {
+			return true
+		}
+		if replicas > 0 && statefulSet.Status.Replicas == 0 {
+			return true
+		}
+		expectedEnvValue := fmt.Sprintf("%d", replicas)
+		for _, container := range statefulSet.Spec.Template.Spec.Containers {
+			if container.Name != argocdApplicationControllerContainerName {
+				continue
+			}
+			for _, env := range container.Env {
+				if env.Name == argocdControllerReplicasEnvName {
+					return env.Value != expectedEnvValue
+				}
+			}
+			return true
+		}
+		return true
+	default:
+		panic("unreachable")
+	}
+}
+
+func (r *ReplicaSetScalerReconciler) RSControllerIsZero(replicaSetController ReplicaSetController) bool {
+	switch replicaSetController.Kind {
+	case ReplicaSetControllerKindStatefulSet:
+		statefulSet := replicaSetController.StatefulSet
+		return statefulSet.Spec.Replicas != nil && *statefulSet.Spec.Replicas == 0 ||
+			statefulSet.Status.Replicas == 0
+	default:
+		panic("unreachable")
+	}
+}
+
+func (r *ReplicaSetScalerReconciler) EnforceRSControllerDesiredState(
+	ctx context.Context,
+	req ctrl.Request,
+	scaler *autoscaler.ReplicaSetScaler,
+	replicaSetController ReplicaSetController,
+	desiredReplicas int32,
+) (ctrl.Result, error) {
+	actualReplicas := r.GetRSControllerActualReplicas(replicaSetController)
+	if err := r.ScaleTo(ctx, replicaSetController, desiredReplicas, false); err != nil {
+		meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
+			Type:    StatusTypeReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "ErrorScaling",
+			Message: err.Error(),
+		})
+		if statusErr := r.Status().Update(ctx, scaler); statusErr != nil {
+			return ctrl.Result{}, statusErr
+		}
+		return ctrl.Result{}, err
+	}
+
+	meta.SetStatusCondition(&scaler.Status.Conditions, metav1.Condition{
+		Type:   StatusTypeReady,
+		Status: metav1.ConditionFalse,
+		Reason: "EnforcingDesiredState",
+	})
+	if err := r.Status().Update(ctx, scaler); err != nil {
+		return ctrl.Result{}, err
+	}
+	if r.Recorder != nil {
+		r.Recorder.Event(
+			r.GetRSObject(&replicaSetController),
+			corev1.EventTypeNormal,
+			"DesiredStateEnforced",
+			fmt.Sprintf("Enforced %d replicas", desiredReplicas),
+		)
+	}
+	replicaSetScalerChangesTotalCounter.WithLabelValues(
+		req.NamespacedName.String(),
+		scaler.Spec.ReplicaSetControllerRef.Kind,
+		fmt.Sprintf("%s/%s", scaler.Namespace, scaler.Spec.ReplicaSetControllerRef.Name),
+	).Inc()
+	log.FromContext(ctx).Info("Enforced RS controller desired state",
+		"ref", scaler.Spec.ReplicaSetControllerRef,
+		"desiredReplicas", desiredReplicas,
+		"actualReplicas", actualReplicas)
+
+	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 
 func (r *ReplicaSetScalerReconciler) GetRSObject(replicaSetController *ReplicaSetController) client.Object {
@@ -553,7 +685,7 @@ func (r *ReplicaSetScalerReconciler) ScaleTo(ctx context.Context, replicaSetCont
 		for containerIndex, container := range replicaSetController.StatefulSet.Spec.Template.Spec.Containers {
 			// TODO: can the name of the container be different?
 			// We might need to expose this as a user input in the API
-			if container.Name != "argocd-application-controller" {
+			if container.Name != argocdApplicationControllerContainerName {
 				continue
 			}
 
@@ -561,7 +693,7 @@ func (r *ReplicaSetScalerReconciler) ScaleTo(ctx context.Context, replicaSetCont
 
 			envFound := false
 			for envIndex, env := range container.Env {
-				if env.Name != "ARGOCD_CONTROLLER_REPLICAS" {
+				if env.Name != argocdControllerReplicasEnvName {
 					continue
 				}
 
@@ -572,7 +704,7 @@ func (r *ReplicaSetScalerReconciler) ScaleTo(ctx context.Context, replicaSetCont
 				replicaSetController.StatefulSet.Spec.Template.Spec.Containers[containerIndex].Env = append(
 					replicaSetController.StatefulSet.Spec.Template.Spec.Containers[containerIndex].Env,
 					corev1.EnvVar{
-						Name:  "ARGOCD_CONTROLLER_REPLICAS",
+						Name:  argocdControllerReplicasEnvName,
 						Value: fmt.Sprintf("%d", replicas),
 					},
 				)
@@ -580,7 +712,7 @@ func (r *ReplicaSetScalerReconciler) ScaleTo(ctx context.Context, replicaSetCont
 		}
 		if !containerFound {
 			// TODO: should the container name be customizeable?
-			return fmt.Errorf("Container argocd-application-controller not found in StatefulSet")
+			return fmt.Errorf("Container %s not found in StatefulSet", argocdApplicationControllerContainerName)
 		}
 		if restart {
 			if replicaSetController.StatefulSet.Spec.Template.Annotations == nil {

@@ -235,9 +235,10 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 	// Maintaining the history records:
 	// Remove all records that last seen outside of the stabilization period.
 	{
+		historyRetentionPeriod := r.HistoryRetentionPeriod(evaluation)
 		cleanHistory := []autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
 		for _, record := range evaluation.Status.History {
-			if record.Timestamp.Add(evaluation.Spec.StabilizationPeriod.Duration).After(time.Now()) {
+			if record.Timestamp.Add(historyRetentionPeriod).After(time.Now()) {
 				cleanHistory = append(cleanHistory, record)
 			}
 		}
@@ -343,8 +344,9 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 
 	// If last evaluation already expired (or this is a first evaluation) - apply current projection as the new leader.
 	// Also - wipe the history to prevent past counters from influencing future elections.
+	stabilizationPeriod := r.StabilizationPeriodForProjection(evaluation)
 	if evaluation.Status.LastEvaluationTimestamp == nil ||
-		time.Since(evaluation.Status.LastEvaluationTimestamp.Time) >= evaluation.Spec.StabilizationPeriod.Duration {
+		time.Since(evaluation.Status.LastEvaluationTimestamp.Time) >= stabilizationPeriod {
 		evaluation.Status.Replicas = evaluation.Status.Projection
 		evaluation.Status.LastEvaluationTimestamp = ptr.To(metav1.Now())
 		evaluation.Status.History = []autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{
@@ -398,6 +400,44 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 
 	// We should get a reconciliation request on poller changes
 	return ctrl.Result{}, nil
+}
+
+func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) HistoryRetentionPeriod(
+	evaluation *autoscaler.MostWantedTwoPhaseHysteresisEvaluation,
+) time.Duration {
+	scaleUpPeriod := r.ScaleUpStabilizationPeriod(evaluation)
+	scaleDownPeriod := r.ScaleDownStabilizationPeriod(evaluation)
+	if scaleUpPeriod > scaleDownPeriod {
+		return scaleUpPeriod
+	}
+	return scaleDownPeriod
+}
+
+func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) StabilizationPeriodForProjection(
+	evaluation *autoscaler.MostWantedTwoPhaseHysteresisEvaluation,
+) time.Duration {
+	if len(evaluation.Status.Projection) < len(evaluation.Status.Replicas) {
+		return r.ScaleDownStabilizationPeriod(evaluation)
+	}
+	return r.ScaleUpStabilizationPeriod(evaluation)
+}
+
+func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) ScaleUpStabilizationPeriod(
+	evaluation *autoscaler.MostWantedTwoPhaseHysteresisEvaluation,
+) time.Duration {
+	if evaluation.Spec.ScaleUpStabilizationPeriod != nil {
+		return evaluation.Spec.ScaleUpStabilizationPeriod.Duration
+	}
+	return evaluation.Spec.StabilizationPeriod.Duration
+}
+
+func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) ScaleDownStabilizationPeriod(
+	evaluation *autoscaler.MostWantedTwoPhaseHysteresisEvaluation,
+) time.Duration {
+	if evaluation.Spec.ScaleDownStabilizationPeriod != nil {
+		return evaluation.Spec.ScaleDownStabilizationPeriod.Duration
+	}
+	return evaluation.Spec.StabilizationPeriod.Duration
 }
 
 // SetupWithManager sets up the controller with the Manager.

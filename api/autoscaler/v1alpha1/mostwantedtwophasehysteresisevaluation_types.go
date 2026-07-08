@@ -29,6 +29,14 @@ type MostWantedTwoPhaseHysteresisEvaluationSpec struct {
 	// Older historical records are always pruned.
 	// +kubebuilder:validation:Required
 	StabilizationPeriod metav1.Duration `json:"stabilizationPeriod,omitempty"`
+
+	// ScaleUpStabilizationPeriod is the amount of time to wait before applying a projection that increases replicas.
+	// +optional
+	ScaleUpStabilizationPeriod *metav1.Duration `json:"scaleUpStabilizationPeriod,omitempty"`
+
+	// ScaleDownStabilizationPeriod is the amount of time to wait before applying a projection that decreases replicas.
+	// +optional
+	ScaleDownStabilizationPeriod *metav1.Duration `json:"scaleDownStabilizationPeriod,omitempty"`
 }
 
 type MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord struct {

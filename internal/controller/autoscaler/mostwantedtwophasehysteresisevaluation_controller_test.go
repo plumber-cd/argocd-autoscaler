@@ -17,6 +17,7 @@ limitations under the License.
 package autoscaler
 
 import (
+	"fmt"
 	"math"
 	"time"
 
@@ -35,6 +36,31 @@ import (
 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 )
+
+func replicaListForTest(namespace string, count int) common.ReplicaList {
+	replicas := make(common.ReplicaList, 0, count)
+	for i := range count {
+		replicas = append(replicas, common.Replica{
+			ID: int32(i),
+			LoadIndexes: []common.LoadIndex{
+				{
+					Shard: common.Shard{
+						UID:       types.UID(fmt.Sprintf("shard-%d", i)),
+						ID:        fmt.Sprintf("shard-%d", i),
+						Namespace: namespace,
+						Name:      fmt.Sprintf("fake-shard-name-%d", i),
+						Server:    fmt.Sprintf("fake-shard-server-%d", i),
+					},
+					Value:        resource.MustParse("1"),
+					DisplayValue: "1",
+				},
+			},
+			TotalLoad:             resource.MustParse("1"),
+			TotalLoadDisplayValue: "1",
+		})
+	}
+	return replicas
+}
 
 var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 	var scenarioRun GenericScenarioRun
@@ -397,6 +423,158 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 			},
 		).
 		Commit(collector.Collect)
+
+	NewScenarioTemplate(
+		"asymmetric stabilization",
+		func(run *ScenarioRun[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
+			samplePartition := NewObjectContainer(
+				run,
+				&autoscalerv1alpha1.LongestProcessingTimePartition{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-longest-processing-time-partition",
+						Namespace: run.Namespace().ObjectKey().Name,
+					},
+					Spec: autoscalerv1alpha1.LongestProcessingTimePartitionSpec{
+						PartitionerSpec: common.PartitionerSpec{
+							LoadIndexProviderRef: &corev1.TypedLocalObjectReference{
+								Kind: "N/A",
+								Name: "N/A",
+							},
+						},
+					},
+				},
+			).Create()
+			meta.SetStatusCondition(
+				&samplePartition.Object().Status.Conditions,
+				metav1.Condition{
+					Type:   StatusTypeReady,
+					Status: metav1.ConditionTrue,
+					Reason: StatusTypeReady,
+				},
+			)
+			samplePartition.StatusUpdate()
+
+			sampleEvaluation := NewObjectContainer(
+				run,
+				&autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sample-most-wanted-two-phase-hysteresis-evaluation",
+						Namespace: run.Namespace().ObjectKey().Name,
+					},
+					Spec: autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationSpec{
+						EvaluatorSpec: common.EvaluatorSpec{
+							PartitionProviderRef: &corev1.TypedLocalObjectReference{
+								APIGroup: ptr.To(samplePartition.GroupVersionKind().Group),
+								Kind:     samplePartition.GroupVersionKind().Kind,
+								Name:     samplePartition.ObjectKey().Name,
+							},
+						},
+						StabilizationPeriod:          metav1.Duration{Duration: 24 * time.Hour},
+						ScaleUpStabilizationPeriod:   &metav1.Duration{Duration: time.Minute},
+						ScaleDownStabilizationPeriod: &metav1.Duration{Duration: time.Hour},
+					},
+				},
+			).Create()
+			run.SetContainer(sampleEvaluation)
+		},
+	).
+		Branch(
+			"scale up",
+			func(branch *Scenario[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
+				branch.
+					Hydrate(
+						"projection increases replicas",
+						func(run *ScenarioRun[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
+							samplePartition := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.LongestProcessingTimePartition{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							samplePartition.Object().Status.Replicas = replicaListForTest(run.Namespace().ObjectKey().Name, 2)
+							samplePartition.StatusUpdate()
+
+							run.Container().Get().Object().Status.Replicas = replicaListForTest(run.Namespace().ObjectKey().Name, 1)
+							run.Container().Object().Status.LastEvaluationTimestamp = ptr.To(
+								metav1.Time{Time: time.Now().Add(-2 * time.Minute)},
+							)
+							run.Container().StatusUpdate()
+						},
+					).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"uses scale-up period",
+						func(run *ScenarioRun[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
+							Expect(run.ReconcileError()).ToNot(HaveOccurred())
+
+							samplePartition := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.LongestProcessingTimePartition{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							Expect(run.Container().Object().Status.Replicas).To(Equal(samplePartition.Object().Status.Replicas))
+							Expect(run.Container().Object().Status.Projection).To(Equal(samplePartition.Object().Status.Replicas))
+						},
+					).
+					Commit(collector.Collect)
+			},
+		).
+		Branch(
+			"scale down",
+			func(branch *Scenario[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
+				branch.
+					Hydrate(
+						"projection decreases replicas",
+						func(run *ScenarioRun[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
+							samplePartition := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.LongestProcessingTimePartition{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							samplePartition.Object().Status.Replicas = replicaListForTest(run.Namespace().ObjectKey().Name, 1)
+							samplePartition.StatusUpdate()
+
+							run.Container().Get().Object().Status.Replicas = replicaListForTest(run.Namespace().ObjectKey().Name, 2)
+							run.Container().Object().Status.LastEvaluationTimestamp = ptr.To(
+								metav1.Time{Time: time.Now().Add(-2 * time.Minute)},
+							)
+							run.Container().StatusUpdate()
+						},
+					).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"uses scale-down period",
+						func(run *ScenarioRun[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
+							Expect(run.ReconcileError()).ToNot(HaveOccurred())
+
+							samplePartition := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.LongestProcessingTimePartition{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							Expect(run.Container().Object().Status.Replicas).
+								To(Equal(replicaListForTest(run.Namespace().ObjectKey().Name, 2)))
+							Expect(run.Container().Object().Status.Projection).To(Equal(samplePartition.Object().Status.Replicas))
+						},
+					).
+					Commit(collector.Collect)
+			},
+		)
 
 	BeforeEach(func() {
 		scenarioRun = collector.NewRun(ctx, k8sClient)

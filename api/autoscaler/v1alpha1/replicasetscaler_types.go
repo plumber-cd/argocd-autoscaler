@@ -46,6 +46,10 @@ type ReplicaSetScalerSpecModes struct {
 type ReplicaSetScalerSpec struct {
 	common.ScalerSpec `json:",inline"`
 
+	// Paused halts scaling actions while continuing status reconciliation.
+	// +optional
+	Paused *bool `json:"paused,omitempty"`
+
 	// Mode is the mode of the ReplicaSetScaler
 	Mode *ReplicaSetScalerSpecModes `json:"mode,omitempty"`
 }

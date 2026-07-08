@@ -75,6 +75,14 @@ spec:
                 - name
                 type: object
                 x-kubernetes-map-type: atomic
+              scaleDownStabilizationPeriod:
+                description: ScaleDownStabilizationPeriod is the amount of time to
+                  wait before applying a projection that decreases replicas.
+                type: string
+              scaleUpStabilizationPeriod:
+                description: ScaleUpStabilizationPeriod is the amount of time to wait
+                  before applying a projection that increases replicas.
+                type: string
               stabilizationPeriod:
                 description: |-
                   StabilizationPeriod is the amount of time to wait before evaluating historical records.

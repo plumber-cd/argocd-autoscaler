@@ -470,6 +470,50 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 			},
 		).
 		Branch(
+			"paused",
+			func(branch *Scenario[*autoscalerv1alpha1.ReplicaSetScaler]) {
+				branch.
+					Hydrate(
+						"scaler is paused",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							run.Container().Get().Object().Spec.Paused = ptr.To(true)
+							run.Container().Update()
+						},
+					).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"skip scaling actions",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).ToNot(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(GlobalRateLimit))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							By("Checking conditions")
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("Paused"))
+
+							By("Checking shard manager desired state")
+							shardManager := NewObjectContainer(
+								run,
+								&autoscalerv1alpha1.SecretTypeClusterShardManager{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ShardManagerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							Expect(shardManager.Object().Spec.Replicas).To(BeEmpty())
+						},
+					).
+					Commit(collector.Collect)
+			},
+		).
+		Branch(
 			"default mode",
 			func(branch *Scenario[*autoscalerv1alpha1.ReplicaSetScaler]) {
 				branch.
@@ -738,18 +782,19 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 					Hydrate(
 						"in RS controller scaling phase",
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
-							sampleShardManager := NewObjectContainer(
+							samplePartition := NewObjectContainer(
 								run,
-								&autoscalerv1alpha1.SecretTypeClusterShardManager{
+								&autoscalerv1alpha1.LongestProcessingTimePartition{
 									ObjectMeta: metav1.ObjectMeta{
-										Name:      run.Container().Get().Object().Spec.ShardManagerRef.Name,
+										Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
 										Namespace: run.Namespace().ObjectKey().Name,
 									},
 								},
 							).Get()
-							run.Container().Get().Object().Status.Replicas = sampleShardManager.Object().Status.Replicas
+							run.Container().Get().Object().Status.Replicas = samplePartition.Object().Status.Replicas
 							run.Container().StatusUpdate()
 
+							desiredReplicas := int32(len(samplePartition.Object().Status.Replicas))
 							sampleSTS := NewObjectContainer(
 								run,
 								&appsv1.StatefulSet{
@@ -759,6 +804,9 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 									},
 								},
 							).Get()
+							sampleSTS.Object().Spec.Replicas = ptr.To(desiredReplicas)
+							sampleSTS.Object().Spec.Template.Spec.Containers[0].Env[0].Value = fmt.Sprintf("%d", desiredReplicas)
+							sampleSTS.Update()
 							sampleSTS.Object().Status.Replicas = 1
 							sampleSTS.StatusUpdate()
 						},
@@ -825,6 +873,82 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 							Expect(readyCondition).NotTo(BeNil())
 							Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
 							Expect(readyCondition.Reason).To(Equal(StatusTypeReady))
+						},
+					).
+					Commit(collector.Collect).
+					Hydrate(
+						"STS env stripped",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							sampleSTS := NewObjectContainer(
+								run,
+								&appsv1.StatefulSet{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ReplicaSetControllerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							sampleSTS.Object().Spec.Template.Spec.Containers[0].Env = nil
+							sampleSTS.Update()
+						},
+					).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"re-assert STS env",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).ToNot(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(5 * time.Second))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("EnforcingDesiredState"))
+						},
+					).
+					Commit(collector.Collect).
+					Hydrate(
+						"STS scaled to zero",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							sampleSTS := NewObjectContainer(
+								run,
+								&appsv1.StatefulSet{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ReplicaSetControllerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							sampleSTS.Object().Spec.Replicas = ptr.To(int32(0))
+							sampleSTS.Object().Status.Replicas = 0
+							sampleSTS.Object().Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{
+								{
+									Name:  "ARGOCD_CONTROLLER_REPLICAS",
+									Value: "0",
+								},
+							}
+							sampleSTS.Update()
+							sampleSTS.StatusUpdate()
+						},
+					).
+					BranchFailureToUpdateStatusCheck(collector.Collect).
+					WithCheck(
+						"scale out immediately",
+						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
+							Expect(run.ReconcileError()).ToNot(HaveOccurred())
+							Expect(run.ReconcileResult().RequeueAfter).To(Equal(5 * time.Second))
+							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+
+							readyCondition := meta.FindStatusCondition(
+								run.Container().Get().Object().Status.Conditions,
+								StatusTypeReady,
+							)
+							Expect(readyCondition).NotTo(BeNil())
+							Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(readyCondition.Reason).To(Equal("EnforcingDesiredState"))
 						},
 					).
 					Commit(collector.Collect)
@@ -1028,7 +1152,9 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 									},
 								},
 							).Get()
-							sampleShardManager.Object().Status.Replicas = samplePartition.Object().Status.Replicas
+							sampleShardManager.Object().Spec.Replicas = samplePartition.Object().Status.Replicas
+							sampleShardManager.Update()
+							sampleShardManager.Get().Object().Status.Replicas = samplePartition.Object().Status.Replicas
 							sampleShardManager.StatusUpdate()
 						},
 					).
@@ -1137,17 +1263,33 @@ var _ = Describe("ReplicaSetScaler Controller", func() {
 					Hydrate(
 						"in RS controller scaling phase",
 						func(run *ScenarioRun[*autoscalerv1alpha1.ReplicaSetScaler]) {
-							sampleShardManager := NewObjectContainer(
+							samplePartition := NewObjectContainer(
 								run,
-								&autoscalerv1alpha1.SecretTypeClusterShardManager{
+								&autoscalerv1alpha1.LongestProcessingTimePartition{
 									ObjectMeta: metav1.ObjectMeta{
-										Name:      run.Container().Get().Object().Spec.ShardManagerRef.Name,
+										Name:      run.Container().Get().Object().Spec.PartitionProviderRef.Name,
 										Namespace: run.Namespace().ObjectKey().Name,
 									},
 								},
 							).Get()
-							run.Container().Get().Object().Status.Replicas = sampleShardManager.Object().Status.Replicas
+							run.Container().Get().Object().Status.Replicas = samplePartition.Object().Status.Replicas
 							run.Container().StatusUpdate()
+
+							desiredReplicas := int32(len(samplePartition.Object().Status.Replicas))
+							sampleSTS := NewObjectContainer(
+								run,
+								&appsv1.StatefulSet{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      run.Container().Get().Object().Spec.ReplicaSetControllerRef.Name,
+										Namespace: run.Namespace().ObjectKey().Name,
+									},
+								},
+							).Get()
+							sampleSTS.Object().Spec.Replicas = ptr.To(desiredReplicas)
+							sampleSTS.Object().Spec.Template.Spec.Containers[0].Env[0].Value = fmt.Sprintf("%d", desiredReplicas)
+							sampleSTS.Update()
+							sampleSTS.Object().Status.Replicas = 1
+							sampleSTS.StatusUpdate()
 						},
 					).
 					BranchFailureToUpdateStatusCheck(collector.Collect).
