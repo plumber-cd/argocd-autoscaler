@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -163,8 +162,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			"export shards to the status",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				readyCondition := meta.FindStatusCondition(
 					run.Container().Get().Object().Status.Conditions,
@@ -261,8 +259,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 						"handle errors",
 						func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 							Expect(run.ReconcileError()).ToNot(HaveOccurred())
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+							Expect(run.ReconcileResult()).To(BeZero())
 
 							By("Checking ready condition")
 							readyCondition := meta.FindStatusCondition(
@@ -322,8 +319,7 @@ var _ = Describe("SecretTypeClusterShardManager Controller", func() {
 			"successfully update shards on secrets",
 			func(run *ScenarioRun[*autoscalerv1alpha1.SecretTypeClusterShardManager]) {
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking ready condition")
 				readyCondition := meta.FindStatusCondition(

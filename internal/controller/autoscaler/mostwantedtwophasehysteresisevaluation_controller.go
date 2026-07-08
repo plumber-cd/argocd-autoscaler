@@ -41,7 +41,6 @@ import (
 
 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
-	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -56,64 +55,64 @@ type MostWantedTwoPhaseHysteresisEvaluationReconciler struct {
 var (
 	mostWantedTwoPhaseHysteresisEvaluationProjectedShardsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace:   "argocd_autoscaler",
-			Subsystem:   "evaluation",
+			Namespace:   metricsNamespace,
+			Subsystem:   evaluationSubsystem,
 			Name:        "projected_shards",
 			Help:        "Projected shards partitioning",
-			ConstLabels: prometheus.Labels{"evaluation_type": "most_wanted_two_phase_hysteresis"},
+			ConstLabels: prometheus.Labels{evaluationTypeLabel: evaluationTypeMostWantedTwoPhaseHysteresis},
 		},
 		[]string{
-			"evaluation_ref",
-			"shard_uid",
-			"shard_id",
-			"shard_namespace",
-			"shard_name",
-			"shard_server",
-			"replica_id",
+			evaluationRefLabel,
+			shardUIDLabel,
+			shardIDLabel,
+			shardNamespaceLabel,
+			shardNameLabel,
+			shardServerLabel,
+			replicaIDLabel,
 		},
 	)
 	mostWantedTwoPhaseHysteresisEvaluationProjectedReplicasTotalLoadGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace:   "argocd_autoscaler",
-			Subsystem:   "evaluation",
+			Namespace:   metricsNamespace,
+			Subsystem:   evaluationSubsystem,
 			Name:        "projected_replicas_total_load",
 			Help:        "Projected sum of the load indexes assigned to a replica",
-			ConstLabels: prometheus.Labels{"evaluation_type": "most_wanted_two_phase_hysteresis"},
+			ConstLabels: prometheus.Labels{evaluationTypeLabel: evaluationTypeMostWantedTwoPhaseHysteresis},
 		},
 		[]string{
-			"evaluation_ref",
-			"replica_id",
+			evaluationRefLabel,
+			replicaIDLabel,
 		},
 	)
 	mostWantedTwoPhaseHysteresisEvaluationShardsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace:   "argocd_autoscaler",
-			Subsystem:   "evaluation",
+			Namespace:   metricsNamespace,
+			Subsystem:   evaluationSubsystem,
 			Name:        "shards",
 			Help:        "Shards partitioning",
-			ConstLabels: prometheus.Labels{"evaluation_type": "most_wanted_two_phase_hysteresis"},
+			ConstLabels: prometheus.Labels{evaluationTypeLabel: evaluationTypeMostWantedTwoPhaseHysteresis},
 		},
 		[]string{
-			"evaluation_ref",
-			"shard_uid",
-			"shard_id",
-			"shard_namespace",
-			"shard_name",
-			"shard_server",
-			"replica_id",
+			evaluationRefLabel,
+			shardUIDLabel,
+			shardIDLabel,
+			shardNamespaceLabel,
+			shardNameLabel,
+			shardServerLabel,
+			replicaIDLabel,
 		},
 	)
 	mostWantedTwoPhaseHysteresisEvaluationReplicasTotalLoadGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace:   "argocd_autoscaler",
-			Subsystem:   "evaluation",
+			Namespace:   metricsNamespace,
+			Subsystem:   evaluationSubsystem,
 			Name:        "replicas_total_load",
 			Help:        "Sum of the load indexes assigned to a replica",
-			ConstLabels: prometheus.Labels{"evaluation_type": "most_wanted_two_phase_hysteresis"},
+			ConstLabels: prometheus.Labels{evaluationTypeLabel: evaluationTypeMostWantedTwoPhaseHysteresis},
 		},
 		[]string{
-			"evaluation_ref",
-			"replica_id",
+			evaluationRefLabel,
+			replicaIDLabel,
 		},
 	)
 )
@@ -140,14 +139,14 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 	log.V(2).Info("Received reconcile request")
 	defer log.V(2).Info("Reconcile request completed")
 
-	if lastTimeRaw, exists := r.lastReconciled.Load(req.NamespacedName.String()); exists {
+	if lastTimeRaw, exists := r.lastReconciled.Load(req.String()); exists {
 		lastTime := lastTimeRaw.(time.Time)
 		if time.Since(lastTime) < GlobalRateLimit {
 			log.V(2).Info("Rate limiting", "since", time.Since(lastTime))
 			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
 		}
 	}
-	r.lastReconciled.Store(req.NamespacedName.String(), time.Now())
+	r.lastReconciled.Store(req.String(), time.Now())
 
 	evaluation := &autoscaler.MostWantedTwoPhaseHysteresisEvaluation{}
 	if err := r.Get(ctx, req.NamespacedName, evaluation); err != nil {
@@ -223,7 +222,7 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		// If currently desired partition was never seen before, we create a new history record for it.
 		if !seenBefore {
 			evaluation.Status.History = append(evaluation.Status.History,
-				autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{
+				autoscaler.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{
 					Timestamp:    metav1.Now(),
 					ReplicasHash: Sha256(currentDesiredPartition.SerializeToString()),
 					SeenTimes:    1,
@@ -236,7 +235,7 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 	// Remove all records that last seen outside of the stabilization period.
 	{
 		historyRetentionPeriod := r.HistoryRetentionPeriod(evaluation)
-		cleanHistory := []autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
+		cleanHistory := []autoscaler.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
 		for _, record := range evaluation.Status.History {
 			if record.Timestamp.Add(historyRetentionPeriod).After(time.Now()) {
 				cleanHistory = append(cleanHistory, record)
@@ -250,7 +249,7 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 	}
 
 	// Noticing each history record
-	historyRecordsByHash := map[string]autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
+	historyRecordsByHash := map[string]autoscaler.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
 	historyRecordsByHashLastSeen := map[string]metav1.Time{}
 	historyRecorsByHashSeenTimes := map[string]int32{}
 	for _, record := range evaluation.Status.History {
@@ -270,7 +269,7 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 
 	// Determining the top seen record
 	// Tie breaker is the last seen record
-	topSeenRecord := autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
+	topSeenRecord := autoscaler.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{}
 	maxSeenCount := int32(0)
 	for hash, seenTimes := range historyRecorsByHashSeenTimes {
 		log.V(2).Info("Evaluating records", "record", hash, "seenTimes", seenTimes)
@@ -318,10 +317,10 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 	// Prometheus records
 	{
 		mostWantedTwoPhaseHysteresisEvaluationProjectedShardsGauge.DeletePartialMatch(prometheus.Labels{
-			"evaluation_ref": req.NamespacedName.String(),
+			evaluationRefLabel: req.String(),
 		})
 		mostWantedTwoPhaseHysteresisEvaluationProjectedReplicasTotalLoadGauge.DeletePartialMatch(prometheus.Labels{
-			"evaluation_ref": req.NamespacedName.String(),
+			evaluationRefLabel: req.String(),
 		})
 		for _, replica := range evaluation.Status.Projection {
 			for _, li := range replica.LoadIndexes {
@@ -349,7 +348,7 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 		time.Since(evaluation.Status.LastEvaluationTimestamp.Time) >= stabilizationPeriod {
 		evaluation.Status.Replicas = evaluation.Status.Projection
 		evaluation.Status.LastEvaluationTimestamp = ptr.To(metav1.Now())
-		evaluation.Status.History = []autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{
+		evaluation.Status.History = []autoscaler.MostWantedTwoPhaseHysteresisEvaluationStatusHistoricalRecord{
 			{
 				Timestamp:    metav1.Now(),
 				ReplicasHash: Sha256(evaluation.Status.Replicas.SerializeToString()),
@@ -363,10 +362,10 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) Reconcile(ctx context
 	// Prometheus records
 	{
 		mostWantedTwoPhaseHysteresisEvaluationShardsGauge.DeletePartialMatch(prometheus.Labels{
-			"evaluation_ref": req.NamespacedName.String(),
+			evaluationRefLabel: req.String(),
 		})
 		mostWantedTwoPhaseHysteresisEvaluationReplicasTotalLoadGauge.DeletePartialMatch(prometheus.Labels{
-			"evaluation_ref": req.NamespacedName.String(),
+			evaluationRefLabel: req.String(),
 		})
 		for _, replica := range evaluation.Status.Replicas {
 			for _, li := range replica.LoadIndexes {
@@ -445,7 +444,7 @@ func (r *MostWantedTwoPhaseHysteresisEvaluationReconciler) SetupWithManager(mgr 
 	c := ctrl.NewControllerManagedBy(mgr).
 		Named("argocd_autoscaler_most_wanted_two_phase_hysteresis_evaluation").
 		For(
-			&autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation{},
+			&autoscaler.MostWantedTwoPhaseHysteresisEvaluation{},
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		)
 

@@ -19,7 +19,6 @@ package autoscaler
 import (
 	"context"
 	"errors"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -111,8 +110,7 @@ var _ = Describe("LongestProcessingTimePartition Controller", func() {
 			"handle error during load index lookup",
 			func(run *ScenarioRun[*autoscalerv1alpha1.LongestProcessingTimePartition]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -167,8 +165,7 @@ var _ = Describe("LongestProcessingTimePartition Controller", func() {
 			"do nothing if load index provider is not ready",
 			func(run *ScenarioRun[*autoscalerv1alpha1.LongestProcessingTimePartition]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -227,7 +224,7 @@ var _ = Describe("LongestProcessingTimePartition Controller", func() {
 					shards []common.LoadIndex,
 					max int,
 				) (common.ReplicaList, error) {
-					replicas := common.ReplicaList{}
+					replicas := make(common.ReplicaList, 0, len(shards))
 					for i, shard := range shards {
 						replicas = append(replicas, common.Replica{
 							ID:                    int32(i),
@@ -246,8 +243,7 @@ var _ = Describe("LongestProcessingTimePartition Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.LongestProcessingTimePartition]) {
 				Expect(partitioner.partitioned).To(BeTrue())
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -306,8 +302,7 @@ var _ = Describe("LongestProcessingTimePartition Controller", func() {
 			"handle errors",
 			func(run *ScenarioRun[*autoscalerv1alpha1.LongestProcessingTimePartition]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(

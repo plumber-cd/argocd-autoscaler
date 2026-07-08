@@ -40,7 +40,6 @@ import (
 
 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
-	autoscalerv1alpha1 "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
 	"github.com/plumber-cd/argocd-autoscaler/partitioners/longestprocessingtime"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -58,33 +57,33 @@ type LongestProcessingTimePartitionReconciler struct {
 var (
 	longestProcessingTimePartitionShardsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace:   "argocd_autoscaler",
+			Namespace:   metricsNamespace,
 			Subsystem:   "partition",
 			Name:        "shards",
 			Help:        "Shards as partitioned",
 			ConstLabels: prometheus.Labels{"partition_type": "longest_processing_time"},
 		},
 		[]string{
-			"partition_ref",
-			"shard_uid",
-			"shard_id",
-			"shard_namespace",
-			"shard_name",
-			"shard_server",
-			"replica_id",
+			partitionRefLabel,
+			shardUIDLabel,
+			shardIDLabel,
+			shardNamespaceLabel,
+			shardNameLabel,
+			shardServerLabel,
+			replicaIDLabel,
 		},
 	)
 	longestProcessingTimePartitionReplicasTotalLoadGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace:   "argocd_autoscaler",
+			Namespace:   metricsNamespace,
 			Subsystem:   "partition",
 			Name:        "replicas_total_load",
 			Help:        "Sum of the load indexes assigned to a replica",
 			ConstLabels: prometheus.Labels{"partition_type": "longest_processing_time"},
 		},
 		[]string{
-			"partition_ref",
-			"replica_id",
+			partitionRefLabel,
+			replicaIDLabel,
 		},
 	)
 )
@@ -107,14 +106,14 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 	log.V(2).Info("Received reconcile request")
 	defer log.V(2).Info("Reconcile request completed")
 
-	if lastTimeRaw, exists := r.lastReconciled.Load(req.NamespacedName.String()); exists {
+	if lastTimeRaw, exists := r.lastReconciled.Load(req.String()); exists {
 		lastTime := lastTimeRaw.(time.Time)
 		if time.Since(lastTime) < GlobalRateLimit {
 			log.V(2).Info("Rate limiting", "since", time.Since(lastTime))
 			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
 		}
 	}
-	r.lastReconciled.Store(req.NamespacedName.String(), time.Now())
+	r.lastReconciled.Store(req.String(), time.Now())
 
 	partition := &autoscaler.LongestProcessingTimePartition{}
 	if err := r.Get(ctx, req.NamespacedName, partition); err != nil {
@@ -194,10 +193,10 @@ func (r *LongestProcessingTimePartitionReconciler) Reconcile(ctx context.Context
 	}
 	log.V(1).Info("Partitioned successfully", "replicas", len(replicas))
 	longestProcessingTimePartitionShardsGauge.DeletePartialMatch(prometheus.Labels{
-		"partition_ref": req.NamespacedName.String(),
+		partitionRefLabel: req.String(),
 	})
 	longestProcessingTimePartitionReplicasTotalLoadGauge.DeletePartialMatch(prometheus.Labels{
-		"partition_ref": req.NamespacedName.String(),
+		partitionRefLabel: req.String(),
 	})
 	for _, replica := range replicas {
 		for _, li := range replica.LoadIndexes {
@@ -238,7 +237,7 @@ func (r *LongestProcessingTimePartitionReconciler) SetupWithManager(mgr ctrl.Man
 	c := ctrl.NewControllerManagedBy(mgr).
 		Named("argocd_autoscaler_longers_processing_time_partition").
 		For(
-			&autoscalerv1alpha1.LongestProcessingTimePartition{},
+			&autoscaler.LongestProcessingTimePartition{},
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		)
 

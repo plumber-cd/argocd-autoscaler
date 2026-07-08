@@ -57,19 +57,19 @@ type PrometheusPollReconciler struct {
 var (
 	prometheusPollValuesGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace:   "argocd_autoscaler",
+			Namespace:   metricsNamespace,
 			Subsystem:   "poll",
-			Name:        "values",
+			Name:        metricValuesName,
 			Help:        "Metrics polled by this poller",
 			ConstLabels: prometheus.Labels{"poll_type": "prometheus"},
 		},
 		[]string{
 			"poll_ref",
-			"shard_uid",
-			"shard_id",
-			"shard_namespace",
-			"shard_name",
-			"shard_server",
+			shardUIDLabel,
+			shardIDLabel,
+			shardNamespaceLabel,
+			shardNameLabel,
+			shardServerLabel,
 			"metric_id",
 		},
 	)
@@ -90,14 +90,14 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	log.V(2).Info("Received reconcile request")
 	defer log.V(2).Info("Reconcile request completed")
 
-	if lastTimeRaw, exists := r.lastReconciled.Load(req.NamespacedName.String()); exists {
+	if lastTimeRaw, exists := r.lastReconciled.Load(req.String()); exists {
 		lastTime := lastTimeRaw.(time.Time)
 		if time.Since(lastTime) < GlobalRateLimit {
 			log.V(2).Info("Rate limiting", "since", time.Since(lastTime))
 			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
 		}
 	}
-	r.lastReconciled.Store(req.NamespacedName.String(), time.Now())
+	r.lastReconciled.Store(req.String(), time.Now())
 
 	poll := &autoscaler.PrometheusPoll{}
 	if err := r.Get(ctx, req.NamespacedName, poll); err != nil {
@@ -251,7 +251,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 	log.V(1).Info("Polled metrics", "count", len(metrics))
 	prometheusPollValuesGauge.DeletePartialMatch(prometheus.Labels{
-		"poll_ref": req.NamespacedName.String(),
+		"poll_ref": req.String(),
 	})
 	for _, metric := range metrics {
 		log.V(2).Info("Metric polled", "metric", metric.ID, "value", metric.Value)
@@ -278,7 +278,7 @@ func (r *PrometheusPollReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		log.V(1).Info("Failed to update resource status", "err", err)
 		return ctrl.Result{}, err
 	}
-	log.Info("Resource status updated", "values", len(metrics), "lastPollingTime", poll.Status.LastPollingTime)
+	log.Info("Resource status updated", metricValuesName, len(metrics), "lastPollingTime", poll.Status.LastPollingTime)
 
 	return ctrl.Result{RequeueAfter: poll.Spec.Period.Duration}, nil
 }

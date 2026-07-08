@@ -104,13 +104,13 @@ func (r *PollerImpl) Poll(
 			if len(vectorVal) == 0 {
 				if metric.NoData == nil {
 					log.Error(nil, "Result from Prometheus had no data", "metric", metric.ID, "query", query)
-					return nil, fmt.Errorf("Result from Prometheus had no data, query:\n%s", query)
+					return nil, fmt.Errorf("result from Prometheus had no data, query:\n%s", query)
 				}
 				value = metric.NoData.AsApproximateFloat64()
 			} else if len(vectorVal) != 1 {
 				// We require users to use promql that returns a single value ready for normalization
 				log.Error(nil, "Expected exactly 1 sample", "result", vectorVal, "metric", metric, "query", query)
-				return nil, fmt.Errorf("Expecter exaxtly 1 sample, got: %d, query:\n%s", len(vectorVal), query)
+				return nil, fmt.Errorf("expected exactly 1 sample, got: %d, query:\n%s", len(vectorVal), query)
 			} else {
 				sample := vectorVal[0]
 				value = float64(sample.Value)

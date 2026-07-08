@@ -42,7 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	argo "github.com/argoproj/argo-cd/v2/common"
+	argo "github.com/argoproj/argo-cd/v3/common"
 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 
 	autoscaler "github.com/plumber-cd/argocd-autoscaler/api/autoscaler/v1alpha1"
@@ -59,7 +59,7 @@ type SecretTypeClusterShardManagerReconciler struct {
 var (
 	secretTypeClusterShardManagerDiscoveredShardsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace:   "argocd_autoscaler",
+			Namespace:   metricsNamespace,
 			Subsystem:   "shard_manager",
 			Name:        "discovered_shards",
 			Help:        "Shards that are discovered by the shard manager",
@@ -67,12 +67,12 @@ var (
 		},
 		[]string{
 			"shard_manager_ref",
-			"shard_uid",
-			"shard_id",
-			"shard_namespace",
-			"shard_name",
-			"shard_server",
-			"replica_id",
+			shardUIDLabel,
+			shardIDLabel,
+			shardNamespaceLabel,
+			shardNameLabel,
+			shardServerLabel,
+			replicaIDLabel,
 		},
 	)
 )
@@ -93,14 +93,14 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 	log.V(2).Info("Received reconcile request")
 	defer log.V(2).Info("Reconcile request completed")
 
-	if lastTimeRaw, exists := r.lastReconciled.Load(req.NamespacedName.String()); exists {
+	if lastTimeRaw, exists := r.lastReconciled.Load(req.String()); exists {
 		lastTime := lastTimeRaw.(time.Time)
 		if time.Since(lastTime) < GlobalRateLimit {
 			log.V(2).Info("Rate limiting", "since", time.Since(lastTime))
 			return ctrl.Result{RequeueAfter: GlobalRateLimit - time.Since(lastTime)}, nil
 		}
 	}
-	r.lastReconciled.Store(req.NamespacedName.String(), time.Now())
+	r.lastReconciled.Store(req.String(), time.Now())
 
 	manager := &autoscaler.SecretTypeClusterShardManager{}
 	if err := r.Get(ctx, req.NamespacedName, manager); err != nil {
@@ -140,7 +140,7 @@ func (r *SecretTypeClusterShardManagerReconciler) Reconcile(ctx context.Context,
 	}
 	log.V(1).Info("Found secrets", "count", len(secrets.Items))
 	secretTypeClusterShardManagerDiscoveredShardsGauge.DeletePartialMatch(prometheus.Labels{
-		"shard_manager_ref": req.NamespacedName.String(),
+		"shard_manager_ref": req.String(),
 	})
 	for _, secret := range secrets.Items {
 		log.V(2).Info("Secret found", "secret", secret.Name)

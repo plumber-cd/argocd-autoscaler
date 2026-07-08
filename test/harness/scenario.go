@@ -17,7 +17,6 @@ package harness
 import (
 	"context"
 	"errors"
-	"time"
 
 	. "github.com/onsi/gomega"
 
@@ -155,8 +154,7 @@ func (s *Scenario[K]) BranchResourceNotFoundCheck(callback ScenarioRegisterCallb
 		branch.
 			WithCheck("successfully exit", func(run *ScenarioRun[K]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 			}).
 			Commit(callback)
 	})
