@@ -111,8 +111,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 			"handle error during poll lookup",
 			func(run *ScenarioRun[*autoscalerv1alpha1.RobustScalingNormalizer]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -171,8 +170,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 			"do nothing if poll is not ready",
 			func(run *ScenarioRun[*autoscalerv1alpha1.RobustScalingNormalizer]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -253,8 +251,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.RobustScalingNormalizer]) {
 				Expect(normalizer.normalized).To(BeTrue())
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -321,8 +318,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 			"handle errors",
 			func(run *ScenarioRun[*autoscalerv1alpha1.RobustScalingNormalizer]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(

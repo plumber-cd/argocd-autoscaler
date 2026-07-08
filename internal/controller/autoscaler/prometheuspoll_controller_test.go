@@ -24,6 +24,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/plumber-cd/argocd-autoscaler/api/autoscaler/common"
 	. "github.com/plumber-cd/argocd-autoscaler/test/harness"
@@ -153,8 +154,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 						"handle errors",
 						func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+							Expect(run.ReconcileResult()).To(BeZero())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(
@@ -185,8 +185,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 						"handle errors",
 						func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+							Expect(run.ReconcileResult()).To(BeZero())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(
@@ -231,8 +230,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 						"update status and exit",
 						func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
-							Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-							Expect(run.ReconcileResult().Requeue).To(BeFalse())
+							Expect(run.ReconcileResult()).To(BeZero())
 
 							By("Checking conditions")
 							readyCondition := meta.FindStatusCondition(
@@ -318,7 +316,9 @@ var _ = Describe("PrometheusPoll Controller", func() {
 						"re-queue for the remainder of the period",
 						func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
 							Expect(run.ReconcileError()).NotTo(HaveOccurred())
-							Expect(run.ReconcileResult().RequeueAfter).To(BeNumerically("~", 30*time.Second, 2*time.Second))
+							result := run.ReconcileResult()
+							Expect(result.RequeueAfter).To(BeNumerically("~", 30*time.Second, 2*time.Second))
+							Expect(result).To(Equal(reconcile.Result{RequeueAfter: result.RequeueAfter}))
 						},
 					).
 					Commit(collector.Collect).
@@ -419,7 +419,7 @@ var _ = Describe("PrometheusPoll Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.PrometheusPoll]) {
 				Expect(poller.polled).To(BeTrue())
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(run.Container().Object().Spec.Period.Duration))
+				Expect(run.ReconcileResult()).To(Equal(reconcile.Result{RequeueAfter: run.Container().Object().Spec.Period.Duration}))
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(

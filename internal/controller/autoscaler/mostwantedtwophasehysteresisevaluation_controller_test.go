@@ -121,8 +121,7 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 			"handle error during partition lookup",
 			func(run *ScenarioRun[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -170,8 +169,7 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 			"do nothing if partition provider is not ready",
 			func(run *ScenarioRun[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -234,8 +232,7 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 			"succeed",
 			func(run *ScenarioRun[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).
-					To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -272,8 +269,7 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 				run.Reconcile()
 
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).
-					To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition = meta.FindStatusCondition(
@@ -342,8 +338,7 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 			"should handle unknown new projection",
 			func(run *ScenarioRun[*autoscalerv1alpha1.MostWantedTwoPhaseHysteresisEvaluation]) {
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).
-					To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -361,8 +356,7 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 				run.Reconcile()
 
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).
-					To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition = meta.FindStatusCondition(
@@ -380,8 +374,7 @@ var _ = Describe("MostWantedTwoPhaseHysteresisEvaluation Controller", func() {
 				run.Reconcile()
 
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).
-					To(Equal(time.Duration(0)))
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition = meta.FindStatusCondition(

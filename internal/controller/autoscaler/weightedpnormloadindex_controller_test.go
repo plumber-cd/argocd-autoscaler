@@ -18,7 +18,6 @@ package autoscaler
 
 import (
 	"errors"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -136,8 +135,7 @@ var _ = Describe("WeightedPNormLoadIndex Controller", func() {
 			"handle error during poll lookup",
 			func(run *ScenarioRun[*autoscalerv1alpha1.WeightedPNormLoadIndex]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -157,8 +155,7 @@ var _ = Describe("WeightedPNormLoadIndex Controller", func() {
 			"handle error during metric provider lookup",
 			func(run *ScenarioRun[*autoscalerv1alpha1.WeightedPNormLoadIndex]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -206,8 +203,7 @@ var _ = Describe("WeightedPNormLoadIndex Controller", func() {
 			"do nothing if metric values provider is not ready",
 			func(run *ScenarioRun[*autoscalerv1alpha1.WeightedPNormLoadIndex]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -286,8 +282,7 @@ var _ = Describe("WeightedPNormLoadIndex Controller", func() {
 			func(run *ScenarioRun[*autoscalerv1alpha1.WeightedPNormLoadIndex]) {
 				Expect(indexer.indexed).To(BeTrue())
 				Expect(run.ReconcileError()).ToNot(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
@@ -346,8 +341,7 @@ var _ = Describe("WeightedPNormLoadIndex Controller", func() {
 			"handle errors",
 			func(run *ScenarioRun[*autoscalerv1alpha1.WeightedPNormLoadIndex]) {
 				Expect(run.ReconcileError()).NotTo(HaveOccurred())
-				Expect(run.ReconcileResult().RequeueAfter).To(Equal(time.Duration(0)))
-				Expect(run.ReconcileResult().Requeue).To(BeFalse())
+				Expect(run.ReconcileResult()).To(BeZero())
 
 				By("Checking conditions")
 				readyCondition := meta.FindStatusCondition(
